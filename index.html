@@ -62,7 +62,6 @@
               <th class="text-left px-4 py-2">Galutinė būsena</th>
               <th class="text-left px-4 py-2">SLA būsena</th>
               <th class="text-left px-4 py-2">Užimtumas</th>
-              <th class="text-left px-4 py-2">Atlaisvinta kada</th>
               <th class="text-left px-4 py-2">Atlaisvinta prieš</th>
               <th class="text-left px-4 py-2">Paskutinė būsena</th>
               <th class="text-left px-4 py-2">Kas pažymėjo</th>
@@ -84,7 +83,6 @@
       lova:                ["Lova"],
       uzimtumas:           ["Užimtumas"],
       paskutineBusena:     ["Paskutinė būsena"],
-      atlaisvintaKada:     ["Atlaisvinta (kada)"],
       atlaisvintaPries:    ["Atlaisvinta prieš"],
       galutineBusena:      ["Būsena"],
       slaBusena:           ["Kontrolė"],
@@ -150,7 +148,6 @@
       map.lova   = find(COLS.lova);
       map.uzimt  = find(COLS.uzimtumas);
       map.pask   = find(COLS.paskutineBusena);
-      map.gWhen  = find(COLS.atlaisvintaKada);
       map.gHours = find(COLS.atlaisvintaPries);
       map.final  = find(COLS.galutineBusena);
       map.sla    = find(COLS.slaBusena);
@@ -167,7 +164,6 @@
         const final  = get(row, idx.final);
         const sla    = get(row, idx.sla);
         const uzimt  = get(row, idx.uzimt);
-        const gWhen  = get(row, idx.gWhen);
         const gHours = get(row, idx.gHours);
         const pask   = get(row, idx.pask);
         const who    = get(row, idx.who);
@@ -176,7 +172,6 @@
           galutine: final || "",
           sla: sla || "",
           uzimt: uzimt || "",
-          gWhen: gWhen || "",
           gHours: gHours || "",
           gHoursNum: Number(gHours?.toString().replace(",", ".")),
           pask: pask || "",
@@ -255,7 +250,6 @@
           <td class="px-4 py-2">${pillForStatus(r.galutine)}</td>
           <td class="px-4 py-2">${pillForSLA(r.sla)}</td>
           <td class="px-4 py-2">${r.uzimt || "—"}</td>
-          <td class="px-4 py-2">${r.gWhen || "—"}</td>
           <td class="px-4 py-2">${r.gHours ? `<span class="mono">${formatDuration(r.gHoursNum)}</span>` : "—"}</td>
           <td class="px-4 py-2">${r.pask || "—"}</td>
           <td class="px-4 py-2">${r.who || "—"}</td>
