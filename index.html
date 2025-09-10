@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Lovų būklė – Dashboard (Read‑only)</title>
   <!-- Tailwind CDN -->
+  <script>
+    tailwind.config = { darkMode: 'class' };
+  </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- PapaParse CSV parser -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -14,36 +17,45 @@
     .card { border-radius: 1rem; box-shadow: 0 8px 20px rgba(0,0,0,.06); }
     .mono { font-variant-numeric: tabular-nums; }
   </style>
+  <script>
+    // Tamsus režimas pagal paros laiką: nuo 19:00 iki 7:00
+    (function(){
+      const h = new Date().getHours();
+      if (h >= 19 || h < 7) {
+        document.documentElement.classList.add('dark');
+      }
+    })();
+  </script>
 </head>
-<body class="bg-slate-50 text-slate-900">
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
   <div class="max-w-7xl mx-auto p-4 md:p-8">
     <header class="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 md:justify-between mb-4">
       <div>
         <h1 class="text-xl md:text-2xl font-semibold">Lovų būklė</h1>
-        <p class="text-sm text-slate-500">Tiesioginis vaizdas iš Google Sheets „Dashboard“ lapo (read‑only).</p>
-      </div>
-      <div class="flex flex-wrap items-center gap-1 text-sm">
+          <p class="text-sm text-slate-500 dark:text-slate-400">Tiesioginis vaizdas iš Google Sheets „Dashboard“ lapo (read‑only).</p>
+        </div>
+        <div class="flex flex-nowrap items-center gap-1 text-sm overflow-x-auto">
         <input id="search" type="search" placeholder="Paieška (lova, būsena, pažymėjo)…"
-               class="w-64 max-w-full border rounded-md px-2 py-1 bg-white shadow-sm focus:outline-none text-sm" />
-        <select id="filterStatus" class="border rounded-md px-2 py-1 bg-white shadow-sm text-sm">
+               class="w-64 max-w-full border rounded-md px-2 py-1 bg-white shadow-sm focus:outline-none text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400" />
+        <select id="filterStatus" class="border rounded-md px-2 py-1 bg-white shadow-sm text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
           <option value="">Visos būsenos</option>
           <option value="🧹">🧹 Reikia sutvarkyti</option>
           <option value="🚫">🚫 Užimta</option>
           <option value="🟩">🟩 Sutvarkyta</option>
         </select>
-        <select id="filterSLA" class="border rounded-md px-2 py-1 bg-white shadow-sm text-sm">
+        <select id="filterSLA" class="border rounded-md px-2 py-1 bg-white shadow-sm text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
           <option value="">SLA – visos</option>
           <option value="⛔ Viršyta">⛔ Viršyta</option>
           <option value="⚠️ Ką tik atlaisvinta">⚠️ Ką tik atlaisvinta</option>
           <option value="⚪ Laukia (≤ SLA)">⚪ Laukia (≤ SLA)</option>
           <option value="✅ Atlikta laiku">✅ Atlikta laiku</option>
         </select>
-        <select id="sort" class="border rounded-md px-2 py-1 bg-white shadow-sm text-sm">
+        <select id="sort" class="border rounded-md px-2 py-1 bg-white shadow-sm text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
           <option value="priority">Rikiuoti pagal prioritetą</option>
           <option value="bed">Rikiuoti pagal lovą</option>
           <option value="wait">Pagal laukimo laiką (desc)</option>
         </select>
-        <button id="refreshBtn" class="rounded-md bg-slate-900 text-white px-2 py-1 text-sm shadow hover:bg-slate-800">
+        <button id="refreshBtn" class="rounded-md bg-slate-900 text-white px-2 py-1 text-sm shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
           Atnaujinti
         </button>
       </div>
@@ -53,10 +65,10 @@
     <section id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></section>
 
     <!-- Lentelė -->
-    <div class="card bg-white overflow-hidden">
+    <div class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100">
       <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
-          <thead class="bg-slate-100/70 text-slate-700">
+          <thead class="bg-slate-100/70 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
             <tr>
               <th class="text-left px-4 py-2">Lova</th>
               <th class="text-left px-4 py-2">Galutinė būsena</th>
@@ -67,10 +79,10 @@
               <th class="text-left px-4 py-2">Kas pažymėjo</th>
             </tr>
           </thead>
-          <tbody id="tbody" class="divide-y"></tbody>
+          <tbody id="tbody" class="divide-y divide-slate-200 dark:divide-slate-700"></tbody>
         </table>
       </div>
-      <div id="updatedAt" class="text-xs text-slate-500 px-4 py-2">—</div>
+      <div id="updatedAt" class="text-xs text-slate-500 px-4 py-2 dark:text-slate-400">—</div>
     </div>
   </div>
 
@@ -109,8 +121,8 @@
       ];
       const el = document.getElementById("kpis");
       el.innerHTML = kpis.map(k =>
-        `<div class="card p-4 bg-white">
-           <div class="text-xs text-slate-500">${k.label}</div>
+        `<div class="card p-4 bg-white dark:bg-slate-800">
+           <div class="text-xs text-slate-500 dark:text-slate-400">${k.label}</div>
            <div class="text-3xl font-semibold ${k.cls} inline-block rounded-lg px-3 py-1 mt-1">${k.value}</div>
          </div>`
       ).join("");
@@ -245,7 +257,7 @@
     function renderTable(rows) {
       const tbody = document.getElementById("tbody");
       tbody.innerHTML = rows.map(r => `
-        <tr class="hover:bg-slate-50">
+        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700">
           <td class="px-4 py-2 font-medium">${r.lova || "—"}</td>
           <td class="px-4 py-2">${pillForStatus(r.galutine)}</td>
           <td class="px-4 py-2">${pillForSLA(r.sla)}</td>
