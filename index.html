@@ -1,8 +1,8 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="lt">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>Lovų būklė – Dashboard (Read‑only)</title>
   <!-- Tailwind CDN -->
   <script>
@@ -36,7 +36,7 @@
         </div>
         <div class="flex flex-nowrap items-center gap-1 text-sm overflow-x-auto">
         <input id="search" type="search" placeholder="Paieška (lova, būsena, pažymėjo)…"
-               class="w-64 max-w-full border rounded-md px-2 py-1 bg-white shadow-sm focus:outline-none text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400" />
+               class="w-64 max-w-full border rounded-md px-2 py-1 bg-white shadow-sm focus:outline-none text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400">
         <select id="filterStatus" class="border rounded-md px-2 py-1 bg-white shadow-sm text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
           <option value="">Visos būsenos</option>
           <option value="🧹">🧹 Reikia sutvarkyti</option>
@@ -55,7 +55,7 @@
           <option value="bed">Rikiuoti pagal lovą</option>
           <option value="wait">Pagal laukimo laiką (desc)</option>
         </select>
-        <button id="refreshBtn" class="rounded-md bg-slate-900 text-white px-2 py-1 text-sm shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
+        <button id="refreshBtn" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 text-sm shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
           Atnaujinti
         </button>
       </div>
@@ -171,7 +171,7 @@
       const header = Object.keys(raw[0]);
       const idx = inferColumns(header);
       const get = (row, i) => i >= 0 ? row[header[i]] : "";
-      return raw.map(row => {
+      return raw.map((row, i) => {
         const lova   = get(row, idx.lova);
         const final  = get(row, idx.final);
         const sla    = get(row, idx.sla);
@@ -180,6 +180,7 @@
         const pask   = get(row, idx.pask);
         const who    = get(row, idx.who);
         return {
+          order: i, // Eilutės numeris Google Sheet'e rikiavimui
           lova: lova || "",
           galutine: final || "",
           sla: sla || "",
@@ -223,7 +224,8 @@
     function sortRows(rows) {
       const mode = document.getElementById("sort").value;
       if (mode === "bed") {
-        rows.sort((a, b) => (a.lova || "").localeCompare(b.lova || "", "lt"));
+        // Rikiuojame pagal eilės numerį iš Google Sheet'e
+        rows.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
       } else if (mode === "wait") {
         rows.sort((a, b) => (Number(b.gHoursNum) || 0) - (Number(a.gHoursNum) || 0));
       } else {
