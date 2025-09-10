@@ -231,6 +231,22 @@
       }
     }
 
+    /**
+     * Konvertuoja valandas (skaičių) į "X val Y min" formatą.
+     * @param {number} hours
+     * @returns {string}
+     */
+    function formatDuration(hours) {
+      if (!Number.isFinite(hours) || hours < 0) return "";
+      const total = Math.round(hours * 60);
+      const h = Math.floor(total / 60);
+      const m = total % 60;
+      const parts = [];
+      if (h > 0) parts.push(`${h} val`);
+      if (m > 0 || h === 0) parts.push(`${m} min`);
+      return parts.join(" ");
+    }
+
     function renderTable(rows) {
       const tbody = document.getElementById("tbody");
       tbody.innerHTML = rows.map(r => `
@@ -240,7 +256,7 @@
           <td class="px-4 py-2">${pillForSLA(r.sla)}</td>
           <td class="px-4 py-2">${r.uzimt || "—"}</td>
           <td class="px-4 py-2">${r.gWhen || "—"}</td>
-          <td class="px-4 py-2">${r.gHours ? `<span class="mono">${Number(r.gHoursNum).toFixed(1)} h</span>` : "—"}</td>
+          <td class="px-4 py-2">${r.gHours ? `<span class="mono">${formatDuration(r.gHoursNum)}</span>` : "—"}</td>
           <td class="px-4 py-2">${r.pask || "—"}</td>
           <td class="px-4 py-2">${r.who || "—"}</td>
         </tr>
