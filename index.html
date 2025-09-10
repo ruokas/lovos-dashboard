@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="lt">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Lovų būklė – Dashboard (Read‑only)</title>
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- PapaParse CSV parser -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    .status-pill { border-radius: 9999px; padding: .125rem .5rem; font-weight: 600; display: inline-block; }
+    .badge      { border-radius: .5rem; padding: .125rem .5rem; font-weight: 600; display: inline-block; }
+    .card { border-radius: 1rem; box-shadow: 0 8px 20px rgba(0,0,0,.06); }
+    .mono { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-7xl mx-auto p-4 md:p-8">
+    <header class="flex flex-col md:flex-row md:items-end gap-4 md:gap-6 md:justify-between mb-6">
+      <div>
+        <h1 class="text-2xl md:text-3xl font-semibold">Lovų būklė</h1>
+        <p class="text-sm text-slate-500">Tiesioginis vaizdas iš Google Sheets „Dashboard“ lapo (read‑only).</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        <input id="search" type="search" placeholder="Paieška (lova, būsena, pažymėjo)…"
+               class="w-64 max-w-full border rounded-lg px-3 py-2 bg-white shadow-sm focus:outline-none" />
+        <select id="filterStatus" class="border rounded-lg px-3 py-2 bg-white shadow-sm">
+          <option value="">Visos būsenos</option>
+          <option value="🧹">🧹 Reikia sutvarkyti</option>
+          <option value="🚫">🚫 Užimta</option>
+          <option value="🟩">🟩 Sutvarkyta</option>
+        </select>
+        <select id="filterSLA" class="border rounded-lg px-3 py-2 bg-white shadow-sm">
+          <option value="">SLA – visos</option>
+          <option value="⛔ Viršyta">⛔ Viršyta</option>
+          <option value="⚠️ Ką tik atlaisvinta">⚠️ Ką tik atlaisvinta</option>
+          <option value="⚪ Laukia (≤ SLA)">⚪ Laukia (≤ SLA)</option>
+          <option value="✅ Atlikta laiku">✅ Atlikta laiku</option>
+        </select>
+        <select id="sort" class="border rounded-lg px-3 py-2 bg-white shadow-sm">
+          <option value="priority">Rikiuoti pagal prioritetą</option>
+          <option value="bed">Rikiuoti pagal lovą</option>
+          <option value="wait">Pagal laukimo laiką (desc)</option>
+        </select>
+        <button id="refreshBtn" class="rounded-lg bg-slate-900 text-white px-3 py-2 text-sm shadow hover:bg-slate-800">
+          Atnaujinti
+        </button>
+      </div>
+    </header>
+
+    <!-- KPI kortelės -->
+    <section id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></section>
+
+    <!-- Lentelė -->
+    <div class="card bg-white overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-100/70 text-slate-700">
+            <tr>
+              <th class="text-left px-4 py-2">Lova</th>
+              <th class="text-left px-4 py-2">Galutinė būsena</th>
+              <th class="text-left px-4 py-2">SLA būsena</th>
+              <th class="text-left px-4 py-2">Užimtumas</th>
+              <th class="text-left px-4 py-2">Atlaisvinta kada</th>
+              <th class="text-left px-4 py-2">Atlaisvinta prieš</th>
+              <th class="text-left px-4 py-2">Paskutinė būsena</th>
+              <th class="text-left px-4 py-2">Kas pažymėjo</th>
+            </tr>
+          </thead>
+          <tbody id="tbody" class="divide-y"></tbody>
+        </table>
+      </div>
+      <div id="updatedAt" class="text-xs text-slate-500 px-4 py-2">—</div>
+    </div>
+  </div>
+
+  <script>
+    // CSV nuoroda: įklijuokite publikuotą CSV URL iš Google Sheets.
+    const CSV_URL = "PASTE_YOUR_PUBLISHED_CSV_URL_HERE";
+
+    // Stulpelių pavadinimų žemėlapis, kad tvarka lapo būtų nesvarbi.
+    const COLS = {
+      lova:                ["Lova"],
+      uzimtumas:           ["Užimtumas","Uzimtumas"],
+      paskutineBusena:     ["Paskutinė būsena","Paskutine busena"],
+      atlaisvintaKada:     ["Atlaisvinta kada","Atlaisvinta (kada)"],
+      atlaisvintaPries:    ["Atlaisvinta prieš (val.)","Atlaisvinta pries (val.)","Atlaisvinta prieš","Atlaisvinta pries"],
+      galutineBusena:      ["Galutinė būsena","Galutine busena"],
+      slaBusena:           ["SLA būsena","SLA busena"],
+      kasPazymejo:         ["Kas pažymėjo","Kas pazymejo","Pažymėjo","Pazymejo"]
+    };
+
+    // Funkcija statuso prioritetui: 🧹 (0) > 🚫 (1) > 🟩 (2).
+    function statusPriority(s) {
+      if (!s) return 99;
+      const ch = s.trim().charAt(0);
+      if (ch === "🧹") return 0;
+      if (ch === "🚫") return 1;
+      if (ch === "🟩") return 2;
+      return 9;
+    }
+
+    // KPI kortelių atvaizdavimas.
+    function renderKPIs(rows) {
+      const kpis = [
+        { label: "Reikia sutvarkyti", value: rows.filter(r => (r.galutine || "").startsWith("🧹")).length, cls: "bg-orange-100 text-orange-800" },
+        { label: "Užimta",           value: rows.filter(r => (r.galutine || "").startsWith("🚫")).length, cls: "bg-rose-100 text-rose-800" },
+        { label: "Sutvarkyta",       value: rows.filter(r => (r.galutine || "").startsWith("🟩")).length, cls: "bg-emerald-100 text-emerald-800" },
+        { label: "SLA viršyta",      value: rows.filter(r => r.sla === "⛔ Viršyta").length, cls: "bg-red-100 text-red-800" },
+      ];
+      const el = document.getElementById("kpis");
+      el.innerHTML = kpis.map(k =>
+        `<div class="card p-4 bg-white">
+           <div class="text-xs text-slate-500">${k.label}</div>
+           <div class="text-3xl font-semibold ${k.cls} inline-block rounded-lg px-3 py-1 mt-1">${k.value}</div>
+         </div>`
+      ).join("");
+    }
+
+    // Ženkliukai statusui.
+    function pillForStatus(s) {
+      if (!s) return `<span class="status-pill bg-slate-200 text-slate-700">—</span>`;
+      const icon = s.trim().charAt(0);
+      if (icon === "🧹") return `<span class="status-pill bg-orange-100 text-orange-800">${s}</span>`;
+      if (icon === "🚫") return `<span class="status-pill bg-rose-100 text-rose-800">${s}</span>`;
+      if (icon === "🟩") return `<span class="status-pill bg-emerald-100 text-emerald-800">${s}</span>`;
+      return `<span class="status-pill bg-slate-100 text-slate-700">${s}</span>`;
+    }
+
+    // Ženkliukai SLA.
+    function pillForSLA(s) {
+      if (s === "⛔ Viršyta") return `<span class="badge bg-red-100 text-red-800">${s}</span>`;
+      if (s === "⚠️ Ką tik atlaisvinta") return `<span class="badge bg-amber-100 text-amber-800">${s}</span>`;
+      if (s === "⚪ Laukia (≤ SLA)") return `<span class="badge bg-sky-100 text-sky-800">${s}</span>`;
+      if (s === "✅ Atlikta laiku") return `<span class="badge bg-emerald-100 text-emerald-800">${s}</span>`;
+      return `<span class="badge bg-slate-100 text-slate-700">${s || "—"}</span>`;
+    }
+
+    // Data normalizacija.
+    function inferColumns(header) {
+      const map = {};
+      function find(names) {
+        for (const n of names) {
+          const idx = header.findIndex(h => h.trim().toLowerCase() === n.trim().toLowerCase());
+          if (idx !== -1) return idx;
+        }
+        return -1;
+      }
+      map.lova   = find(COLS.lova);
+      map.uzimt  = find(COLS.uzimtumas);
+      map.pask   = find(COLS.paskutineBusena);
+      map.gWhen  = find(COLS.atlaisvintaKada);
+      map.gHours = find(COLS.atlaisvintaPries);
+      map.final  = find(COLS.galutineBusena);
+      map.sla    = find(COLS.slaBusena);
+      map.who    = find(COLS.kasPazymejo);
+      return map;
+    }
+    function normalizeRows(raw) {
+      if (!raw.length) return [];
+      const header = Object.keys(raw[0]);
+      const idx = inferColumns(header);
+      const get = (row, i) => i >= 0 ? row[header[i]] : "";
+      return raw.map(row => {
+        const lova   = get(row, idx.lova);
+        const final  = get(row, idx.final);
+        const sla    = get(row, idx.sla);
+        const uzimt  = get(row, idx.uzimt);
+        const gWhen  = get(row, idx.gWhen);
+        const gHours = get(row, idx.gHours);
+        const pask   = get(row, idx.pask);
+        const who    = get(row, idx.who);
+        return {
+          lova: lova || "",
+          galutine: final || "",
+          sla: sla || "",
+          uzimt: uzimt || "",
+          gWhen: gWhen || "",
+          gHours: gHours || "",
+          gHoursNum: Number(gHours?.toString().replace(",", ".")),
+          pask: pask || "",
+          who: who || ""
+        };
+      });
+    }
+
+    // CSV įkėlimas per PapaParse.
+    async function loadCSV() {
+      const res = await fetch(CSV_URL, { cache: "no-store" });
+      const csv = await res.text();
+      return new Promise(resolve => {
+        Papa.parse(csv, {
+          header: true,
+          skipEmptyLines: true,
+          complete: (results) => resolve(results.data)
+        });
+      });
+    }
+
+    // Filtrai ir rikiavimas.
+    function applyFilters(rows) {
+      const q = document.getElementById("search").value.trim().toLowerCase();
+      const fS = document.getElementById("filterStatus").value;
+      const fSLA = document.getElementById("filterSLA").value;
+      return rows.filter(r => {
+        if (fS && !(r.galutine || "").startsWith(fS)) return false;
+        if (fSLA && (r.sla || "") !== fSLA) return false;
+        if (q) {
+          const blob = [r.lova, r.galutine, r.sla, r.uzimt, r.pask, r.who].join(" ").toLowerCase();
+          if (!blob.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+    function sortRows(rows) {
+      const mode = document.getElementById("sort").value;
+      if (mode === "bed") {
+        rows.sort((a, b) => (a.lova || "").localeCompare(b.lova || "", "lt"));
+      } else if (mode === "wait") {
+        rows.sort((a, b) => (Number(b.gHoursNum) || 0) - (Number(a.gHoursNum) || 0));
+      } else {
+        rows.sort((a, b) => {
+          const pDiff = statusPriority(a.galutine) - statusPriority(b.galutine);
+          if (pDiff !== 0) return pDiff;
+          const slaScore = s => s === "⛔ Viršyta" ? 0 : s === "⚠️ Ką tik atlaisvinta" ? 1 : 2;
+          const sDiff = slaScore(a.sla) - slaScore(b.sla);
+          if (sDiff !== 0) return sDiff;
+          return (a.lova || "").localeCompare(b.lova || "", "lt");
+        });
+      }
+    }
+
+    function renderTable(rows) {
+      const tbody = document.getElementById("tbody");
+      tbody.innerHTML = rows.map(r => `
+        <tr class="hover:bg-slate-50">
+          <td class="px-4 py-2 font-medium">${r.lova || "—"}</td>
+          <td class="px-4 py-2">${pillForStatus(r.galutine)}</td>
+          <td class="px-4 py-2">${pillForSLA(r.sla)}</td>
+          <td class="px-4 py-2">${r.uzimt || "—"}</td>
+          <td class="px-4 py-2">${r.gWhen || "—"}</td>
+          <td class="px-4 py-2">${r.gHours ? `<span class="mono">${Number(r.gHoursNum).toFixed(1)} h</span>` : "—"}</td>
+          <td class="px-4 py-2">${r.pask || "—"}</td>
+          <td class="px-4 py-2">${r.who || "—"}</td>
+        </tr>
+      `).join("");
+    }
+
+    async function refresh() {
+      try {
+        const raw = await loadCSV();
+        const rows = normalizeRows(raw);
+        const filtered = applyFilters(rows);
+        sortRows(filtered);
+        renderKPIs(filtered);
+        renderTable(filtered);
+        document.getElementById("updatedAt").textContent = "Atnaujinta: " + new Date().toLocaleString("lt-LT");
+      } catch (err) {
+        console.error(err);
+        document.getElementById("updatedAt").textContent = "Klaida įkeliant duomenis.";
+      }
+    }
+
+    // Event’ai
+    document.getElementById("refreshBtn").addEventListener("click", refresh);
+    document.getElementById("filterStatus").addEventListener("change", refresh);
+    document.getElementById("filterSLA").addEventListener("change", refresh);
+    document.getElementById("sort").addEventListener("change", refresh);
+    document.getElementById("search").addEventListener("input", refresh);
+    // Initial refresh and auto-refresh every minute
+    refresh();
+    setInterval(refresh, 60000);
+  </script>
+</body>
+</html>
