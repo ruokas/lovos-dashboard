@@ -284,9 +284,9 @@
     document.getElementById("filterSLA").addEventListener("change", refresh);
     document.getElementById("sort").addEventListener("change", refresh);
     document.getElementById("search").addEventListener("input", refresh);
-    // Initial refresh and auto-refresh every minute
+    // Initial refresh and auto-refresh every 10 seconds
     refresh();
-    setInterval(refresh, 60000);
+    setInterval(refresh, 10000);
   </script>
 </body>
 </html>
