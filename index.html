@@ -67,7 +67,7 @@
     <!-- Lentelė -->
     <div class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100">
       <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
+        <table class="min-w-full text-lg leading-7">
           <thead class="bg-slate-100/70 text-slate-700 dark:bg-slate-700 dark:text-slate-200">
             <tr>
               <th class="text-left px-4 py-2">Lova</th>
@@ -260,13 +260,13 @@
       const tbody = document.getElementById("tbody");
       tbody.innerHTML = rows.map(r => `
         <tr class="hover:bg-slate-50 dark:hover:bg-slate-700">
-          <td class="px-4 py-2 font-medium">${r.lova || "—"}</td>
-          <td class="px-4 py-2">${pillForStatus(r.galutine)}</td>
-          <td class="px-4 py-2">${pillForSLA(r.sla)}</td>
-          <td class="px-4 py-2">${r.uzimt || "—"}</td>
-          <td class="px-4 py-2">${r.gHours ? `<span class="mono">${formatDuration(r.gHoursNum)}</span>` : "—"}</td>
-          <td class="px-4 py-2">${r.pask || "—"}</td>
-          <td class="px-4 py-2">${r.who || "—"}</td>
+          <td class="px-4 py-3 text-lg font-medium">${r.lova || "—"}</td>
+          <td class="px-4 py-3 text-lg">${pillForStatus(r.galutine)}</td>
+          <td class="px-4 py-3 text-lg">${pillForSLA(r.sla)}</td>
+          <td class="px-4 py-3 text-lg">${r.uzimt || "—"}</td>
+          <td class="px-4 py-3 text-lg">${r.gHours ? `<span class="mono">${formatDuration(r.gHoursNum)}</span>` : "—"}</td>
+          <td class="px-4 py-3 text-lg">${r.pask || "—"}</td>
+          <td class="px-4 py-3 text-lg">${r.who || "—"}</td>
         </tr>
       `).join("");
     }
