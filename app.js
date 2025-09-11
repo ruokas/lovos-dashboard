@@ -125,7 +125,7 @@ function renderTable(rows) {
   tbody.innerHTML = rows
     .map(
       (r) => `
-        <tr class="hover:bg-slate-50 dark:hover:bg-slate-700">
+        <tr class="odd:bg-slate-50 even:bg-white dark:odd:bg-slate-800 dark:even:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700">
           <td class="px-4 py-3 text-lg font-medium">${r.lova || "—"}</td>
           <td class="px-4 py-3 text-lg">${pillForStatus(r.galutine)}</td>
           <td class="px-4 py-3 text-lg">${pillForSLA(r.sla)}</td>
