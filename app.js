@@ -1,13 +1,5 @@
 import { loadData } from "./data.js";
 
-// Tamsus režimas pagal paros laiką: nuo 19:00 iki 7:00
-(function () {
-  const h = new Date().getHours();
-  if (h >= 19 || h < 7) {
-    document.documentElement.classList.add('dark');
-  }
-})();
-
 
 // Funkcija statuso prioritetui: 🧹 (0) > 🚫 (1) > 🟩 (2).
 function statusPriority(s) {
