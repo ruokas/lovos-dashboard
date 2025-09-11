@@ -87,9 +87,9 @@ async function refresh() {
   }
 }
 
-// Pradinis paleidimas ir periodinis atnaujinimas kas 10 s
+// Pradinis paleidimas ir periodinis atnaujinimas kas 30 s
 refresh();
-setInterval(refresh, 10000);
+setInterval(refresh, 30000);
 
 window.addEventListener('resize', () => {
   if (lastRows.length) renderGrid(lastRows);

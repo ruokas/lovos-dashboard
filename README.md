@@ -5,7 +5,7 @@ Minimalus statinis skydelis realiu laiku rodyti lovų būklę iš Google Sheets.
 ## Naudojimas
 1. Atsisiųskite arba klonuokite šį repo.
 2. Atidarykite `index.html` naršyklėje (dvigubas spustelėjimas arba per `http-server`).
-3. Duomenys automatiškai atnaujinami kas 10 s.
+3. Duomenys automatiškai atnaujinami kas 30 s.
 4. Viršuje esantis mygtukas „Tamsi tema“ leidžia perjungti šviesų/tamsų režimą (išsaugoma naršyklėje).
 
 ## CSV URL konfigūracija
