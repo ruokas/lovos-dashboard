@@ -16,7 +16,8 @@ function renderGrid(rows) {
   if (!grid) return;
 
   const maxCol = Math.max(...bedLayout.map(b => b.col));
-  grid.className = `grid gap-2 grid-cols-${maxCol}`;
+  grid.className = 'grid gap-2';
+  grid.style.gridTemplateColumns = 'repeat(' + maxCol + ', minmax(0,1fr))';
 
   grid.innerHTML = bedLayout.map(bed => {
     const data = rows.find(r => (r.lova || '').toLowerCase() === bed.id.toLowerCase()) || {};
