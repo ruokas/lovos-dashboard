@@ -29,9 +29,14 @@ function renderGrid(rows) {
   const maxCol = Math.max(...bedLayout.map(b => b.col));
   const maxRow = Math.max(...bedLayout.map(b => b.row));
 
+  // The immediate parent height collapses before the grid is sized,
+  // causing cellSize to calculate as 0 and cells to overlap.
+  // Measure width from the parent but take height from the grandparent
+  // (which stretches to fill the available space) with fallbacks.
   const parent = grid.parentElement;
+  const container = parent.parentElement;
   const availableWidth = parent.clientWidth;
-  const availableHeight = parent.clientHeight;
+  const availableHeight = container?.clientHeight || parent.clientHeight || window.innerHeight;
 
   const styles = getComputedStyle(grid);
   const gapX = parseFloat(styles.columnGap || styles.gap) || 0;
