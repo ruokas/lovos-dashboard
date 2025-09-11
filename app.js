@@ -142,6 +142,8 @@ function renderTable(rows) {
 }
 
 async function refresh() {
+  const loader = document.getElementById("loader");
+  loader.classList.remove("hidden");
   try {
     const rows = await loadData();
     const filtered = applyFilters(rows);
@@ -153,6 +155,9 @@ async function refresh() {
   } catch (err) {
     console.error(err);
     document.getElementById("updatedAt").textContent = "Klaida įkeliant duomenis.";
+    loader.classList.add("hidden");
+  } finally {
+    loader.classList.add("hidden");
   }
 }
 
