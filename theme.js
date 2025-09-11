@@ -6,7 +6,7 @@
     root.classList.toggle('dark', t === 'dark');
     if (btn) btn.textContent = t === 'dark' ? 'Šviesi tema' : 'Tamsi tema';
   }
-  const stored = localStorage.getItem(KEY) || 'light';
+  const stored = localStorage.getItem(KEY) || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   apply(stored);
   if (btn) {
     btn.addEventListener('click', () => {
