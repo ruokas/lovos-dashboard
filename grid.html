@@ -11,9 +11,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style type="text/tailwindcss">
     /* Dideli kontrastiniai blokai geresniam matomumui iš toliau */
-    .bed-cell { @apply w-full h-full flex flex-col items-center justify-center text-center p-4 text-2xl font-semibold rounded-lg border-2 border-slate-300 box-border; }
+    .bed-cell { @apply w-full h-full flex flex-col items-center justify-center text-center p-4 text-2xl font-semibold rounded-lg border-2 border-slate-300 box-border overflow-hidden; }
     .bed-id { @apply text-3xl font-bold; }
-    .bed-info { @apply text-xl mt-1; }
+    .bed-info { @apply text-xl mt-1 break-words w-full; }
     .clean { @apply bg-emerald-100 text-emerald-800; }
     .occupied { @apply bg-rose-100 text-rose-800; }
     .dirty { @apply bg-orange-100 text-orange-800; }
