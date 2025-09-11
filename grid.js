@@ -2,6 +2,8 @@ import { loadData } from './data.js';
 import { bedLayout } from './layout.js';
 
 let lastRows = [];
+const grid = document.getElementById('bedGrid');
+const container = grid?.parentElement?.parentElement;
 
 function pillForOccupancy(s) {
   if (!s) return `<span class="badge bg-slate-100 text-slate-700">—</span>`;
@@ -20,39 +22,29 @@ function pillForStatus(s) {
   return `<span class="status-pill bg-slate-100 text-slate-700">${s}</span>`;
 }
 
-// Atvaizduoja lovų tinklelio būseną
 function renderGrid(rows) {
   lastRows = rows;
-  const grid = document.getElementById('bedGrid');
   if (!grid) return;
 
   const maxCol = Math.max(...bedLayout.map(b => b.col));
   const maxRow = Math.max(...bedLayout.map(b => b.row));
 
-  // The immediate parent height collapses before the grid is sized,
-  // causing cellSize to calculate as 0 and cells to overlap.
-  // Measure width from the parent but take height from the grandparent
-  // (which stretches to fill the available space) with fallbacks.
   const parent = grid.parentElement;
-  const container = parent.parentElement;
+  const wrapper = parent.parentElement;
   const availableWidth = parent.clientWidth;
-  const availableHeight = container?.clientHeight || parent.clientHeight || window.innerHeight;
+  const availableHeight = wrapper?.clientHeight || parent.clientHeight || window.innerHeight;
 
   const styles = getComputedStyle(grid);
   const gapX = parseFloat(styles.columnGap || styles.gap) || 0;
   const gapY = parseFloat(styles.rowGap || styles.gap) || 0;
-
   const totalGapX = gapX * (maxCol - 1);
   const totalGapY = gapY * (maxRow - 1);
 
-  const cellSize = Math.floor(
-    Math.min(
-      (availableWidth - totalGapX) / maxCol,
-      (availableHeight - totalGapY) / maxRow
-    )
-  );
+  const cellSize = Math.floor(Math.min(
+    (availableWidth - totalGapX) / maxCol,
+    (availableHeight - totalGapY) / maxRow
+  ));
 
-  grid.className = 'grid gap-2';
   grid.style.gridTemplateColumns = `repeat(${maxCol}, ${cellSize}px)`;
   grid.style.gridTemplateRows = `repeat(${maxRow}, ${cellSize}px)`;
   grid.style.width = `${cellSize * maxCol + totalGapX}px`;
@@ -60,37 +52,49 @@ function renderGrid(rows) {
 
   grid.innerHTML = bedLayout.map(bed => {
     const data = rows.find(r => (r.lova || '').toLowerCase() === bed.id.toLowerCase()) || {};
-    const statusClass = (data.galutine || '').startsWith('🧹') ? 'dirty'
-      : (data.galutine || '').startsWith('🚫') ? 'occupied'
-      : (data.galutine || '').startsWith('🟩') ? 'clean'
-      : 'bg-slate-100 text-slate-800';
+    const statusClass = (data.galutine || '').startsWith('🧹')
+      ? 'dirty'
+      : (data.galutine || '').startsWith('🚫')
+        ? 'occupied'
+        : (data.galutine || '').startsWith('🟩')
+          ? 'clean'
+          : 'bg-slate-100 text-slate-800';
 
-    return `<div class="bed-cell ${statusClass}" style="grid-row:${bed.row} / span 1;grid-column:${bed.col} / span 1">
-      <div class="bed-id">${bed.id}</div>
-      <div class="bed-info flex flex-col items-center gap-1">${pillForOccupancy(data.uzimt)}${pillForStatus(data.galutine)}</div>
-    </div>`;
+    return `<div class="bed-cell ${statusClass}" style="grid-row:${bed.row};grid-column:${bed.col}">
+        <div class="bed-id">${bed.id}</div>
+        <div class="bed-info">
+          ${pillForOccupancy(data.uzimt)}
+          ${pillForStatus(data.galutine)}
+        </div>
+      </div>`;
   }).join('');
 }
 
-// Įkelia duomenis ir atnaujina tinklelio vaizdą
 async function refresh() {
+  const errorEl = document.getElementById('error');
+  if (errorEl) errorEl.classList.add('hidden');
   try {
     const rows = await loadData();
     renderGrid(rows);
+    const updatedEl = document.getElementById('updatedAt');
+    if (updatedEl) updatedEl.textContent = new Date().toLocaleTimeString('lt-LT');
   } catch (err) {
     console.error('Nepavyko įkelti duomenų', err);
-    const el = document.getElementById('error');
-    if (el) {
-      el.textContent = 'Nepavyko įkelti duomenų';
-      el.classList.remove('hidden');
+    if (errorEl) {
+      errorEl.textContent = 'Nepavyko įkelti duomenų';
+      errorEl.classList.remove('hidden');
     }
   }
 }
 
-// Pradinis paleidimas ir periodinis atnaujinimas kas 30 s
+document.getElementById('refreshBtn')?.addEventListener('click', refresh);
+
 refresh();
 setInterval(refresh, 30000);
 
-window.addEventListener('resize', () => {
-  if (lastRows.length) renderGrid(lastRows);
-});
+if (container) {
+  const ro = new ResizeObserver(() => {
+    if (lastRows.length) renderGrid(lastRows);
+  });
+  ro.observe(container);
+}

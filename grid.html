@@ -10,13 +10,12 @@
     tailwind.config = { darkMode: 'class' };
   </script>
   <style type="text/tailwindcss">
-    /* Dideli kontrastiniai blokai geresniam matomumui iš toliau */
-    .bed-cell { @apply w-full h-full flex flex-col items-center justify-center text-center p-4 text-2xl font-semibold rounded-lg border-2 border-slate-300 box-border overflow-hidden; }
-    .bed-id { @apply text-3xl font-bold; }
-    .bed-info { @apply text-xl mt-1 break-words w-full; }
-    .clean { @apply bg-emerald-100 text-emerald-800; }
-    .occupied { @apply bg-rose-100 text-rose-800; }
-    .dirty { @apply bg-orange-100 text-orange-800; }
+    .bed-cell { @apply flex flex-col items-center justify-center text-center p-2 text-xl font-semibold rounded-xl border shadow-sm transition-colors duration-150; }
+    .bed-id { @apply text-2xl font-bold; }
+    .bed-info { @apply mt-1 text-base flex flex-col items-center gap-1; }
+    .clean { @apply bg-emerald-100 text-emerald-800 border-emerald-200; }
+    .occupied { @apply bg-rose-100 text-rose-800 border-rose-200; }
+    .dirty { @apply bg-orange-100 text-orange-800 border-orange-200; }
   </style>
   <!-- PapaParse CSV parser -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -24,14 +23,25 @@
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 flex flex-col">
   <div class="w-full flex-1 p-4 md:p-8 flex flex-col">
-    <header class="flex items-center justify-between mb-4">
-      <a href="index.html" class="underline">Sąrašo vaizdas</a>
-      <button id="themeToggle" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 text-sm shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">Tamsi tema</button>
+    <header class="flex items-center justify-between mb-4 flex-wrap gap-2">
+      <div class="flex items-center gap-2">
+        <a href="index.html" class="underline">Sąrašo vaizdas</a>
+        <button id="refreshBtn" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 text-sm shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">Atnaujinti</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <span id="updatedAt" class="text-sm text-slate-500 dark:text-slate-400">—</span>
+        <button id="themeToggle" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 text-sm shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">Tamsi tema</button>
+      </div>
     </header>
     <div id="error" class="text-red-600 mb-2 hidden"></div>
     <div class="flex-1 flex items-center justify-center">
       <div id="bedGrid" class="grid gap-2"></div>
     </div>
+    <footer class="mt-4 text-sm flex justify-center gap-4">
+      <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-emerald-100 border border-emerald-200"></span>Sutvarkyta</span>
+      <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-rose-100 border border-rose-200"></span>Užimta</span>
+      <span class="flex items-center gap-1"><span class="w-4 h-4 rounded bg-orange-100 border border-orange-200"></span>Reikia sutvarkyti</span>
+    </footer>
   </div>
 
   <script src="theme.js" defer></script>
