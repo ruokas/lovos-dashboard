@@ -10,10 +10,13 @@
   </script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style type="text/tailwindcss">
-    .bed-cell { @apply flex items-center justify-center text-lg font-medium rounded-md; }
-    .clean { @apply bg-emerald-100 text-emerald-800; }
-    .occupied { @apply bg-rose-100 text-rose-800; }
-    .dirty { @apply bg-orange-100 text-orange-800; }
+    /* Dideli kontrastiniai blokai geresniam matomumui iš toliau */
+    .bed-cell { @apply flex flex-col items-center justify-center text-center p-4 text-2xl font-semibold rounded-lg border-2 border-slate-300; }
+    .bed-id { @apply text-3xl font-bold; }
+    .bed-info { @apply text-xl mt-1; }
+    .clean { @apply bg-emerald-600 text-white; }
+    .occupied { @apply bg-rose-600 text-white; }
+    .dirty { @apply bg-orange-500 text-white; }
   </style>
   <!-- PapaParse CSV parser -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
