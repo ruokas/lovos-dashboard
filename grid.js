@@ -4,6 +4,9 @@ import { bedLayout } from './layout.js';
 let lastRows = [];
 const grid = document.getElementById('bedGrid');
 const container = grid?.parentElement?.parentElement;
+// Proporcija tarp pločio ir aukščio (mažina kortelės aukštį).
+// 1 reikštų kvadratą; 0.75 – žemesnę kortelę.
+const HEIGHT_RATIO = 0.75;
 
 function pillForOccupancy(s) {
   if (!s) return `<span class="badge bg-slate-100 text-slate-700">—</span>`;
@@ -40,15 +43,15 @@ function renderGrid(rows) {
   const totalGapX = gapX * (maxCol - 1);
   const totalGapY = gapY * (maxRow - 1);
 
-  const cellSize = Math.floor(Math.min(
-    (availableWidth - totalGapX) / maxCol,
-    (availableHeight - totalGapY) / maxRow
-  ));
+  // Plotis parenkamas pagal turimą vietą, o aukštis – pagal nurodytą proporciją.
+  const cellWidth = Math.floor((availableWidth - totalGapX) / maxCol);
+  const maxHeight = Math.floor((availableHeight - totalGapY) / maxRow);
+  const cellHeight = Math.min(Math.floor(cellWidth * HEIGHT_RATIO), maxHeight);
 
-  grid.style.gridTemplateColumns = `repeat(${maxCol}, ${cellSize}px)`;
-  grid.style.gridTemplateRows = `repeat(${maxRow}, ${cellSize}px)`;
-  grid.style.width = `${cellSize * maxCol + totalGapX}px`;
-  grid.style.height = `${cellSize * maxRow + totalGapY}px`;
+  grid.style.gridTemplateColumns = `repeat(${maxCol}, ${cellWidth}px)`;
+  grid.style.gridTemplateRows = `repeat(${maxRow}, ${cellHeight}px)`;
+  grid.style.width = `${cellWidth * maxCol + totalGapX}px`;
+  grid.style.height = `${cellHeight * maxRow + totalGapY}px`;
 
   grid.innerHTML = bedLayout.map(bed => {
     const data = rows.find(r => (r.lova || '').toLowerCase() === bed.id.toLowerCase()) || {};
