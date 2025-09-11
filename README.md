@@ -8,6 +8,11 @@ Minimalus statinis skydelis realiu laiku rodyti lovų būklę iš Google Sheets.
 3. Duomenys automatiškai atnaujinami kas 30 s.
 4. Viršuje esantis mygtukas „Tamsi tema“ leidžia perjungti šviesų/tamsų režimą (išsaugoma naršyklėje).
 
+## Spalvinė logika tinklelyje
+- **Žalia** – laisva ir sutvarkyta lova.
+- **Geltona** – laisva, bet nesutvarkyta.
+- **Raudona** – lova užimta.
+
 ## CSV URL konfigūracija
 1. Google Sheets → *File* → *Share* → *Publish to web* → pasirinkite **CSV**.
 2. Nukopijuokite sugeneruotą nuorodą.
