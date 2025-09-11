@@ -176,7 +176,7 @@ document.getElementById("sort").addEventListener("change", refresh);
 const search = document.getElementById("search");
 const debounced = debounce(refresh, 300);
 search.addEventListener("input", debounced);
- // Initial refresh and auto-refresh every 10 seconds
- refresh();
- setInterval(refresh, 10000);
+// Initial refresh and auto-refresh every 30 seconds
+refresh();
+setInterval(refresh, 30000);
 
