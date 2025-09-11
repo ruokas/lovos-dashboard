@@ -1,3 +1,5 @@
+import { loadData } from "./data.js";
+
 // Tamsus režimas pagal paros laiką: nuo 19:00 iki 7:00
 (function () {
   const h = new Date().getHours();
@@ -6,19 +8,6 @@
   }
 })();
 
-// CSV nuoroda: įklijuokite publikuotą CSV URL iš Google Sheets.
-const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSju9ACW4Z1oa-GsD2Rs4hnNicNcP1qoZ6AINebI1DbAeXAwgeVyrWKqOLHT5BMfTW9_RpIU_W3qDKk/pub?gid=208986390&single=true&output=csv";
-
-// Stulpelių pavadinimų žemėlapis, kad tvarka lapo būtų nesvarbi.
-const COLS = {
-  lova: ["Lova"],
-  uzimtumas: ["Užimtumas"],
-  paskutineBusena: ["Paskutinė būsena"],
-  atlaisvintaPries: ["Atlaisvinta prieš"],
-  galutineBusena: ["Būsena"],
-  slaBusena: ["Kontrolė"],
-  kasPazymejo: ["Pažymėjo"],
-};
 
 // Funkcija statuso prioritetui: 🧹 (0) > 🚫 (1) > 🟩 (2).
 function statusPriority(s) {
@@ -64,65 +53,6 @@ function pillForSLA(s) {
   if (s === "⚪ Laukia (≤ SLA)") return `<span class="badge bg-sky-100 text-sky-800">${s}</span>`;
   if (s === "✅ Atlikta laiku") return `<span class="badge bg-emerald-100 text-emerald-800">${s}</span>`;
   return `<span class="badge bg-slate-100 text-slate-700">${s || "—"}</span>`;
-}
-
-// Data normalizacija.
-function inferColumns(header) {
-  const map = {};
-  function find(names) {
-    for (const n of names) {
-      const idx = header.findIndex(h => h.trim().toLowerCase() === n.trim().toLowerCase());
-      if (idx !== -1) return idx;
-    }
-    return -1;
-  }
-  map.lova = find(COLS.lova);
-  map.uzimt = find(COLS.uzimtumas);
-  map.pask = find(COLS.paskutineBusena);
-  map.gHours = find(COLS.atlaisvintaPries);
-  map.final = find(COLS.galutineBusena);
-  map.sla = find(COLS.slaBusena);
-  map.who = find(COLS.kasPazymejo);
-  return map;
-}
-function normalizeRows(raw) {
-  if (!raw.length) return [];
-  const header = Object.keys(raw[0]);
-  const idx = inferColumns(header);
-  const get = (row, i) => (i >= 0 ? row[header[i]] : "");
-  return raw.map((row, i) => {
-    const lova = get(row, idx.lova);
-    const final = get(row, idx.final);
-    const sla = get(row, idx.sla);
-    const uzimt = get(row, idx.uzimt);
-    const gHours = get(row, idx.gHours);
-    const pask = get(row, idx.pask);
-    const who = get(row, idx.who);
-    return {
-      order: i, // Eilutės numeris Google Sheet'e rikiavimui
-      lova: lova || "",
-      galutine: final || "",
-      sla: sla || "",
-      uzimt: uzimt || "",
-      gHours: gHours || "",
-      gHoursNum: Number(gHours?.toString().replace(",", ".")),
-      pask: pask || "",
-      who: who || "",
-    };
-  });
-}
-
-// CSV įkėlimas per PapaParse.
-async function loadCSV() {
-  const res = await fetch(CSV_URL, { cache: "no-store" });
-  const csv = await res.text();
-  return new Promise((resolve) => {
-    Papa.parse(csv, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results) => resolve(results.data),
-    });
-  });
 }
 
 // Filtrai ir rikiavimas.
@@ -213,8 +143,7 @@ function renderTable(rows) {
 
 async function refresh() {
   try {
-    const raw = await loadCSV();
-    const rows = normalizeRows(raw);
+    const rows = await loadData();
     const filtered = applyFilters(rows);
     sortRows(filtered);
     renderKPIs(filtered);

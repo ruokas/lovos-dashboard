@@ -10,7 +10,7 @@ Minimalus statinis skydelis realiu laiku rodyti lovų būklę iš Google Sheets.
 ## CSV URL konfigūracija
 1. Google Sheets → *File* → *Share* → *Publish to web* → pasirinkite **CSV**.
 2. Nukopijuokite sugeneruotą nuorodą.
-3. `app.js` faile pakeiskite `CSV_URL` konstantą į savo nuorodą.
+3. `data.js` faile pakeiskite `CSV_URL` konstantą į savo nuorodą.
 
 ## Smoke test
 1. Atidarykite `index.html`.
@@ -20,7 +20,9 @@ Minimalus statinis skydelis realiu laiku rodyti lovų būklę iš Google Sheets.
 
 ## Struktūra
 - `index.html` – pagrindinis dashboardas.
-- `app.js` – duomenų logika.
+- `data.js` – duomenų įkėlimas ir normalizacija.
+- `app.js` – UI logika.
+- `grid.js` – (būsima) tinklelio logika.
 - `styles.css` – stiliai.
 - `README.md` – dokumentacija.
 - `LICENSE` – MIT licencija.
