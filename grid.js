@@ -17,11 +17,9 @@ function renderGrid(rows) {
       : (data.galutine || '').startsWith('🟩') ? 'clean'
       : 'bg-slate-100 text-slate-800';
 
-    return `<div class="bed-cell p-2 ${statusClass}" style="grid-row:${bed.row};grid-column:${bed.col}">
-      <div class="text-center">
-        <div class="font-semibold">${bed.id}</div>
-        <div class="text-sm">${data.uzimt || '—'}</div>
-      </div>
+    return `<div class="bed-cell ${statusClass}" style="grid-row:${bed.row};grid-column:${bed.col}">
+      <div class="bed-id">${bed.id}</div>
+      <div class="bed-info">${data.uzimt || '—'}</div>
     </div>`;
   }).join('');
 }
