@@ -9,6 +9,12 @@
     tailwind.config = { darkMode: 'class' };
   </script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style type="text/tailwindcss">
+    .bed-cell { @apply flex items-center justify-center text-lg font-medium rounded-md; }
+    .clean { @apply bg-emerald-100 text-emerald-800; }
+    .occupied { @apply bg-rose-100 text-rose-800; }
+    .dirty { @apply bg-orange-100 text-orange-800; }
+  </style>
   <!-- PapaParse CSV parser -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <link rel="stylesheet" href="styles.css">

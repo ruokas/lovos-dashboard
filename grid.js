@@ -20,14 +20,16 @@ function renderGrid(rows) {
 
   grid.innerHTML = bedLayout.map(bed => {
     const data = rows.find(r => (r.lova || '').toLowerCase() === bed.id.toLowerCase()) || {};
-    const color = (data.galutine || '').startsWith('🧹') ? 'bg-orange-100 text-orange-800'
-      : (data.galutine || '').startsWith('🚫') ? 'bg-rose-100 text-rose-800'
-      : (data.galutine || '').startsWith('🟩') ? 'bg-emerald-100 text-emerald-800'
+    const statusClass = (data.galutine || '').startsWith('🧹') ? 'dirty'
+      : (data.galutine || '').startsWith('🚫') ? 'occupied'
+      : (data.galutine || '').startsWith('🟩') ? 'clean'
       : 'bg-slate-100 text-slate-800';
 
-    return `<div class="p-2 text-center rounded ${color}" style="grid-row:${bed.row};grid-column:${bed.col}">
-      <div class="font-semibold">${bed.id}</div>
-      <div class="text-sm">${data.uzimt || '—'}</div>
+    return `<div class="bed-cell p-2 ${statusClass}" style="grid-row:${bed.row};grid-column:${bed.col}">
+      <div class="text-center">
+        <div class="font-semibold">${bed.id}</div>
+        <div class="text-sm">${data.uzimt || '—'}</div>
+      </div>
     </div>`;
   }).join('');
 }
