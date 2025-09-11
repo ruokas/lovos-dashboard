@@ -1,4 +1,4 @@
-.status-pill { border-radius: 9999px; padding: .125rem .5rem; font-weight: 600; display: inline-block; }
-.badge      { border-radius: .5rem; padding: .125rem .5rem; font-weight: 600; display: inline-block; }
+.status-pill { border-radius: 9999px; padding: .125rem .5rem; font-weight: 600; display: inline-block; max-width: 100%; white-space: normal; word-break: break-word; text-align: center; }
+.badge      { border-radius: .5rem; padding: .125rem .5rem; font-weight: 600; display: inline-block; max-width: 100%; white-space: normal; word-break: break-word; text-align: center; }
 .card { border-radius: 1rem; box-shadow: 0 8px 20px rgba(0,0,0,.06); }
 .mono { font-variant-numeric: tabular-nums; }
