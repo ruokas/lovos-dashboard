@@ -60,7 +60,7 @@ function renderGrid(rows) {
       : (data.galutine || '').startsWith('🟩') ? 'clean'
       : 'bg-slate-100 text-slate-800';
 
-    return `<div class="bed-cell ${statusClass}" style="grid-row:${bed.row};grid-column:${bed.col}">
+    return `<div class="bed-cell ${statusClass}" style="grid-row:${bed.row} / span 1;grid-column:${bed.col} / span 1">
       <div class="bed-id">${bed.id}</div>
       <div class="bed-info flex flex-col items-center gap-1">${pillForOccupancy(data.uzimt)}${pillForStatus(data.galutine)}</div>
     </div>`;
