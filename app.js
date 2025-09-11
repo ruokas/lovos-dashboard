@@ -55,6 +55,15 @@ function pillForSLA(s) {
   return `<span class="badge bg-slate-100 text-slate-700">${s || "—"}</span>`;
 }
 
+// Ženkliukai užimtumui.
+function pillForOccupancy(s) {
+  if (!s) return `<span class="badge bg-slate-100 text-slate-700">—</span>`;
+  const t = s.trim().toLowerCase();
+  if (t.includes("užim")) return `<span class="badge bg-rose-100 text-rose-800">${s}</span>`;
+  if (t.includes("laisv")) return `<span class="badge bg-emerald-100 text-emerald-800">${s}</span>`;
+  return `<span class="badge bg-slate-100 text-slate-700">${s}</span>`;
+}
+
 // Filtrai ir rikiavimas.
 function applyFilters(rows) {
   const q = document.getElementById("search").value.trim().toLowerCase();
@@ -105,6 +114,14 @@ function formatDuration(hours) {
   return parts.join(" ");
 }
 
+// Spalvinis indikatorius laukimo laikui.
+function pillForWait(hours) {
+  if (!Number.isFinite(hours)) return `<span class="badge bg-slate-100 text-slate-700">—</span>`;
+  if (hours > 2) return `<span class="badge bg-red-100 text-red-800 mono">${formatDuration(hours)}</span>`;
+  if (hours > 1) return `<span class="badge bg-amber-100 text-amber-800 mono">${formatDuration(hours)}</span>`;
+  return `<span class="badge bg-slate-100 text-slate-700 mono">${formatDuration(hours)}</span>`;
+}
+
 /**
  * Grąžina funkciją, kuri paleis fn tik praėjus delay ms nuo paskutinio kvietimo.
  * Naudinga riboti dažną įvykių (pvz., input) apdorojimą.
@@ -129,10 +146,8 @@ function renderTable(rows) {
           <td class="px-4 py-3 text-lg font-medium">${r.lova || "—"}</td>
           <td class="px-4 py-3 text-lg">${pillForStatus(r.galutine)}</td>
           <td class="px-4 py-3 text-lg">${pillForSLA(r.sla)}</td>
-          <td class="px-4 py-3 text-lg">${r.uzimt || "—"}</td>
-          <td class="px-4 py-3 text-lg">${
-            r.gHours ? `<span class="mono">${formatDuration(r.gHoursNum)}</span>` : "—"
-          }</td>
+          <td class="px-4 py-3 text-lg">${pillForOccupancy(r.uzimt)}</td>
+          <td class="px-4 py-3 text-lg">${pillForWait(r.gHoursNum)}</td>
           <td class="px-4 py-3 text-lg">${r.pask || "—"}</td>
           <td class="px-4 py-3 text-lg">${r.who || "—"}</td>
         </tr>

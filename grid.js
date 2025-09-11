@@ -1,6 +1,23 @@
 import { loadData } from './data.js';
 import { bedLayout } from './layout.js';
 
+function pillForOccupancy(s) {
+  if (!s) return `<span class="badge bg-slate-100 text-slate-700">—</span>`;
+  const t = s.trim().toLowerCase();
+  if (t.includes('užim')) return `<span class="badge bg-rose-100 text-rose-800">${s}</span>`;
+  if (t.includes('laisv')) return `<span class="badge bg-emerald-100 text-emerald-800">${s}</span>`;
+  return `<span class="badge bg-slate-100 text-slate-700">${s}</span>`;
+}
+
+function pillForStatus(s) {
+  if (!s) return `<span class="status-pill bg-slate-200 text-slate-700">—</span>`;
+  const icon = s.trim().charAt(0);
+  if (icon === '🧹') return `<span class="status-pill bg-orange-100 text-orange-800">${s}</span>`;
+  if (icon === '🚫') return `<span class="status-pill bg-rose-100 text-rose-800">${s}</span>`;
+  if (icon === '🟩') return `<span class="status-pill bg-emerald-100 text-emerald-800">${s}</span>`;
+  return `<span class="status-pill bg-slate-100 text-slate-700">${s}</span>`;
+}
+
 // Atvaizduoja lovų tinklelio būseną
 function renderGrid(rows) {
   const grid = document.getElementById('bedGrid');
@@ -19,7 +36,7 @@ function renderGrid(rows) {
 
     return `<div class="bed-cell ${statusClass}" style="grid-row:${bed.row};grid-column:${bed.col}">
       <div class="bed-id">${bed.id}</div>
-      <div class="bed-info">${data.uzimt || '—'}</div>
+      <div class="bed-info flex flex-col items-center gap-1">${pillForOccupancy(data.uzimt)}${pillForStatus(data.galutine)}</div>
     </div>`;
   }).join('');
 }
