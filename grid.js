@@ -16,15 +16,6 @@ function pillForOccupancy(s) {
   return `<span class="badge bg-slate-100 text-slate-700">${s}</span>`;
 }
 
-function pillForStatus(s) {
-  if (!s) return `<span class="status-pill bg-slate-200 text-slate-700">—</span>`;
-  const icon = s.trim().charAt(0);
-  if (icon === '🧹') return `<span class="status-pill bg-orange-100 text-orange-800">${s}</span>`;
-  if (icon === '🚫') return `<span class="status-pill bg-rose-100 text-rose-800">${s}</span>`;
-  if (icon === '🟩') return `<span class="status-pill bg-emerald-100 text-emerald-800">${s}</span>`;
-  return `<span class="status-pill bg-slate-100 text-slate-700">${s}</span>`;
-}
-
 function renderGrid(rows) {
   lastRows = rows;
   if (!grid) return;
@@ -55,19 +46,14 @@ function renderGrid(rows) {
 
   grid.innerHTML = bedLayout.map(bed => {
     const data = rows.find(r => (r.lova || '').toLowerCase() === bed.id.toLowerCase()) || {};
-    const statusClass = (data.galutine || '').startsWith('🧹')
-      ? 'dirty'
-      : (data.galutine || '').startsWith('🚫')
-        ? 'occupied'
-        : (data.galutine || '').startsWith('🟩')
-          ? 'clean'
-          : 'bg-slate-100 text-slate-800';
+    const isOccupied = (data.uzimt || '').toLowerCase().includes('užim');
+    const isClean = (data.galutine || '').startsWith('🟩');
+    const statusClass = isOccupied ? 'occupied' : (isClean ? 'clean' : 'dirty');
 
     return `<div class="bed-cell ${statusClass}" style="grid-row:${bed.row};grid-column:${bed.col}">
         <div class="bed-id">${bed.id}</div>
         <div class="bed-info">
           ${pillForOccupancy(data.uzimt)}
-          ${pillForStatus(data.galutine)}
         </div>
       </div>`;
   }).join('');

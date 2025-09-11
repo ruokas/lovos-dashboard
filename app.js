@@ -14,7 +14,7 @@ function statusPriority(s) {
 // KPI kortelių atvaizdavimas.
 function renderKPIs(rows) {
   const kpis = [
-    { label: "Reikia sutvarkyti", value: rows.filter(r => (r.galutine || "").startsWith("🧹")).length, cls: "bg-orange-100 text-orange-800" },
+    { label: "Reikia sutvarkyti", value: rows.filter(r => (r.galutine || "").startsWith("🧹")).length, cls: "bg-yellow-100 text-yellow-800" },
     { label: "Užimta", value: rows.filter(r => (r.galutine || "").startsWith("🚫")).length, cls: "bg-rose-100 text-rose-800" },
     { label: "Sutvarkyta", value: rows.filter(r => (r.galutine || "").startsWith("🟩")).length, cls: "bg-emerald-100 text-emerald-800" },
     { label: "SLA viršyta", value: rows.filter(r => r.sla === "⛔ Viršyta").length, cls: "bg-red-100 text-red-800" },
@@ -32,7 +32,7 @@ function renderKPIs(rows) {
 function pillForStatus(s) {
   if (!s) return `<span class="status-pill bg-slate-200 text-slate-700">—</span>`;
   const icon = s.trim().charAt(0);
-  if (icon === "🧹") return `<span class="status-pill bg-orange-100 text-orange-800">${s}</span>`;
+  if (icon === "🧹") return `<span class="status-pill bg-yellow-100 text-yellow-800">${s}</span>`;
   if (icon === "🚫") return `<span class="status-pill bg-rose-100 text-rose-800">${s}</span>`;
   if (icon === "🟩") return `<span class="status-pill bg-emerald-100 text-emerald-800">${s}</span>`;
   return `<span class="status-pill bg-slate-100 text-slate-700">${s}</span>`;
