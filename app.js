@@ -175,6 +175,21 @@ function formatDuration(hours) {
   return parts.join(" ");
 }
 
+/**
+ * Grąžina funkciją, kuri paleis fn tik praėjus delay ms nuo paskutinio kvietimo.
+ * Naudinga riboti dažną įvykių (pvz., input) apdorojimą.
+ * @param {Function} fn
+ * @param {number} delay
+ * @returns {Function}
+ */
+function debounce(fn, delay) {
+  let timer;
+  return function (...args) {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+
 function renderTable(rows) {
   const tbody = document.getElementById("tbody");
   tbody.innerHTML = rows
@@ -213,11 +228,13 @@ async function refresh() {
 }
 
 // Event’ai
- document.getElementById("refreshBtn").addEventListener("click", refresh);
- document.getElementById("filterStatus").addEventListener("change", refresh);
- document.getElementById("filterSLA").addEventListener("change", refresh);
- document.getElementById("sort").addEventListener("change", refresh);
- document.getElementById("search").addEventListener("input", refresh);
+document.getElementById("refreshBtn").addEventListener("click", refresh);
+document.getElementById("filterStatus").addEventListener("change", refresh);
+document.getElementById("filterSLA").addEventListener("change", refresh);
+document.getElementById("sort").addEventListener("change", refresh);
+const search = document.getElementById("search");
+const debounced = debounce(refresh, 300);
+search.addEventListener("input", debounced);
  // Initial refresh and auto-refresh every 10 seconds
  refresh();
  setInterval(refresh, 10000);
