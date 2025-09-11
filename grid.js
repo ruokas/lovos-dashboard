@@ -1,6 +1,8 @@
 import { loadData } from './data.js';
 import { bedLayout } from './layout.js';
 
+let lastRows = [];
+
 function pillForOccupancy(s) {
   if (!s) return `<span class="badge bg-slate-100 text-slate-700">—</span>`;
   const t = s.trim().toLowerCase();
@@ -20,12 +22,23 @@ function pillForStatus(s) {
 
 // Atvaizduoja lovų tinklelio būseną
 function renderGrid(rows) {
+  lastRows = rows;
   const grid = document.getElementById('bedGrid');
   if (!grid) return;
 
   const maxCol = Math.max(...bedLayout.map(b => b.col));
+  const maxRow = Math.max(...bedLayout.map(b => b.row));
+
+  const parent = grid.parentElement;
+  const availableWidth = parent.clientWidth;
+  const availableHeight = parent.clientHeight;
+  const cellSize = Math.min(availableWidth / maxCol, availableHeight / maxRow);
+
   grid.className = 'grid gap-2';
-  grid.style.gridTemplateColumns = 'repeat(' + maxCol + ', minmax(0,1fr))';
+  grid.style.gridTemplateColumns = `repeat(${maxCol}, ${cellSize}px)`;
+  grid.style.gridTemplateRows = `repeat(${maxRow}, ${cellSize}px)`;
+  grid.style.width = `${cellSize * maxCol}px`;
+  grid.style.height = `${cellSize * maxRow}px`;
 
   grid.innerHTML = bedLayout.map(bed => {
     const data = rows.find(r => (r.lova || '').toLowerCase() === bed.id.toLowerCase()) || {};
@@ -59,3 +72,7 @@ async function refresh() {
 // Pradinis paleidimas ir periodinis atnaujinimas kas 10 s
 refresh();
 setInterval(refresh, 10000);
+
+window.addEventListener('resize', () => {
+  if (lastRows.length) renderGrid(lastRows);
+});
