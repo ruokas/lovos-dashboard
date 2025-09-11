@@ -1,14 +1,5 @@
 import { loadData } from './data.js';
-
-// Lovų pozicijų koordinatės (pridėkite daugiau pagal poreikį)
-export const bedLayout = [
-  { id: 'A1', row: 1, col: 1 },
-  { id: 'A2', row: 1, col: 2 },
-  { id: 'A3', row: 1, col: 3 },
-  { id: 'B1', row: 2, col: 1 },
-  { id: 'B2', row: 2, col: 2 },
-  { id: 'B3', row: 2, col: 3 }
-];
+import { bedLayout } from './layout.js';
 
 // Atvaizduoja lovų tinklelio būseną
 function renderGrid(rows) {
