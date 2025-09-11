@@ -32,13 +32,26 @@ function renderGrid(rows) {
   const parent = grid.parentElement;
   const availableWidth = parent.clientWidth;
   const availableHeight = parent.clientHeight;
-  const cellSize = Math.min(availableWidth / maxCol, availableHeight / maxRow);
+
+  const styles = getComputedStyle(grid);
+  const gapX = parseFloat(styles.columnGap || styles.gap) || 0;
+  const gapY = parseFloat(styles.rowGap || styles.gap) || 0;
+
+  const totalGapX = gapX * (maxCol - 1);
+  const totalGapY = gapY * (maxRow - 1);
+
+  const cellSize = Math.floor(
+    Math.min(
+      (availableWidth - totalGapX) / maxCol,
+      (availableHeight - totalGapY) / maxRow
+    )
+  );
 
   grid.className = 'grid gap-2';
   grid.style.gridTemplateColumns = `repeat(${maxCol}, ${cellSize}px)`;
   grid.style.gridTemplateRows = `repeat(${maxRow}, ${cellSize}px)`;
-  grid.style.width = `${cellSize * maxCol}px`;
-  grid.style.height = `${cellSize * maxRow}px`;
+  grid.style.width = `${cellSize * maxCol + totalGapX}px`;
+  grid.style.height = `${cellSize * maxRow + totalGapY}px`;
 
   grid.innerHTML = bedLayout.map(bed => {
     const data = rows.find(r => (r.lova || '').toLowerCase() === bed.id.toLowerCase()) || {};
