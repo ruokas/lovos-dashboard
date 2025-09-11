@@ -42,6 +42,11 @@ async function refresh() {
     renderGrid(rows);
   } catch (err) {
     console.error('Nepavyko įkelti duomenų', err);
+    const el = document.getElementById('error');
+    if (el) {
+      el.textContent = 'Nepavyko įkelti duomenų';
+      el.classList.remove('hidden');
+    }
   }
 }
 
