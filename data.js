@@ -75,6 +75,20 @@ async function loadCSV() {
 
 // Public API
 export async function loadData() {
-  const raw = await loadCSV();
-  return normalizeRows(raw);
+  try {
+    const raw = await loadCSV();
+    const rows = normalizeRows(raw);
+    // Cache rezultatus lokalioje saugykloje, kad veiktų offline.
+    localStorage.setItem('cachedRows', JSON.stringify(rows));
+    return rows;
+  } catch (err) {
+    console.error('Nepavyko įkelti CSV, bandoma naudoti talpyklą', err);
+    try {
+      const cached = JSON.parse(localStorage.getItem('cachedRows') || 'null');
+      if (cached) return cached;
+    } catch (e) {
+      console.error('Nepavyko nuskaityti talpyklos', e);
+    }
+    throw err;
+  }
 }
