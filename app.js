@@ -157,8 +157,9 @@ async function refresh() {
     sortRows(filtered);
     renderKPIs(filtered);
     renderTable(filtered);
+    const prefix = navigator.onLine ? "Atnaujinta: " : "Offline, rodoma talpykla: ";
     document.getElementById("updatedAt").textContent =
-      "Atnaujinta: " + new Date().toLocaleString("lt-LT");
+      prefix + new Date().toLocaleString("lt-LT");
   } catch (err) {
     console.error(err);
     document.getElementById("updatedAt").textContent = "Klaida įkeliant duomenis.";

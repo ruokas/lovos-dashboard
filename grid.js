@@ -66,7 +66,10 @@ async function refresh() {
     const rows = await loadData();
     renderGrid(rows);
     const updatedEl = document.getElementById('updatedAt');
-    if (updatedEl) updatedEl.textContent = new Date().toLocaleTimeString('lt-LT');
+    if (updatedEl) {
+      const prefix = navigator.onLine ? 'Atnaujinta: ' : 'Offline, rodoma talpykla: ';
+      updatedEl.textContent = prefix + new Date().toLocaleTimeString('lt-LT');
+    }
   } catch (err) {
     console.error('Nepavyko įkelti duomenų', err);
     if (errorEl) {
