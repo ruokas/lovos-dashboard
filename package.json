@@ -1,0 +1,17 @@
+{
+  "name": "lovos-dashboard",
+  "version": "1.0.0",
+  "description": "Minimalus statinis skydelis realiu laiku rodyti lovų būklę iš Google Sheets.",
+  "main": "app.js",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "jsdom": "^26.1.0",
+    "vitest": "^3.2.4"
+  }
+}

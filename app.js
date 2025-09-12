@@ -169,15 +169,18 @@ async function refresh() {
   }
 }
 
-// Event’ai
-document.getElementById("refreshBtn").addEventListener("click", refresh);
-document.getElementById("filterStatus").addEventListener("change", refresh);
-document.getElementById("filterSLA").addEventListener("change", refresh);
-document.getElementById("sort").addEventListener("change", refresh);
-const search = document.getElementById("search");
-const debounced = debounce(refresh, 300);
-search.addEventListener("input", debounced);
-// Initial refresh and auto-refresh every 30 seconds
-refresh();
-setInterval(refresh, 30000);
+if (typeof document !== "undefined" && document.getElementById("refreshBtn")) {
+  document.getElementById("refreshBtn").addEventListener("click", refresh);
+  document.getElementById("filterStatus").addEventListener("change", refresh);
+  document.getElementById("filterSLA").addEventListener("change", refresh);
+  document.getElementById("sort").addEventListener("change", refresh);
+  const search = document.getElementById("search");
+  const debounced = debounce(refresh, 300);
+  search.addEventListener("input", debounced);
+  refresh();
+  setInterval(refresh, 30000);
+}
 
+
+
+export { formatDuration, applyFilters };
