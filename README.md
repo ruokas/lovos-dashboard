@@ -18,6 +18,9 @@ Minimalus statinis skydelis realiu laiku rodyti lovų būklę iš Google Sheets.
 2. Nukopijuokite sugeneruotą nuorodą.
 3. `data.js` faile pakeiskite `CSV_URL` konstantą į savo nuorodą.
 
+## Testavimas
+`npm test` – paleidžia vienetinius testus su Vitest.
+
 ## Smoke test
 1. Atidarykite `index.html`.
 2. Patikrinkite paieškos lauką ir filtrus „Būsena“ bei „SLA“.
