@@ -169,8 +169,22 @@ async function refresh() {
   }
 }
 
+// Išvalo paiešką, filtrus ir atstato numatytą rikiavimą.
+function clearFilters() {
+  const search = document.getElementById("search");
+  const filterStatus = document.getElementById("filterStatus");
+  const filterSLA = document.getElementById("filterSLA");
+  const sort = document.getElementById("sort");
+  if (search) search.value = "";
+  if (filterStatus) filterStatus.value = "";
+  if (filterSLA) filterSLA.value = "";
+  if (sort) sort.value = "priority";
+  refresh();
+}
+
 if (typeof document !== "undefined" && document.getElementById("refreshBtn")) {
   document.getElementById("refreshBtn").addEventListener("click", refresh);
+  document.getElementById("clearFilters").addEventListener("click", clearFilters);
   document.getElementById("filterStatus").addEventListener("change", refresh);
   document.getElementById("filterSLA").addEventListener("change", refresh);
   document.getElementById("sort").addEventListener("change", refresh);
