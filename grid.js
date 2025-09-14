@@ -35,7 +35,12 @@ function renderGrid(rows) {
   const totalGapY = gapY * (maxRow - 1);
 
   // Plotis parenkamas pagal turimą vietą, o aukštis – pagal nurodytą proporciją.
-  const cellWidth = Math.floor((availableWidth - totalGapX) / maxCol);
+  const autoCellWidth = Math.floor((availableWidth - totalGapX) / maxCol);
+  let cellWidth = Math.max(autoCellWidth, 60);
+  if (parent) {
+    if (cellWidth > autoCellWidth) parent.classList.add('overflow-x-auto');
+    else parent.classList.remove('overflow-x-auto');
+  }
   const maxHeight = Math.floor((availableHeight - totalGapY) / maxRow);
   const cellHeight = Math.min(Math.floor(cellWidth * HEIGHT_RATIO), maxHeight);
 
