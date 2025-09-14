@@ -80,6 +80,9 @@ async function refresh() {
 }
 
 document.getElementById('refreshBtn')?.addEventListener('click', refresh);
+document.getElementById('listViewBtn')?.addEventListener('click', () => {
+  window.location.href = 'index.html';
+});
 
 refresh();
 setInterval(refresh, 30000);

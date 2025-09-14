@@ -184,6 +184,9 @@ function clearFilters() {
 
 if (typeof document !== "undefined" && document.getElementById("refreshBtn")) {
   document.getElementById("refreshBtn").addEventListener("click", refresh);
+  document.getElementById("gridViewBtn")?.addEventListener("click", () => {
+    window.location.href = "grid.html";
+  });
   document.getElementById("clearFilters").addEventListener("click", clearFilters);
   document.getElementById("filterStatus").addEventListener("change", refresh);
   document.getElementById("filterSLA").addEventListener("change", refresh);
