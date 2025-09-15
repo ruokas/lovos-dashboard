@@ -1,4 +1,5 @@
 import { loadData } from "./data.js";
+import { pillForOccupancy } from "./utils/ui.js";
 
 
 // Funkcija statuso prioritetui: 🧹 (0) > 🚫 (1) > 🟩 (2).
@@ -48,15 +49,6 @@ function pillForSLA(s) {
   if (s === "⚪ Laukia (≤ SLA)") return `<span class="badge bg-sky-100 text-sky-800">${s}</span>`;
   if (s === "✅ Atlikta laiku") return `<span class="badge bg-emerald-100 text-emerald-800">${s}</span>`;
   return `<span class="badge bg-slate-100 text-slate-700">${s || "—"}</span>`;
-}
-
-// Ženkliukai užimtumui.
-function pillForOccupancy(s) {
-  if (!s) return `<span class="badge bg-slate-100 text-slate-700">—</span>`;
-  const t = s.trim().toLowerCase();
-  if (t.includes("užim")) return `<span class="badge bg-rose-100 text-rose-800">${s}</span>`;
-  if (t.includes("laisv")) return `<span class="badge bg-emerald-100 text-emerald-800">${s}</span>`;
-  return `<span class="badge bg-slate-100 text-slate-700">${s}</span>`;
 }
 
 // Filtrai ir rikiavimas.

@@ -1,5 +1,6 @@
 import { loadData } from './data.js';
 import { bedLayout } from './layout.js';
+import { pillForOccupancy } from './utils/ui.js';
 
 let lastRows = [];
 const grid = document.getElementById('bedGrid');
@@ -7,14 +8,6 @@ const container = grid?.parentElement?.parentElement;
 // Proporcija tarp pločio ir aukščio (mažina kortelės aukštį).
 // 1 reikštų kvadratą; 0.75 – žemesnę kortelę.
 const HEIGHT_RATIO = 0.75;
-
-function pillForOccupancy(s) {
-  if (!s) return `<span class="badge bg-slate-100 text-slate-700">—</span>`;
-  const t = s.trim().toLowerCase();
-  if (t.includes('užim')) return `<span class="badge bg-rose-100 text-rose-800">${s}</span>`;
-  if (t.includes('laisv')) return `<span class="badge bg-emerald-100 text-emerald-800">${s}</span>`;
-  return `<span class="badge bg-slate-100 text-slate-700">${s}</span>`;
-}
 
 function renderGrid(rows) {
   lastRows = rows;
