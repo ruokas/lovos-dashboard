@@ -14,6 +14,19 @@
     .clean { @apply bg-emerald-100 text-emerald-800; }
     .occupied { @apply bg-rose-100 text-rose-800; }
     .dirty { @apply bg-yellow-100 text-yellow-800; }
+    @layer utilities {
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border-width: 0;
+      }
+    }
   </style>
   <!-- PapaParse CSV parser -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
@@ -28,22 +41,26 @@
         <button id="gridViewBtn" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 h-7 text-xs shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">Tinklelio vaizdas</button>
         </div>
         <div class="flex flex-wrap md:flex-nowrap items-center gap-1 text-sm overflow-x-auto">
-        <input id="search" type="search" placeholder="Paieška (lova, būsena, pažymėjo)…"
-               class="md:w-64 w-full border rounded-md px-2 py-1 h-7 flex-none bg-white shadow-sm focus:outline-none text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400">
-        <select id="filterStatus" class="border rounded-md px-2 py-1 h-7 flex-none bg-white shadow-sm text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
+          <label for="search" class="sr-only">Paieška</label>
+          <input id="search" type="search" placeholder="Paieška (lova, būsena, pažymėjo)…"
+                 class="md:w-64 w-full border rounded-md px-2 py-1 h-7 flex-none bg-white shadow-sm focus:outline-none text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400">
+          <label for="filterStatus" class="sr-only">Filtruoti pagal būseną</label>
+          <select id="filterStatus" class="border rounded-md px-2 py-1 h-7 flex-none bg-white shadow-sm text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
           <option value="">Visos būsenos</option>
           <option value="🧹">🧹 Reikia sutvarkyti</option>
           <option value="🚫">🚫 Užimta</option>
           <option value="🟩">🟩 Sutvarkyta</option>
         </select>
-        <select id="filterSLA" class="border rounded-md px-2 py-1 h-7 flex-none bg-white shadow-sm text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
+          <label for="filterSLA" class="sr-only">Filtruoti pagal SLA</label>
+          <select id="filterSLA" class="border rounded-md px-2 py-1 h-7 flex-none bg-white shadow-sm text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
           <option value="">SLA – visos</option>
           <option value="⛔ Viršyta">⛔ Viršyta</option>
           <option value="⚠️ Ką tik atlaisvinta">⚠️ Ką tik atlaisvinta</option>
           <option value="⚪ Laukia (≤ SLA)">⚪ Laukia (≤ SLA)</option>
           <option value="✅ Atlikta laiku">✅ Atlikta laiku</option>
         </select>
-        <select id="sort" class="border rounded-md px-2 py-1 h-7 flex-none bg-white shadow-sm text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
+          <label for="sort" class="sr-only">Rikiavimo seka</label>
+          <select id="sort" class="border rounded-md px-2 py-1 h-7 flex-none bg-white shadow-sm text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
           <option value="priority">Rikiuoti pagal prioritetą</option>
           <option value="bed">Rikiuoti pagal lovą</option>
           <option value="wait">Pagal laukimo laiką (desc)</option>
