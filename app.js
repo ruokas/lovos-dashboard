@@ -6,10 +6,10 @@ import { texts, t } from "./texts.js";
 // Funkcija statuso prioritetui: 🧹 (0) > 🚫 (1) > 🟩 (2).
 function statusPriority(s) {
   if (!s) return 99;
-  const ch = s.trim().charAt(0);
-  if (ch === "🧹") return 0;
-  if (ch === "🚫") return 1;
-  if (ch === "🟩") return 2;
+  const trimmed = s.trim();
+  if (trimmed.startsWith("🧹")) return 0;
+  if (trimmed.startsWith("🚫")) return 1;
+  if (trimmed.startsWith("🟩")) return 2;
   return 9;
 }
 
@@ -224,4 +224,4 @@ if (typeof document !== "undefined" && document.getElementById("refreshBtn")) {
 
 
 
-export { formatDuration, applyFilters };
+export { formatDuration, applyFilters, statusPriority };
