@@ -21,10 +21,10 @@ function renderKPIs(rows) {
   ];
   const el = document.getElementById("kpis");
   el.innerHTML = kpis.map(k =>
-    `<div class="card p-4 bg-white dark:bg-slate-800">
-       <div class="text-xs text-slate-500 dark:text-slate-400">${k.label}</div>
-       <div class="text-3xl font-semibold ${k.cls} inline-block rounded-lg px-3 py-1 mt-1">${k.value}</div>
-     </div>`
+    `<div class="card p-4 bg-white dark:bg-slate-800 flex flex-col justify-between h-24">
+         <div class="text-sm md:text-base leading-tight truncate text-slate-500 dark:text-slate-400">${k.label}</div>
+         <div class="text-4xl md:text-5xl leading-none font-semibold ${k.cls} inline-block rounded-lg px-2 py-0.5 mt-1">${k.value}</div>
+       </div>`
   ).join("");
 }
 
