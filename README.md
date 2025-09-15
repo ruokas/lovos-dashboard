@@ -28,6 +28,12 @@ Minimalus statinis skydelis realiu laiku rodyti lovų būklę iš Google Sheets.
 4. Paspauskite `Atnaujinti` – lentelė turėtų persikrauti be klaidų.
 5. Perjunkite temą mygtuku „Tamsi tema“ ir įsitikinkite, kad stilius keičiasi bei išlieka perkrovus puslapį.
 
+## Naujos kalbos pridėjimas
+1. `texts.js` faile kiekvieno rakto objekte užpildykite naujos kalbos lauką (pvz., `en`) paliktais tuščiais vertimais.
+2. Jei norite, kad nauja kalba būtų numatyta, pakeiskite `DEFAULT_LANG` reikšmę `texts.js` faile (pagal poreikį papildykite loginą kalbos perjungimui).
+3. Atnaujinkite statinius tekstus HTML failuose (`index.html`, `grid.html`) ir datas formatuojančius metodus (`toLocaleString`, `toLocaleTimeString`), kad atitiktų naują kalbą.
+4. Perkraukite puslapį ir patikrinkite, ar visur rodomi teisingi vertimai.
+
 ## Struktūra
 - `index.html` – pagrindinis dashboardas.
 - `data.js` – duomenų įkėlimas ir normalizacija.
