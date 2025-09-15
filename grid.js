@@ -1,6 +1,7 @@
 import { loadData } from './data.js';
 import { bedLayout } from './layout.js';
 import { pillForOccupancy } from './utils/ui.js';
+import { texts, t } from './texts.js';
 
 let lastRows = [];
 const grid = document.getElementById('bedGrid');
@@ -65,13 +66,14 @@ async function refresh() {
     renderGrid(rows);
     const updatedEl = document.getElementById('updatedAt');
     if (updatedEl) {
-      const prefix = navigator.onLine ? 'Atnaujinta: ' : 'Offline, rodoma talpykla: ';
+      const prefix = navigator.onLine ? t(texts.updates.onlinePrefix) : t(texts.updates.offlinePrefix);
       updatedEl.textContent = prefix + new Date().toLocaleTimeString('lt-LT');
     }
   } catch (err) {
-    console.error('Nepavyko įkelti duomenų', err);
+    const loadError = t(texts.messages.loadErrorShort);
+    console.error(loadError, err);
     if (errorEl) {
-      errorEl.textContent = 'Nepavyko įkelti duomenų';
+      errorEl.textContent = loadError;
       errorEl.classList.remove('hidden');
     }
   }

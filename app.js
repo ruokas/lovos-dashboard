@@ -1,5 +1,6 @@
 import { loadData } from "./data.js";
 import { pillForOccupancy } from "./utils/ui.js";
+import { texts, t } from "./texts.js";
 
 
 // Funkcija statuso prioritetui: 🧹 (0) > 🚫 (1) > 🟩 (2).
@@ -15,10 +16,26 @@ function statusPriority(s) {
 // KPI kortelių atvaizdavimas.
 function renderKPIs(rows) {
   const kpis = [
-    { label: "Reikia sutvarkyti", value: rows.filter(r => (r.galutine || "").startsWith("🧹")).length, cls: "bg-yellow-100 text-yellow-800" },
-    { label: "Užimta", value: rows.filter(r => (r.galutine || "").startsWith("🚫")).length, cls: "bg-rose-100 text-rose-800" },
-    { label: "Sutvarkyta", value: rows.filter(r => (r.galutine || "").startsWith("🟩")).length, cls: "bg-emerald-100 text-emerald-800" },
-    { label: "SLA viršyta", value: rows.filter(r => r.sla === "⛔ Viršyta").length, cls: "bg-red-100 text-red-800" },
+    {
+      label: t(texts.kpi.needsCleaning),
+      value: rows.filter(r => (r.galutine || "").startsWith("🧹")).length,
+      cls: "bg-yellow-100 text-yellow-800",
+    },
+    {
+      label: t(texts.kpi.occupied),
+      value: rows.filter(r => (r.galutine || "").startsWith("🚫")).length,
+      cls: "bg-rose-100 text-rose-800",
+    },
+    {
+      label: t(texts.kpi.cleaned),
+      value: rows.filter(r => (r.galutine || "").startsWith("🟩")).length,
+      cls: "bg-emerald-100 text-emerald-800",
+    },
+    {
+      label: t(texts.kpi.slaBreached),
+      value: rows.filter(r => r.sla === t(texts.sla.exceeded)).length,
+      cls: "bg-red-100 text-red-800",
+    },
   ];
   const el = document.getElementById("kpis");
   el.innerHTML = kpis
@@ -34,7 +51,8 @@ function renderKPIs(rows) {
 
 // Ženkliukai statusui.
 function pillForStatus(s) {
-  if (!s) return `<span class="status-pill bg-slate-200 text-slate-700">—</span>`;
+  const dash = t(texts.common.dash);
+  if (!s) return `<span class="status-pill bg-slate-200 text-slate-700">${dash}</span>`;
   const icon = s.trim().charAt(0);
   if (icon === "🧹") return `<span class="status-pill bg-yellow-100 text-yellow-800">${s}</span>`;
   if (icon === "🚫") return `<span class="status-pill bg-rose-100 text-rose-800">${s}</span>`;
@@ -44,11 +62,16 @@ function pillForStatus(s) {
 
 // Ženkliukai SLA.
 function pillForSLA(s) {
-  if (s === "⛔ Viršyta") return `<span class="badge bg-red-100 text-red-800">${s}</span>`;
-  if (s === "⚠️ Ką tik atlaisvinta") return `<span class="badge bg-amber-100 text-amber-800">${s}</span>`;
-  if (s === "⚪ Laukia (≤ SLA)") return `<span class="badge bg-sky-100 text-sky-800">${s}</span>`;
-  if (s === "✅ Atlikta laiku") return `<span class="badge bg-emerald-100 text-emerald-800">${s}</span>`;
-  return `<span class="badge bg-slate-100 text-slate-700">${s || "—"}</span>`;
+  const slaExceeded = t(texts.sla.exceeded);
+  const slaJustFreed = t(texts.sla.justFreed);
+  const slaWaitingWithin = t(texts.sla.waitingWithin);
+  const slaOnTime = t(texts.sla.onTime);
+  const dash = t(texts.common.dash);
+  if (s === slaExceeded) return `<span class="badge bg-red-100 text-red-800">${slaExceeded}</span>`;
+  if (s === slaJustFreed) return `<span class="badge bg-amber-100 text-amber-800">${slaJustFreed}</span>`;
+  if (s === slaWaitingWithin) return `<span class="badge bg-sky-100 text-sky-800">${slaWaitingWithin}</span>`;
+  if (s === slaOnTime) return `<span class="badge bg-emerald-100 text-emerald-800">${slaOnTime}</span>`;
+  return `<span class="badge bg-slate-100 text-slate-700">${s || dash}</span>`;
 }
 
 // Filtrai ir rikiavimas.
@@ -74,10 +97,12 @@ function sortRows(rows) {
   } else if (mode === "wait") {
     rows.sort((a, b) => (Number(b.gHoursNum) || 0) - (Number(a.gHoursNum) || 0));
   } else {
+    const slaExceeded = t(texts.sla.exceeded);
+    const slaJustFreed = t(texts.sla.justFreed);
     rows.sort((a, b) => {
       const pDiff = statusPriority(a.galutine) - statusPriority(b.galutine);
       if (pDiff !== 0) return pDiff;
-      const slaScore = (s) => (s === "⛔ Viršyta" ? 0 : s === "⚠️ Ką tik atlaisvinta" ? 1 : 2);
+      const slaScore = (s) => (s === slaExceeded ? 0 : s === slaJustFreed ? 1 : 2);
       const sDiff = slaScore(a.sla) - slaScore(b.sla);
       if (sDiff !== 0) return sDiff;
       return (a.lova || "").localeCompare(b.lova || "", "lt");
@@ -96,14 +121,17 @@ function formatDuration(hours) {
   const h = Math.floor(total / 60);
   const m = total % 60;
   const parts = [];
-  if (h > 0) parts.push(`${h} val`);
-  if (m > 0 || h === 0) parts.push(`${m} min`);
+  const hoursLabel = t(texts.time.hours);
+  const minutesLabel = t(texts.time.minutes);
+  if (h > 0) parts.push(`${h} ${hoursLabel}`);
+  if (m > 0 || h === 0) parts.push(`${m} ${minutesLabel}`);
   return parts.join(" ");
 }
 
 // Spalvinis indikatorius laukimo laikui.
 function pillForWait(hours) {
-  if (!Number.isFinite(hours)) return `<span class="badge bg-slate-100 text-slate-700">—</span>`;
+  const dash = t(texts.common.dash);
+  if (!Number.isFinite(hours)) return `<span class="badge bg-slate-100 text-slate-700">${dash}</span>`;
   if (hours > 2) return `<span class="badge bg-red-100 text-red-800 mono">${formatDuration(hours)}</span>`;
   if (hours > 1) return `<span class="badge bg-amber-100 text-amber-800 mono">${formatDuration(hours)}</span>`;
   return `<span class="badge bg-slate-100 text-slate-700 mono">${formatDuration(hours)}</span>`;
@@ -126,17 +154,18 @@ function debounce(fn, delay) {
 
 function renderTable(rows) {
   const tbody = document.getElementById("tbody");
+  const dash = t(texts.common.dash);
   tbody.innerHTML = rows
     .map(
       (r) => `
         <tr class="odd:bg-slate-50 even:bg-white dark:odd:bg-slate-800 dark:even:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700">
-          <td class="px-4 py-3 text-lg font-medium">${r.lova || "—"}</td>
+          <td class="px-4 py-3 text-lg font-medium">${r.lova || dash}</td>
           <td class="px-4 py-3 text-lg">${pillForStatus(r.galutine)}</td>
           <td class="px-4 py-3 text-lg">${pillForSLA(r.sla)}</td>
           <td class="px-4 py-3 text-lg">${pillForOccupancy(r.uzimt)}</td>
           <td class="px-4 py-3 text-lg">${pillForWait(r.gHoursNum)}</td>
-          <td class="px-4 py-3 text-lg">${r.pask || "—"}</td>
-          <td class="px-4 py-3 text-lg">${r.who || "—"}</td>
+          <td class="px-4 py-3 text-lg">${r.pask || dash}</td>
+          <td class="px-4 py-3 text-lg">${r.who || dash}</td>
         </tr>
       `
     )
@@ -152,12 +181,12 @@ async function refresh() {
     sortRows(filtered);
     renderKPIs(filtered);
     renderTable(filtered);
-    const prefix = navigator.onLine ? "Atnaujinta: " : "Offline, rodoma talpykla: ";
+    const prefix = navigator.onLine ? t(texts.updates.onlinePrefix) : t(texts.updates.offlinePrefix);
     document.getElementById("updatedAt").textContent =
       prefix + new Date().toLocaleString("lt-LT");
   } catch (err) {
     console.error(err);
-    document.getElementById("updatedAt").textContent = "Klaida įkeliant duomenis.";
+    document.getElementById("updatedAt").textContent = t(texts.messages.loadError);
     loader.classList.add("hidden");
   } finally {
     loader.classList.add("hidden");
