@@ -20,12 +20,15 @@ function renderKPIs(rows) {
     { label: "SLA viršyta", value: rows.filter(r => r.sla === "⛔ Viršyta").length, cls: "bg-red-100 text-red-800" },
   ];
   const el = document.getElementById("kpis");
-  el.innerHTML = kpis.map(k =>
-    `<div class="card p-4 bg-white dark:bg-slate-800 flex flex-col justify-between h-24">
-         <div class="text-sm md:text-base leading-tight truncate text-slate-500 dark:text-slate-400">${k.label}</div>
-         <div class="text-4xl md:text-5xl leading-none font-semibold ${k.cls} inline-block rounded-lg px-2 py-0.5 mt-1">${k.value}</div>
-       </div>`
-  ).join("");
+  el.innerHTML = kpis
+    .map(
+      (k, idx) =>
+        `<article class="card kpi-card bg-white dark:bg-slate-800" aria-labelledby="kpi-${idx}">
+           <h3 id="kpi-${idx}" class="kpi-title" title="${k.label}">${k.label}</h3>
+           <div class="kpi-value ${k.cls}" aria-live="polite">${k.value}</div>
+         </article>`
+    )
+    .join("");
 }
 
 // Ženkliukai statusui.
