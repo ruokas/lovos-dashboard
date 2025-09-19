@@ -74,11 +74,17 @@
         <button id="themeToggle" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 h-9 text-xs shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
           Tamsi tema
         </button>
+        <button id="audioToggle" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 h-9 text-xs shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200" aria-pressed="false">
+          Garso signalai
+        </button>
       </div>
     </header>
 
     <!-- KPI kortelės -->
     <section id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></section>
+
+    <!-- Pranešimai apie kritinius įvykius -->
+    <div id="alerts" class="hidden mb-4 rounded-md border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 shadow-sm dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-100" role="status" aria-live="assertive"></div>
 
     <!-- Lentelė -->
     <div class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100">
