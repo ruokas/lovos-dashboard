@@ -45,4 +45,71 @@
     font-size: clamp(1.75rem, 6vw + .5rem, 2.5rem);
   }
 }
+.toolbar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: .5rem;
+  align-items: center;
+  width: 100%;
+}
+.toolbar > * {
+  width: 100%;
+}
+@media (min-width: 768px) {
+  .toolbar {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: .75rem;
+  }
+}
+@media (min-width: 1024px) {
+  .toolbar {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: .75rem;
+  }
+  .toolbar > * {
+    width: auto;
+  }
+  .toolbar input[type="search"] {
+    min-width: 16rem;
+  }
+}
+.responsive-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+.responsive-table th,
+.responsive-table td {
+  vertical-align: top;
+}
+.responsive-table td {
+  word-break: break-word;
+}
+@media (max-width: 1280px) {
+  .responsive-table th,
+  .responsive-table td {
+    padding-left: .75rem;
+    padding-right: .75rem;
+  }
+  .responsive-table td .status-pill,
+  .responsive-table td .badge {
+    font-size: .9rem;
+  }
+}
+@media (max-width: 1024px) {
+  .responsive-table {
+    font-size: 1rem;
+    line-height: 1.5;
+  }
+  .responsive-table th {
+    font-size: .75rem;
+    letter-spacing: .02em;
+  }
+  .kpi-card {
+    min-height: 6.5rem;
+  }
+  .kpi-value {
+    font-size: clamp(1.6rem, 3vw + .75rem, 2.25rem);
+  }
+}
 .mono { font-variant-numeric: tabular-nums; }
