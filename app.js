@@ -158,14 +158,14 @@ function renderTable(rows) {
   tbody.innerHTML = rows
     .map(
       (r) => `
-        <tr class="odd:bg-slate-50 even:bg-white dark:odd:bg-slate-800 dark:even:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700">
-          <td class="px-4 py-3 text-lg font-medium">${r.lova || dash}</td>
-          <td class="px-4 py-3 text-lg">${pillForStatus(r.galutine)}</td>
-          <td class="px-4 py-3 text-lg">${pillForSLA(r.sla)}</td>
-          <td class="px-4 py-3 text-lg">${pillForOccupancy(r.uzimt)}</td>
-          <td class="px-4 py-3 text-lg">${pillForWait(r.gHoursNum)}</td>
-          <td class="px-4 py-3 text-lg">${r.pask || dash}</td>
-          <td class="px-4 py-3 text-lg">${r.who || dash}</td>
+        <tr class="odd:bg-slate-50 even:bg-white dark:odd:bg-slate-800 dark:even:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm md:text-base">
+          <td class="px-3 md:px-4 py-3 text-base md:text-lg font-semibold md:font-medium leading-6 md:leading-7 align-top whitespace-nowrap">${r.lova || dash}</td>
+          <td class="px-3 md:px-4 py-3 text-sm md:text-lg leading-6 md:leading-7 align-top">${pillForStatus(r.galutine)}</td>
+          <td class="px-3 md:px-4 py-3 text-sm md:text-lg leading-6 md:leading-7 align-top">${pillForSLA(r.sla)}</td>
+          <td class="px-3 md:px-4 py-3 text-sm md:text-lg leading-6 md:leading-7 align-top">${pillForOccupancy(r.uzimt)}</td>
+          <td class="px-3 md:px-4 py-3 text-sm md:text-lg leading-6 md:leading-7 align-top">${pillForWait(r.gHoursNum)}</td>
+          <td class="px-3 md:px-4 py-3 text-sm md:text-lg leading-6 md:leading-7 align-top break-words">${r.pask || dash}</td>
+          <td class="px-3 md:px-4 py-3 text-sm md:text-lg leading-6 md:leading-7 align-top break-words">${r.who || dash}</td>
         </tr>
       `
     )
