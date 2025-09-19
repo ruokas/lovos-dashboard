@@ -3,6 +3,120 @@ import { pillForOccupancy } from "./utils/ui.js";
 import { texts, t } from "./texts.js";
 
 
+const CRITICAL_PREFIXES = {
+  cleaning: "🧹",
+  sla: "⛔",
+};
+
+const AUDIO_PREF_KEY = "lovos-audio-enabled";
+
+const SOUND_SOURCES = {
+  sla: "data:audio/wav;base64,UklGRqQCAABXQVZFZm10IBAAAAABAAEAoA8AAEAfAAACABAAZGF0YYACAAAAADU/xhP7xmPaQC3GM/PiI8MCCv8/Agojw/PixjNALWPa+8bGEzU/AADLwDrsBTmdJcDSOswNHd08/vUBwP713TwNHTrMwNKdJQU5OuzLwAAANT/GE/vGY9pALcYz8+IjwwIK/z8CCiPD8+LGM0AtY9r7xsYTNT8AAMvAOuwFOZ0lwNI6zA0d3Tz+9QHA/vXdPA0dOszA0p0lBTk67MvAAAA1P8YT+8Zj2kAtxjPz4iPDAgr/PwIKI8Pz4sYzQC1j2vvGxhM1PwAAy8A67AU5nSXA0jrMDR3dPP71AcD+9d08DR06zMDSnSUFOTrsy8AAADU/xhP7xmPaQC3GM/PiI8MCCv8/Agojw/PixjNALWPa+8bGEzU/AADLwDrsBTmdJcDSOswNHd08/vUBwP713TwNHTrMwNKdJQU5OuzLwAAANT/GE/vGY9pALcYz8+IjwwIK/z8CCiPD8+LGM0AtY9r7xsYTNT8AAMvAOuwFOZ0lwNI6zA0d3Tz+9QHA/vXdPA0dOszA0p0lBTk67MvAAAA1P8YT+8Zj2kAtxjPz4iPDAgr/PwIKI8Pz4sYzQC1j2vvGxhM1PwAAy8A67AU5nSXA0jrMDR3dPP71AcD+9d08DR06zMDSnSUFOTrsy8AAADU/xhP7xmPaQC3GM/PiI8MCCv8/Agojw/PixjNALWPa+8bGEzU/AADLwDrsBTmdJcDSOswNHd08/vUBwP713TwNHTrMwNKdJQU5OuzLwAAANT/GE/vGY9pALcYz8+IjwwIK/z8CCiPD8+LGM0AtY9r7xsYTNT8AAMvAOuwFOZ0lwNI6zA0d3Tz+9QHA/vXdPA0dOszA0p0lBTk67MvAAAA1P8YT+8Zj2kAtxjPz4iPDAgr/PwIKI8Pz4sYzQC1j2vvGxhM1PwAAy8A67AU5nSXA0jrMDR3dPP71AcD+9d08DR06zMDSnSUFOTrsy8AAA",
+  cleaning: "data:audio/wav;base64,UklGRqQCAABXQVZFZm10IBAAAAABAAEAoA8AAEAfAAACABAAZGF0YYACAAAAAMYz3TzGE2PaAcBj2sYT3TzGMwAAOswjwzrsnSX/P50lOuwjwzrMAADGM908xhNj2gHAY9rGE908xjMAADrMI8M67J0l/z+dJTrsI8M6zAAAxjPdPMYTY9oBwGPaxhPdPMYzAAA6zCPDOuydJf8/nSU67CPDOswAAMYz3TzGE2PaAcBj2sYT3TzGMwAAOswjwzrsnSX/P50lOuwjwzrMAADGM908xhNj2gHAY9rGE908xjMAADrMI8M67J0l/z+dJTrsI8M6zAAAxjPdPMYTY9oBwGPaxhPdPMYzAAA6zCPDOuydJf8/nSU67CPDOswAAMYz3TzGE2PaAcBj2sYT3TzGMwAAOswjwzrsnSX/P50lOuwjwzrMAADGM908xhNj2gHAY9rGE908xjMAADrMI8M67J0l/z+dJTrsI8M6zAAAxjPdPMYTY9oBwGPaxhPdPMYzAAA6zCPDOuydJf8/nSU67CPDOswAAMYz3TzGE2PaAcBj2sYT3TzGMwAAOswjwzrsnSX/P50lOuwjwzrM",
+};
+
+/**
+ * @type {Set<string>}
+ */
+let lastCriticalKeys = new Set();
+
+let audioEnabled = true;
+
+if (typeof localStorage !== "undefined") {
+  const stored = localStorage.getItem(AUDIO_PREF_KEY);
+  if (stored !== null) {
+    audioEnabled = stored === "true";
+  }
+}
+
+const alertSounds = typeof Audio !== "undefined" ? {
+  sla: new Audio(SOUND_SOURCES.sla),
+  cleaning: new Audio(SOUND_SOURCES.cleaning),
+} : {};
+
+function playAlertSound(type) {
+  const sound = alertSounds[type];
+  if (!sound) return;
+  try {
+    sound.currentTime = 0;
+    sound.play().catch(() => {});
+  } catch (err) {
+    console.error("Nepavyko paleisti garso", err);
+  }
+}
+
+function rowKey(row) {
+  const trimmed = (row.lova || "").trim();
+  if (trimmed) return trimmed;
+  if (row.order !== undefined && row.order !== null) {
+    return `row-${row.order}`;
+  }
+  return "row-unknown";
+}
+
+function buildCriticalSet(rows) {
+  const set = new Set();
+  rows.forEach((row) => {
+    const key = rowKey(row);
+    const status = (row.galutine || "").trim();
+    const sla = (row.sla || "").trim();
+    if (status.startsWith(CRITICAL_PREFIXES.cleaning)) {
+      set.add(`cleaning|${key}`);
+    }
+    if (sla.startsWith(CRITICAL_PREFIXES.sla)) {
+      set.add(`sla|${key}`);
+    }
+  });
+  return set;
+}
+
+function detectNewCritical(previousSet, rows) {
+  const nextSet = buildCriticalSet(rows);
+  const newOnes = [];
+  nextSet.forEach((entry) => {
+    if (!previousSet.has(entry)) {
+      newOnes.push(entry);
+    }
+  });
+  return { nextSet, newOnes };
+}
+
+function updateAlertsUI(newKeys) {
+  if (typeof document === "undefined") return new Set();
+  const alertBox = document.getElementById("alerts");
+  if (!alertBox) return new Set();
+  if (!newKeys.length) {
+    alertBox.textContent = "";
+    alertBox.classList.add("hidden");
+    alertBox.removeAttribute("data-type");
+    return new Set();
+  }
+  const types = new Set();
+  const highlightKeys = new Set();
+  newKeys.forEach((key) => {
+    const [type, rowId] = key.split("|");
+    if (type) types.add(type);
+    if (rowId) highlightKeys.add(rowId);
+  });
+  const messages = [];
+  if (types.has("sla")) messages.push(t(texts.messages.newSlaBreach));
+  if (types.has("cleaning")) messages.push(t(texts.messages.needsCleaningAlert));
+  alertBox.textContent = messages.join(" • ");
+  alertBox.classList.remove("hidden");
+  alertBox.setAttribute("data-type", Array.from(types).join(" "));
+  if (audioEnabled) {
+    types.forEach((type) => playAlertSound(type));
+  }
+  return highlightKeys;
+}
+
+function updateAudioToggle(btn) {
+  if (!btn) return;
+  const label = audioEnabled ? t(texts.messages.soundOn) : t(texts.messages.soundOff);
+  btn.textContent = label;
+  btn.setAttribute("aria-pressed", audioEnabled ? "true" : "false");
+}
+
 // Funkcija statuso prioritetui: 🧹 (0) > 🚫 (1) > 🟩 (2).
 function statusPriority(s) {
   if (!s) return 99;
@@ -152,13 +266,18 @@ function debounce(fn, delay) {
   };
 }
 
-function renderTable(rows) {
+function renderTable(rows, highlightKeys = new Set()) {
   const tbody = document.getElementById("tbody");
   const dash = t(texts.common.dash);
   tbody.innerHTML = rows
     .map(
-      (r) => `
-        <tr class="odd:bg-slate-50 even:bg-white dark:odd:bg-slate-800 dark:even:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm md:text-base">
+      (r) => {
+        const key = rowKey(r);
+        const isCritical = highlightKeys.has(key);
+        const criticalAttr = isCritical ? ' data-critical="true"' : "";
+        const rowClass = `odd:bg-slate-50 even:bg-white dark:odd:bg-slate-800 dark:even:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-700 text-sm md:text-base${isCritical ? " pulse-critical" : ""}`;
+        return `
+        <tr class="${rowClass}"${criticalAttr}>
           <td class="px-3 md:px-4 py-3 text-base md:text-lg font-semibold md:font-medium leading-6 md:leading-7 align-top whitespace-nowrap">${r.lova || dash}</td>
           <td class="px-3 md:px-4 py-3 text-sm md:text-lg leading-6 md:leading-7 align-top">${pillForStatus(r.galutine)}</td>
           <td class="px-3 md:px-4 py-3 text-sm md:text-lg leading-6 md:leading-7 align-top">${pillForSLA(r.sla)}</td>
@@ -167,7 +286,8 @@ function renderTable(rows) {
           <td class="px-3 md:px-4 py-3 text-sm md:text-lg leading-6 md:leading-7 align-top break-words">${r.pask || dash}</td>
           <td class="px-3 md:px-4 py-3 text-sm md:text-lg leading-6 md:leading-7 align-top break-words">${r.who || dash}</td>
         </tr>
-      `
+      `;
+      }
     )
     .join("");
 }
@@ -177,10 +297,13 @@ async function refresh() {
   loader.classList.remove("hidden");
   try {
     const rows = await loadData();
+    const { nextSet, newOnes } = detectNewCritical(lastCriticalKeys, rows);
+    lastCriticalKeys = nextSet;
+    const highlightKeys = updateAlertsUI(newOnes);
     const filtered = applyFilters(rows);
     sortRows(filtered);
     renderKPIs(filtered);
-    renderTable(filtered);
+    renderTable(filtered, highlightKeys);
     const prefix = navigator.onLine ? t(texts.updates.onlinePrefix) : t(texts.updates.offlinePrefix);
     document.getElementById("updatedAt").textContent =
       prefix + new Date().toLocaleString("lt-LT");
@@ -207,6 +330,7 @@ function clearFilters() {
 }
 
 if (typeof document !== "undefined" && document.getElementById("refreshBtn")) {
+  updateAudioToggle(document.getElementById("audioToggle"));
   document.getElementById("refreshBtn").addEventListener("click", refresh);
   document.getElementById("gridViewBtn")?.addEventListener("click", () => {
     window.location.href = "grid.html";
@@ -218,10 +342,19 @@ if (typeof document !== "undefined" && document.getElementById("refreshBtn")) {
   const search = document.getElementById("search");
   const debounced = debounce(refresh, 300);
   search.addEventListener("input", debounced);
+  const audioToggle = document.getElementById("audioToggle");
+  if (audioToggle) {
+    audioToggle.addEventListener("click", () => {
+      audioEnabled = !audioEnabled;
+      if (typeof localStorage !== "undefined") {
+        localStorage.setItem(AUDIO_PREF_KEY, audioEnabled ? "true" : "false");
+      }
+      updateAudioToggle(audioToggle);
+    });
+  }
   refresh();
   setInterval(refresh, 30000);
 }
 
 
-
-export { formatDuration, applyFilters, statusPriority };
+export { formatDuration, applyFilters, statusPriority, detectNewCritical, buildCriticalSet };

@@ -113,3 +113,15 @@
   }
 }
 .mono { font-variant-numeric: tabular-nums; }
+.pulse-critical {
+  animation: criticalPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes criticalPulse {
+  0%, 100% {
+    background-color: inherit;
+  }
+  50% {
+    background-color: rgba(250, 204, 21, 0.25);
+  }
+}

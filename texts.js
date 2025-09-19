@@ -35,6 +35,10 @@ export const texts = {
   messages: {
     loadError: { lt: "Klaida įkeliant duomenis.", en: "" },
     loadErrorShort: { lt: "Nepavyko įkelti duomenų", en: "" },
+    newSlaBreach: { lt: "Naujas SLA viršijimas", en: "" },
+    needsCleaningAlert: { lt: "Reikia sutvarkyti lovą", en: "" },
+    soundOn: { lt: "Garso signalai įjungti", en: "" },
+    soundOff: { lt: "Garso signalai išjungti", en: "" },
   },
 };
 
