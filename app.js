@@ -20,6 +20,18 @@ const SOUND_SOURCES = {
  */
 let lastCriticalKeys = new Set();
 
+/**
+ * Visos užkrautos eilutės.
+ * @type {Array<object>}
+ */
+let allRows = [];
+
+/**
+ * Naujausių kritinių eilučių rinkinys paryškinimui.
+ * @type {Set<string>}
+ */
+let highlightKeys = new Set();
+
 let audioEnabled = true;
 
 if (typeof localStorage !== "undefined") {
@@ -189,10 +201,9 @@ function pillForSLA(s) {
 }
 
 // Filtrai ir rikiavimas.
-function applyFilters(rows) {
-  const q = document.getElementById("search").value.trim().toLowerCase();
-  const fS = document.getElementById("filterStatus").value;
-  const fSLA = document.getElementById("filterSLA").value;
+function applyFilters(rows, state = {}) {
+  const { query = "", status: fS = "", sla: fSLA = "" } = state;
+  const q = query.trim().toLowerCase();
   return rows.filter((r) => {
     if (fS && !(r.galutine || "").startsWith(fS)) return false;
     if (fSLA && (r.sla || "") !== fSLA) return false;
@@ -203,8 +214,8 @@ function applyFilters(rows) {
     return true;
   });
 }
-function sortRows(rows) {
-  const mode = document.getElementById("sort").value;
+function sortRows(rows, state = {}) {
+  const mode = state.sort || "priority";
   if (mode === "bed") {
     // Rikiuojame pagal eilės numerį iš Google Sheet'e
     rows.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -292,27 +303,60 @@ function renderTable(rows, highlightKeys = new Set()) {
     .join("");
 }
 
-async function refresh() {
-  const loader = document.getElementById("loader");
-  loader.classList.remove("hidden");
+function readUiState() {
+  if (typeof document === "undefined") {
+    return {
+      query: "",
+      status: "",
+      sla: "",
+      sort: "priority",
+    };
+  }
+  const search = document.getElementById("search");
+  const filterStatus = document.getElementById("filterStatus");
+  const filterSLA = document.getElementById("filterSLA");
+  const sort = document.getElementById("sort");
+  return {
+    query: search ? search.value : "",
+    status: filterStatus ? filterStatus.value : "",
+    sla: filterSLA ? filterSLA.value : "",
+    sort: sort ? sort.value : "priority",
+  };
+}
+
+async function reloadData() {
+  const loader = typeof document !== "undefined" ? document.getElementById("loader") : null;
+  loader?.classList.remove("hidden");
   try {
     const rows = await loadData();
+    allRows = rows;
     const { nextSet, newOnes } = detectNewCritical(lastCriticalKeys, rows);
     lastCriticalKeys = nextSet;
-    const highlightKeys = updateAlertsUI(newOnes);
-    const filtered = applyFilters(rows);
-    sortRows(filtered);
-    renderKPIs(filtered);
-    renderTable(filtered, highlightKeys);
-    const prefix = navigator.onLine ? t(texts.updates.onlinePrefix) : t(texts.updates.offlinePrefix);
-    document.getElementById("updatedAt").textContent =
-      prefix + new Date().toLocaleString("lt-LT");
+    highlightKeys = updateAlertsUI(newOnes);
+    if (typeof document !== "undefined") {
+      const prefix = navigator.onLine ? t(texts.updates.onlinePrefix) : t(texts.updates.offlinePrefix);
+      document.getElementById("updatedAt").textContent =
+        prefix + new Date().toLocaleString("lt-LT");
+    }
   } catch (err) {
     console.error(err);
-    document.getElementById("updatedAt").textContent = t(texts.messages.loadError);
-    loader.classList.add("hidden");
+    if (typeof document !== "undefined") {
+      document.getElementById("updatedAt").textContent = t(texts.messages.loadError);
+    }
+    throw err;
   } finally {
-    loader.classList.add("hidden");
+    loader?.classList.add("hidden");
+  }
+}
+
+function renderFromState() {
+  const state = readUiState();
+  const filtered = applyFilters(allRows, state);
+  const rowsForRendering = [...filtered];
+  sortRows(rowsForRendering, state);
+  if (typeof document !== "undefined") {
+    renderKPIs(filtered);
+    renderTable(rowsForRendering, highlightKeys);
   }
 }
 
@@ -326,21 +370,27 @@ function clearFilters() {
   if (filterStatus) filterStatus.value = "";
   if (filterSLA) filterSLA.value = "";
   if (sort) sort.value = "priority";
-  refresh();
+  renderFromState();
 }
 
 if (typeof document !== "undefined" && document.getElementById("refreshBtn")) {
   updateAudioToggle(document.getElementById("audioToggle"));
-  document.getElementById("refreshBtn").addEventListener("click", refresh);
+
+  const reloadAndRender = () =>
+    reloadData()
+      .then(() => renderFromState())
+      .catch(() => {});
+
+  document.getElementById("refreshBtn").addEventListener("click", reloadAndRender);
   document.getElementById("gridViewBtn")?.addEventListener("click", () => {
     window.location.href = "grid.html";
   });
   document.getElementById("clearFilters").addEventListener("click", clearFilters);
-  document.getElementById("filterStatus").addEventListener("change", refresh);
-  document.getElementById("filterSLA").addEventListener("change", refresh);
-  document.getElementById("sort").addEventListener("change", refresh);
+  document.getElementById("filterStatus").addEventListener("change", renderFromState);
+  document.getElementById("filterSLA").addEventListener("change", renderFromState);
+  document.getElementById("sort").addEventListener("change", renderFromState);
   const search = document.getElementById("search");
-  const debounced = debounce(refresh, 300);
+  const debounced = debounce(renderFromState, 300);
   search.addEventListener("input", debounced);
   const audioToggle = document.getElementById("audioToggle");
   if (audioToggle) {
@@ -352,9 +402,9 @@ if (typeof document !== "undefined" && document.getElementById("refreshBtn")) {
       updateAudioToggle(audioToggle);
     });
   }
-  refresh();
-  setInterval(refresh, 30000);
+  reloadAndRender();
+  setInterval(reloadAndRender, 30000);
 }
 
 
-export { formatDuration, applyFilters, statusPriority, detectNewCritical, buildCriticalSet };
+export { formatDuration, applyFilters, statusPriority, detectNewCritical, buildCriticalSet, sortRows };
