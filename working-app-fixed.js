@@ -1263,6 +1263,31 @@ function renderBedGrid() {
   });
 }
 
+// Toggle bed list visibility
+function toggleBedList() {
+  const bedListSection = document.getElementById('bedListSection');
+  const bedListBtn = document.getElementById('bedListBtn');
+  
+  if (!bedListSection || !bedListBtn) {
+    console.log('Bed list section or button not found');
+    return;
+  }
+  
+  const isVisible = bedListSection.style.display !== 'none';
+  
+  if (isVisible) {
+    // Hide the bed list
+    bedListSection.style.display = 'none';
+    bedListBtn.textContent = 'Rodyti lovų sąrašą';
+    console.log('Bed list hidden');
+  } else {
+    // Show the bed list
+    bedListSection.style.display = 'block';
+    bedListBtn.textContent = 'Slėpti lovų sąrašą';
+    console.log('Bed list shown');
+  }
+}
+
 // Increase font size for notifications
 // Clear notification hash when font size changes (to prevent sounds on UI updates)
 function clearNotificationHash() {
@@ -1696,6 +1721,17 @@ document.addEventListener('DOMContentLoaded', () => {
         console.log('Display refreshed');
       }, 500);
     });
+  }
+  
+  // Bed list toggle button
+  const bedListBtn = document.getElementById('bedListBtn');
+  if (bedListBtn) {
+    bedListBtn.addEventListener('click', () => {
+      console.log('Bed list button clicked');
+      toggleBedList();
+    });
+  } else {
+    console.log('bedListBtn not found');
   }
   
   console.log('Refresh button section completed');
