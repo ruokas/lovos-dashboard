@@ -387,11 +387,29 @@ function showLoadingState() {
   }
 }
 
+// Show subtle loading indicator in header
+function showBackgroundLoading() {
+  const loadingIndicator = document.getElementById('loadingIndicator');
+  if (loadingIndicator) {
+    loadingIndicator.classList.remove('hidden');
+    console.log('Background loading indicator shown');
+  }
+}
+
+// Hide loading indicator
+function hideBackgroundLoading() {
+  const loadingIndicator = document.getElementById('loadingIndicator');
+  if (loadingIndicator) {
+    loadingIndicator.classList.add('hidden');
+    console.log('Background loading indicator hidden');
+  }
+}
+
 async function updateBedDataFromCSV() {
   console.log('Loading occupancy and status data...');
   
-  // Show loading state
-  showLoadingState();
+  // Show subtle loading indicator in header
+  showBackgroundLoading();
   
   try {
     // Load occupancy and status data in parallel
@@ -478,20 +496,29 @@ async function updateBedDataFromCSV() {
   renderBedGrid();
   renderKPIs();
   renderNotifications();
-  } catch (error) {
-    console.error('Error updating bed data from CSV:', error);
-    // Show error state
-    const bedGrid = document.getElementById('bedGrid');
-    if (bedGrid) {
-      bedGrid.innerHTML = `
-        <div class="flex items-center justify-center py-8 text-red-600">
-          <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-          </svg>
-          <span>Klaida kraunant duomenis</span>
-        </div>
-      `;
-    }
+  
+  console.log('Data updated successfully');
+  
+  // Hide loading indicator
+  hideBackgroundLoading();
+  
+} catch (error) {
+  console.error('Error updating bed data from CSV:', error);
+  
+  // Hide loading indicator even on error
+  hideBackgroundLoading();
+  
+  // Show error state
+  const bedGrid = document.getElementById('bedGrid');
+  if (bedGrid) {
+    bedGrid.innerHTML = `
+      <div class="flex items-center justify-center py-8 text-red-600">
+        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+        </svg>
+        <span>Klaida kraunant duomenis</span>
+      </div>
+    `;
   }
 }
 
@@ -1818,37 +1845,39 @@ document.addEventListener('DOMContentLoaded', () => {
           renderBedGrid();
           renderKPIs();
           renderNotifications();
+        }
           
-          // Load workers data first (only once)
-          console.log('Loading workers data on startup...');
-          loadWorkersData().then(() => {
-            // Then load other CSV data
-            console.log('Loading CSV data on startup...');
-            updateBedDataFromCSV().catch(error => {
-              console.error('Failed to load CSV data on startup:', error);
-            });
-          }).catch(error => {
-            console.error('Failed to load workers data on startup:', error);
+        // Load workers data first (only once)
+        console.log('Loading workers data on startup...');
+        loadWorkersData().then(() => {
+          // Then load other CSV data
+          console.log('Loading CSV data on startup...');
+          updateBedDataFromCSV().catch(error => {
+            console.error('Failed to load CSV data on startup:', error);
           });
-  
-  // Set up automatic refresh every 60 seconds (1 minute)
-  console.log('Setting up automatic refresh every 60 seconds...');
-  setInterval(() => {
-    console.log('Auto-refreshing data...');
-    updateBedDataFromCSV().catch(error => {
-      console.error('Failed to auto-refresh CSV data:', error);
-    });
-  }, 60000); // 60 seconds (1 minute)
-  
-  // Also refresh when page becomes visible again
-  document.addEventListener('visibilitychange', () => {
-    if (!document.hidden) {
-      console.log('Page became visible, refreshing data...');
-      updateBedDataFromCSV().catch(error => {
-        console.error('Failed to refresh data on visibility change:', error);
+        }).catch(error => {
+          console.error('Failed to load workers data on startup:', error);
+        });
+      }
+      
+      // Set up automatic refresh every 60 seconds (1 minute)
+      console.log('Setting up automatic refresh every 60 seconds...');
+      setInterval(() => {
+        console.log('Auto-refreshing data...');
+        updateBedDataFromCSV().catch(error => {
+          console.error('Failed to auto-refresh CSV data:', error);
+        });
+      }, 60000); // 60 seconds (1 minute)
+      
+      // Also refresh when page becomes visible again
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          console.log('Page became visible, refreshing data...');
+          updateBedDataFromCSV().catch(error => {
+            console.error('Failed to refresh data on visibility change:', error);
+          });
+        }
       });
-    }
-  });
-  
-  console.log('Fixed app initialized successfully!');
-});
+      
+      console.log('Fixed app initialized successfully!');
+    });
