@@ -1,47 +1,108 @@
-# Lovos Dashboard
+# Lovų valdymo sistema
 
-Minimalus statinis skydelis realiu laiku rodyti lovų būklę iš Google Sheets.
+Pilna lovų švaros valdymo sistema su vietiniais skaičiavimais ir pranešimais.
+
+## Funkcijos
+
+### Pagrindinės funkcijos
+- **Lovų būklės valdymas**: Pranešti apie lovų būklę (tvarkinga, netvarkinga, trūksta priemonių, kita problema)
+- **Užimtumo sekimas**: Sekti kada lovos tampa laisvos ar užimtos
+- **Automatiniai pranešimai**: Prioritetiniai pranešimai pagal problemų svarbą
+- **Vietiniai skaičiavimai**: Visi skaičiavimai vykdomi vietoje, nepriklausomai nuo išorinių duomenų šaltinių
+
+### Pranešimų prioritetai
+1. **Netvarkinga lova** (aukščiausias prioritetas)
+2. **Trūksta priemonių**
+3. **Kita problema**
+4. **Ką tik atlaisvinta** (reikia sutvarkyti)
+5. **Reguliarus patikrinimas** (užimtos lovos)
+
+### Lovų išdėstymas
+- IT1, IT2
+- 1-17
+- 121A, 121B
+
+### Nustatymai
+- Patikrinimo intervalai užimtoms lovoms
+- "Ką tik atlaisvinta" laikotarpis
+- SLA slenkstis
+- Automatinio atnaujinimo intervalas
+- Garso signalai ir pranešimai
 
 ## Naudojimas
-1. Atsisiųskite arba klonuokite šį repo.
-2. Atidarykite `index.html` naršyklėje (dvigubas spustelėjimas arba per `http-server`).
-3. Duomenys automatiškai atnaujinami kas 30 s.
-4. Viršuje esantis mygtukas „Tamsi tema“ leidžia perjungti šviesų/tamsų režimą (išsaugoma naršyklėje).
 
-## Spalvinė logika tinklelyje
-- **Žalia** – laisva ir sutvarkyta lova.
-- **Geltona** – laisva, bet nesutvarkyta.
-- **Raudona** – lova užimta.
+### Pranešti apie lovos būklę
+1. Spustelėkite "Pranešti apie būklę"
+2. Pasirinkite lovą
+3. Pasirinkite būseną:
+   - ✅ Viskas tvarkinga
+   - 🛏️ Netvarkinga lova
+   - 🧰 Trūksta priemonių
+   - Other: (aprašykite problemą)
+4. Įveskite el. paštą
+5. Spustelėkite "Pranešti"
 
-## CSV URL konfigūracija
-1. Google Sheets → *File* → *Share* → *Publish to web* → pasirinkite **CSV**.
-2. Nukopijuokite sugeneruotą nuorodą.
-3. `data.js` faile pakeiskite `CSV_URL` konstantą į savo nuorodą.
+### Atnaujinti užimtumą
+1. Spustelėkite "Atnaujinti užimtumą"
+2. Pasirinkite lovą
+3. Pasirinkite būseną (Laisva/Užimta)
+4. Spustelėkite "Atnaujinti"
 
-## Testavimas
-`npm test` – paleidžia vienetinius testus su Vitest.
+### Greitasis lovos atnaujinimas
+- **Kairiuoju pelės mygtuku** ant lovos → Pranešti apie būklę
+- **Dešiniuoju pelės mygtuku** ant lovos → Atnaujinti užimtumą
 
-## Smoke test
-1. Atidarykite `index.html`.
-2. Patikrinkite paieškos lauką ir filtrus „Būsena“ bei „SLA“.
-3. Išbandykite rikiavimą iš sąrašo „Rikiuoti pagal…“.
-4. Paspauskite `Atnaujinti` – lentelė turėtų persikrauti be klaidų.
-5. Perjunkite temą mygtuku „Tamsi tema“ ir įsitikinkite, kad stilius keičiasi bei išlieka perkrovus puslapį.
+## Technologijos
 
-## Naujos kalbos pridėjimas
-1. `texts.js` faile kiekvieno rakto objekte užpildykite naujos kalbos lauką (pvz., `en`) paliktais tuščiais vertimais.
-2. Jei norite, kad nauja kalba būtų numatyta, pakeiskite `DEFAULT_LANG` reikšmę `texts.js` faile (pagal poreikį papildykite loginą kalbos perjungimui).
-3. Atnaujinkite statinius tekstus HTML failuose (`index.html`, `grid.html`) ir datas formatuojančius metodus (`toLocaleString`, `toLocaleTimeString`), kad atitiktų naują kalbą.
-4. Perkraukite puslapį ir patikrinkite, ar visur rodomi teisingi vertimai.
+- **Vanilla JavaScript** (ES6+ modules)
+- **Tailwind CSS** (styling)
+- **localStorage** (duomenų saugojimas)
+- **Web Audio API** (garso signalai)
+- **Web Notifications API** (pranešimai)
 
 ## Struktūra
-- `index.html` – pagrindinis dashboardas.
-- `data.js` – duomenų įkėlimas ir normalizacija.
-- `app.js` – UI logika.
-- `grid.js` – (būsima) tinklelio logika.
-- `styles.css` – stiliai.
-- `README.md` – dokumentacija.
-- `LICENSE` – MIT licencija.
+
+```
+├── models/
+│   └── bedData.js          # Duomenų modeliai ir skaičiavimai
+├── settings/
+│   └── settingsManager.js # Nustatymų valdymas
+├── forms/
+│   └── bedStatusForm.js   # Formų sąsaja
+├── notifications/
+│   └── notificationManager.js # Pranešimų sistema
+├── persistence/
+│   └── dataPersistenceManager.js # Duomenų saugojimas
+├── app.js                 # Pagrindinis aplikacijos kontroleris
+├── index.html             # Pagrindinis HTML failas
+└── styles.css             # Papildomi stiliai
+```
+
+## Diegimas
+
+1. Atsisiųskite visus failus
+2. Atidarykite `index.html` naršyklėje
+3. Arba naudokite vietinį serverį:
+   ```bash
+   python -m http.server 8000
+   ```
+4. Eikite į `http://localhost:8000`
+
+## Duomenų saugojimas
+
+Visi duomenys saugomi naršyklės `localStorage` ir yra:
+- Automatiškai išsaugomi kiekvieno pakeitimo metu
+- Eksportuojami JSON formatu
+- Importuojami iš JSON failų
+- Versijų kontrolės palaikymas
+
+## Pranešimai
+
+Sistema palaiko:
+- Garso signalus (konfigūruojami)
+- Naršyklės pranešimus (jei leista)
+- Vizualius pranešimus sąsajoje
+- Prioritetinį pranešimų rodymą
 
 ## Licencija
 MIT © 2024 Rokas M.

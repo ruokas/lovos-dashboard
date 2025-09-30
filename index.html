@@ -3,17 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Lovų būklė – Dashboard (Read‑only)</title>
+  <title>RŠL SMPS lovų priežiūra</title>
   <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = { darkMode: 'class' };
   </script>
   <style type="text/tailwindcss">
-    .bed-cell { @apply flex items-center justify-center text-lg font-medium rounded-md; }
-    .clean { @apply bg-emerald-100 text-emerald-800; }
-    .occupied { @apply bg-rose-100 text-rose-800; }
-    .dirty { @apply bg-yellow-100 text-yellow-800; }
     @layer utilities {
       .sr-only {
         position: absolute;
@@ -27,88 +23,145 @@
         border-width: 0;
       }
     }
+    
+    /* Custom scrollbar styles */
+    .custom-scrollbar {
+      scrollbar-width: thin;
+      scrollbar-color: #cbd5e1 #f1f5f9;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f5f9;
+      border-radius: 4px;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 4px;
+      transition: background-color 0.2s ease;
+    }
+    
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    
+    /* Dark mode scrollbar */
+    .dark .custom-scrollbar {
+      scrollbar-color: #475569 #1e293b;
+    }
+    
+    .dark .custom-scrollbar::-webkit-scrollbar-track {
+      background: #1e293b;
+    }
+    
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #475569;
+    }
+    
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #64748b;
+    }
   </style>
   <!-- PapaParse CSV parser -->
   <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
-  <div id="loader" class="hidden fixed inset-0 bg-black/25 flex items-center justify-center"><div class="animate-spin h-8 w-8 border-4 border-white border-t-transparent rounded-full"></div></div>
+  <div id="loader" class="hidden fixed inset-0 bg-black/25 flex items-center justify-center z-50">
+    <div class="animate-spin h-8 w-8 border-4 border-white border-t-transparent rounded-full"></div>
+  </div>
+  
   <div class="w-full min-h-screen p-4 md:p-8">
-    <header class="flex flex-col md:flex-row md:items-center gap-1 md:gap-2 md:justify-between mb-2">
+    <header class="flex flex-col md:flex-row md:items-center gap-2 md:gap-4 md:justify-between mb-2">
       <div>
-        <h1 class="text-xl md:text-2xl font-semibold">Lovų būklė</h1>
+        <h1 class="text-2xl md:text-3xl font-bold">RŠL SMPS lovų priežiūra</h1>
+        <p class="text-sm text-slate-600 dark:text-slate-400">Stebėkite lovų būklę realiu laiku</p>
       </div>
-        <div class="toolbar text-sm">
-          <label for="search" class="sr-only">Paieška</label>
-          <input id="search" type="search" placeholder="Paieška (lova, būsena, pažymėjo)…"
-                 class="md:w-64 w-full border rounded-md px-2 py-1 h-9 bg-white shadow-sm focus:outline-none text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 dark:placeholder-slate-400">
-          <label for="filterStatus" class="sr-only">Filtruoti pagal būseną</label>
-          <select id="filterStatus" class="border rounded-md px-2 py-1 h-9 bg-white shadow-sm text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
-          <option value="">Visos būsenos</option>
-          <option value="🧹">🧹 Reikia sutvarkyti</option>
-          <option value="🚫">🚫 Užimta</option>
-          <option value="🟩">🟩 Sutvarkyta</option>
-        </select>
-          <label for="filterSLA" class="sr-only">Filtruoti pagal SLA</label>
-          <select id="filterSLA" class="border rounded-md px-2 py-1 h-9 bg-white shadow-sm text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
-          <option value="">SLA – visos</option>
-          <option value="⛔ Viršyta">⛔ Viršyta</option>
-          <option value="⚠️ Ką tik atlaisvinta">⚠️ Ką tik atlaisvinta</option>
-          <option value="⚪ Laukia (≤ SLA)">⚪ Laukia (≤ SLA)</option>
-          <option value="✅ Atlikta laiku">✅ Atlikta laiku</option>
-        </select>
-          <label for="sort" class="sr-only">Rikiavimo seka</label>
-          <select id="sort" class="border rounded-md px-2 py-1 h-9 bg-white shadow-sm text-xs dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100">
-          <option value="priority">Rikiuoti pagal prioritetą</option>
-          <option value="bed">Rikiuoti pagal lovą</option>
-          <option value="wait">Pagal laukimo laiką (desc)</option>
-        </select>
-        <button id="refreshBtn" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 h-9 text-xs shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
-          Atnaujinti
+      
+      <div class="flex flex-wrap gap-2">
+        <button id="addStatusBtn" type="button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium">
+          Pranešti apie būklę
         </button>
-        <button id="clearFilters" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 h-9 text-xs shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
-          Išvalyti
+        <button id="bedListBtn" type="button" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium">
+          Lovų sąrašas
         </button>
-        <button id="themeToggle" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 h-9 text-xs shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">
-          Tamsi tema
+        <button id="fontSizeBtn" type="button" class="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors font-bold text-sm" title="Padidinti mastelį">
+          A+
         </button>
-        <button id="audioToggle" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 h-9 text-xs shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200" aria-pressed="false">
-          Garso signalai
+        <button id="fontSizeDownBtn" type="button" class="px-3 py-2 bg-purple-500 text-white rounded-md hover:bg-purple-600 transition-colors font-bold text-sm" title="Sumažinti mastelį">
+          A-
         </button>
-        <button id="gridViewBtn" type="button" class="rounded-md bg-slate-900 text-white px-2 py-1 h-9 text-xs shadow hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200">Tinklelio vaizdas</button>
+        <button id="settingsBtn" type="button" class="p-2 bg-slate-600 text-white rounded-md hover:bg-slate-700 transition-colors" title="Nustatymai">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+          </svg>
+        </button>
+        <button id="themeToggle" type="button" class="p-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 transition-colors" title="Tamsi tema">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+          </svg>
+        </button>
+        <button id="refreshBtn" type="button" class="p-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 transition-colors" title="Atnaujinti">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+          </svg>
+        </button>
       </div>
     </header>
 
-    <!-- KPI kortelės -->
-    <section id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"></section>
+    <!-- Error display -->
+    <div id="error" class="hidden mb-4 p-3 bg-red-100 border border-red-400 text-red-800 rounded-md"></div>
 
-    <!-- Pranešimai apie kritinius įvykius -->
+    <!-- KPI cards -->
+    <section id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2"></section>
+
+    <!-- Notifications -->
     <div id="alerts" class="hidden mb-4 rounded-md border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 shadow-sm dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-100" role="status" aria-live="assertive"></div>
 
-    <!-- Lentelė -->
-    <div class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100">
-      <div class="overflow-auto max-h-[70vh]">
-        <table class="min-w-full leading-7 responsive-table">
-          <thead class="sticky top-0 z-10 bg-slate-100/70 text-slate-700 dark:bg-slate-700 dark:text-slate-200 text-xs md:text-sm">
-            <tr>
-              <th class="text-left px-3 md:px-4 py-2">Lova</th>
-              <th class="text-left px-3 md:px-4 py-2">Galutinė būsena</th>
-              <th class="text-left px-3 md:px-4 py-2">SLA būsena</th>
-              <th class="text-left px-3 md:px-4 py-2">Užimtumas</th>
-              <th class="text-left px-3 md:px-4 py-2">Atlaisvinta prieš</th>
-              <th class="text-left px-3 md:px-4 py-2">Paskutinė būsena</th>
-              <th class="text-left px-3 md:px-4 py-2">Kas pažymėjo</th>
-            </tr>
-          </thead>
-          <tbody id="tbody" class="divide-y divide-slate-200 dark:divide-slate-700"></tbody>
-        </table>
+    <!-- Notification summary -->
+    <div class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100 mb-2">
+      <div class="p-4">
+        <h2 class="text-lg font-semibold mb-3">Pranešimai</h2>
+        <div id="notificationSummary" class="space-y-2"></div>
       </div>
-      <div id="updatedAt" class="text-xs text-slate-500 px-4 py-2 dark:text-slate-400">—</div>
     </div>
+
+    <!-- Bed list -->
+    <div id="bedListSection" class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100 mb-2" style="display: none;">
+      <div class="p-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-2">
+          <h2 class="text-lg font-semibold">Lovų sąrašas</h2>
+          <div class="flex flex-col sm:flex-row gap-3">
+            <div class="relative">
+              <input type="text" id="bedSearch" placeholder="Ieškoti lovos..." 
+                     class="w-full sm:w-64 px-4 py-2 pl-10 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button id="viewToggle" class="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+        <div id="bedGrid" class="space-y-2 custom-scrollbar max-h-48 overflow-y-auto"></div>
+      </div>
+    </div>
+
   </div>
 
-  <script type="module" src="theme.js"></script>
-  <script type="module" src="app.js"></script>
+    <script type="module" src="theme.js"></script>
+    <script src="working-app-fixed.js"></script>
 </body>
 </html>
