@@ -325,11 +325,9 @@ async function loadCSVData(url, dataType = 'occupancy') {
 }
 
 // Convert email to worker name
-function getWorkerName(email) {
-  if (!email) return 'Nežinomas';
-  const name = workerMap.get(email);
-  console.log(`Converting email ${email} to name: ${name || 'NOT FOUND'}`);
-  return name || email;
+function getWorkerName(name) {
+  // Since we now store names directly, just return the name
+  return name || 'Nežinomas';
 }
 
 // Load workers data only once
@@ -830,12 +828,12 @@ function showStatusForm(bedId = null) {
           </div>
           
           <div>
-            <label for="email" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-              El. paštas
+            <label for="name" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+              Vardas *
             </label>
-            <input type="email" id="email" name="email"
+            <input type="text" id="name" name="name" required
                    class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                   placeholder="jūsų@email.com">
+                   placeholder="Įveskite savo vardą">
           </div>
           
           <div class="flex justify-end space-x-3 pt-4">
@@ -888,9 +886,9 @@ function showStatusForm(bedId = null) {
     const bedId = formData.get('bedId');
     const status = formData.get('status');
     const otherText = formData.get('otherText');
-    const email = formData.get('email');
+    const name = formData.get('name');
     
-    if (bedId && status) {
+    if (bedId && status && name) {
       const bed = bedData.get(bedId);
       if (bed) {
         const oldStatus = bed.currentStatus;
@@ -898,7 +896,7 @@ function showStatusForm(bedId = null) {
         // Update bed status
         bed.currentStatus = status;
         bed.lastUpdated = new Date().toISOString();
-        bed.lastCheckedBy = email || 'Nežinomas'; // Store email, display name via getWorkerName()
+        bed.lastCheckedBy = name; // Store name directly
         
         // If it's "Other" status, store the custom text
         if (status === STATUS_OPTIONS.OTHER && otherText) {
@@ -911,7 +909,7 @@ function showStatusForm(bedId = null) {
         addToHistory('status_update', bedId, {
           oldStatus: oldStatus,
           newStatus: bed.currentStatus,
-          updatedBy: getWorkerName(email) || 'Nežinomas'
+          updatedBy: name
         });
         
         console.log('Updated bed status:', bed);
@@ -1062,9 +1060,9 @@ function showSettingsModal() {
     const bedId = formData.get('bedId');
     const status = formData.get('status');
     const otherText = formData.get('otherText');
-    const email = formData.get('email');
+    const name = formData.get('name');
     
-    if (bedId && status) {
+    if (bedId && status && name) {
       const bed = bedData.get(bedId);
       if (bed) {
         const oldStatus = bed.currentStatus;
@@ -1072,7 +1070,7 @@ function showSettingsModal() {
         // Update bed status
         bed.currentStatus = status;
         bed.lastUpdated = new Date().toISOString();
-        bed.lastCheckedBy = email || 'Nežinomas'; // Store email, display name via getWorkerName()
+        bed.lastCheckedBy = name; // Store name directly
         
         // If it's "Other" status, store the custom text
         if (status === STATUS_OPTIONS.OTHER && otherText) {
@@ -1085,7 +1083,7 @@ function showSettingsModal() {
         addToHistory('status_update', bedId, {
           oldStatus: oldStatus,
           newStatus: bed.currentStatus,
-          updatedBy: getWorkerName(email) || 'Nežinomas'
+          updatedBy: name
         });
         
         console.log('Updated bed status:', bed);
