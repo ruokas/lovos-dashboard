@@ -407,118 +407,121 @@ function hideBackgroundLoading() {
 
 async function updateBedDataFromCSV() {
   console.log('Loading occupancy and status data...');
-  
+
+  // Show skeleton placeholders only until first successful load
+  if (!hasLoadedInitialData) {
+    showLoadingState();
+  }
+
   // Show subtle loading indicator in header
   showBackgroundLoading();
-  
+
   try {
     // Load occupancy and status data in parallel
     const [occupancyData, statusData] = await Promise.all([
       loadCSVData(OCCUPANCY_CSV_URL, 'occupancy'),
       loadCSVData(STATUS_CSV_URL, 'status')
     ]);
-    
+
     console.log('Data loaded - Occupancy:', occupancyData.length, 'Status:', statusData.length);
-  
-  // Process occupancy data
-  if (occupancyData.length > 0) {
-    const bedStatusMap = new Map();
-    
-    occupancyData.forEach(record => {
-      const bedId = record.bedId.trim();
-      const status = record.status.trim();
-      
-      // Only process beds that are in our layout
-      if (BED_LAYOUT.includes(bedId)) {
-        if (!bedStatusMap.has(bedId) || record.timestamp > bedStatusMap.get(bedId).timestamp) {
-          bedStatusMap.set(bedId, {
-            timestamp: record.timestamp,
-            occupancyStatus: status === 'Užimta' ? 'occupied' : 'free'
-          });
+
+    // Process occupancy data
+    if (occupancyData.length > 0) {
+      const bedStatusMap = new Map();
+
+      occupancyData.forEach(record => {
+        const bedId = record.bedId.trim();
+        const status = record.status.trim();
+
+        // Only process beds that are in our layout
+        if (BED_LAYOUT.includes(bedId)) {
+          if (!bedStatusMap.has(bedId) || record.timestamp > bedStatusMap.get(bedId).timestamp) {
+            bedStatusMap.set(bedId, {
+              timestamp: record.timestamp,
+              occupancyStatus: status === 'Užimta' ? 'occupied' : 'free'
+            });
+          }
         }
-      }
-    });
-    
-    // Update bed data with occupancy information
-    bedStatusMap.forEach((data, bedId) => {
-      const bed = bedData.get(bedId);
-      if (bed) {
-        // Check if occupancy status changed from occupied to free
-        if (bed.occupancyStatus === 'occupied' && data.occupancyStatus === 'free') {
-          console.log(`Bed ${bedId} was just freed!`);
-          bed.lastFreedTime = data.timestamp;
+      });
+
+      // Update bed data with occupancy information
+      bedStatusMap.forEach((data, bedId) => {
+        const bed = bedData.get(bedId);
+        if (bed) {
+          // Check if occupancy status changed from occupied to free
+          if (bed.occupancyStatus === 'occupied' && data.occupancyStatus === 'free') {
+            console.log(`Bed ${bedId} was just freed!`);
+            bed.lastFreedTime = data.timestamp;
+          }
+
+          bed.occupancyStatus = data.occupancyStatus;
+          bed.lastOccupancyUpdate = data.timestamp;
+          bedData.set(bedId, bed);
         }
-        
-        bed.occupancyStatus = data.occupancyStatus;
-        bed.lastOccupancyUpdate = data.timestamp;
-        bedData.set(bedId, bed);
-      }
-    });
-    
-    console.log('Updated occupancy data from CSV:', bedStatusMap.size, 'beds');
-  }
-  
-  // Process status data
-  if (statusData.length > 0) {
-    const bedStatusMap = new Map();
-    
-    statusData.forEach(record => {
-      const bedId = record.bedId.trim();
-      const status = record.status.trim();
-      
-      // Only process beds that are in our layout
-      if (BED_LAYOUT.includes(bedId) && status) {
-        if (!bedStatusMap.has(bedId) || record.timestamp > bedStatusMap.get(bedId).timestamp) {
-          bedStatusMap.set(bedId, {
-            timestamp: record.timestamp,
-            status: status,
-            email: record.email || 'Nežinomas'
-          });
+      });
+
+      console.log('Updated occupancy data from CSV:', bedStatusMap.size, 'beds');
+    }
+
+    // Process status data
+    if (statusData.length > 0) {
+      const bedStatusMap = new Map();
+
+      statusData.forEach(record => {
+        const bedId = record.bedId.trim();
+        const status = record.status.trim();
+
+        // Only process beds that are in our layout
+        if (BED_LAYOUT.includes(bedId) && status) {
+          if (!bedStatusMap.has(bedId) || record.timestamp > bedStatusMap.get(bedId).timestamp) {
+            bedStatusMap.set(bedId, {
+              timestamp: record.timestamp,
+              status: status,
+              email: record.email || 'Nežinomas'
+            });
+          }
         }
-      }
-    });
-    
-    // Update bed data with status information
-    bedStatusMap.forEach((data, bedId) => {
-      const bed = bedData.get(bedId);
-      if (bed) {
-        bed.currentStatus = data.status;
-        bed.lastUpdated = data.timestamp;
-        bed.lastCheckedBy = data.email; // Store email, but display name
-        bedData.set(bedId, bed);
-      }
-    });
-    
-    console.log('Updated status data from CSV:', bedStatusMap.size, 'beds');
-  }
-  
-  // Refresh the display
-  renderBedGrid();
-  renderKPIs();
-  renderNotifications();
-  
-  console.log('Data updated successfully');
-  
-  // Hide loading indicator
-  hideBackgroundLoading();
-  
-} catch (error) {
-  console.error('Error updating bed data from CSV:', error);
-  
-  // Hide loading indicator even on error
-  hideBackgroundLoading();
-  
-  // Show error state
-  const bedGrid = document.getElementById('bedGrid');
-  if (bedGrid) {
-    bedGrid.innerHTML = `
-      <div class="flex items-center justify-center py-8 text-red-600">
-        <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-        </svg>
-        <span>Klaida kraunant duomenis</span>
-      </div>
-    `;
+      });
+
+      // Update bed data with status information
+      bedStatusMap.forEach((data, bedId) => {
+        const bed = bedData.get(bedId);
+        if (bed) {
+          bed.currentStatus = data.status;
+          bed.lastUpdated = data.timestamp;
+          bed.lastCheckedBy = data.email; // Store email, but display name
+          bedData.set(bedId, bed);
+        }
+      });
+
+      console.log('Updated status data from CSV:', bedStatusMap.size, 'beds');
+    }
+
+    // Refresh the display
+    renderBedGrid();
+    renderKPIs();
+    renderNotifications();
+
+    hasLoadedInitialData = true;
+    console.log('Data updated successfully');
+  } catch (error) {
+    console.error('Error updating bed data from CSV:', error);
+
+    // Show error state
+    const bedGrid = document.getElementById('bedGrid');
+    if (bedGrid) {
+      bedGrid.innerHTML = `
+        <div class="flex items-center justify-center py-8 text-red-600">
+          <svg class="w-6 h-6 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <span>Klaida kraunant duomenis</span>
+        </div>
+      `;
+    }
+  } finally {
+    // Hide loading indicator even on error
+    hideBackgroundLoading();
   }
 }
 
@@ -539,6 +542,7 @@ const STATUS_OPTIONS = {
 
 // Initialize bed data
 const bedData = new Map();
+let hasLoadedInitialData = false;
 BED_LAYOUT.forEach(bedId => {
   bedData.set(bedId, {
     id: bedId,
@@ -1845,39 +1849,37 @@ document.addEventListener('DOMContentLoaded', () => {
           renderBedGrid();
           renderKPIs();
           renderNotifications();
-        }
           
-        // Load workers data first (only once)
-        console.log('Loading workers data on startup...');
-        loadWorkersData().then(() => {
-          // Then load other CSV data
-          console.log('Loading CSV data on startup...');
-          updateBedDataFromCSV().catch(error => {
-            console.error('Failed to load CSV data on startup:', error);
+          // Load workers data first (only once)
+          console.log('Loading workers data on startup...');
+          loadWorkersData().then(() => {
+            // Then load other CSV data
+            console.log('Loading CSV data on startup...');
+            updateBedDataFromCSV().catch(error => {
+              console.error('Failed to load CSV data on startup:', error);
+            });
+          }).catch(error => {
+            console.error('Failed to load workers data on startup:', error);
           });
-        }).catch(error => {
-          console.error('Failed to load workers data on startup:', error);
-        });
-      }
-      
-      // Set up automatic refresh every 60 seconds (1 minute)
-      console.log('Setting up automatic refresh every 60 seconds...');
-      setInterval(() => {
-        console.log('Auto-refreshing data...');
-        updateBedDataFromCSV().catch(error => {
-          console.error('Failed to auto-refresh CSV data:', error);
-        });
-      }, 60000); // 60 seconds (1 minute)
-      
-      // Also refresh when page becomes visible again
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) {
-          console.log('Page became visible, refreshing data...');
-          updateBedDataFromCSV().catch(error => {
-            console.error('Failed to refresh data on visibility change:', error);
-          });
-        }
-      });
-      
-      console.log('Fixed app initialized successfully!');
+  
+  // Set up automatic refresh every 60 seconds (1 minute)
+  console.log('Setting up automatic refresh every 60 seconds...');
+  setInterval(() => {
+    console.log('Auto-refreshing data...');
+    updateBedDataFromCSV().catch(error => {
+      console.error('Failed to auto-refresh CSV data:', error);
     });
+  }, 60000); // 60 seconds (1 minute)
+  
+  // Also refresh when page becomes visible again
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) {
+      console.log('Page became visible, refreshing data...');
+      updateBedDataFromCSV().catch(error => {
+        console.error('Failed to refresh data on visibility change:', error);
+      });
+    }
+  });
+  
+  console.log('Fixed app initialized successfully!');
+});
