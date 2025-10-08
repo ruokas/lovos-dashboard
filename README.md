@@ -104,5 +104,9 @@ Sistema palaiko:
 - Vizualius pranešimus sąsajoje
 - Prioritetinį pranešimų rodymą
 
+## Papildomų užduočių integracija
+
+Norėdami įtraukti periodines ar ad hoc užduotis (pvz., laboratorinių mėginių pristatymą, pacientų vežimą į vaizdinius tyrimus), sekite [papildomą integracijos gidą](docs/additional-task-integration.md). Čia rasite rekomenduojamą `Task` modelio struktūrą, UI formų ir pranešimų praplėtimą, taip pat smoke testų kontrolinius sąrašus.
+
 ## Licencija
 MIT © 2024 Rokas M.
