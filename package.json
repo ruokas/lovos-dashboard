@@ -4,7 +4,9 @@
   "description": "Minimalus statinis skydelis realiu laiku rodyti lovų būklę iš Google Sheets.",
   "main": "app.js",
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "supabase:db:push": "supabase db push",
+    "supabase:functions:deploy": "supabase functions deploy"
   },
   "keywords": [],
   "author": "",
@@ -13,5 +15,8 @@
   "devDependencies": {
     "jsdom": "^26.1.0",
     "vitest": "^3.2.4"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.47.0"
   }
 }
