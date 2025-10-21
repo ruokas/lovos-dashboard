@@ -1,0 +1,13 @@
+{
+  "name": "report-export",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Supabase edge function for exporting audit reports (saugus karkasas)",
+  "scripts": {
+    "serve": "supabase functions serve report-export --env-file ../../.env.local",
+    "deploy": "supabase functions deploy report-export"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.43.4"
+  }
+}
