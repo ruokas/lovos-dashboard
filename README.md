@@ -66,17 +66,52 @@ Pilna lovų švaros valdymo sistema su vietiniais skaičiavimais ir pranešimais
 ├── models/
 │   └── bedData.js          # Duomenų modeliai ir skaičiavimai
 ├── settings/
-│   └── settingsManager.js # Nustatymų valdymas
+│   └── settingsManager.js  # Nustatymų valdymas
 ├── forms/
-│   └── bedStatusForm.js   # Formų sąsaja
+│   └── bedStatusForm.js    # Formų sąsaja
 ├── notifications/
 │   └── notificationManager.js # Pranešimų sistema
 ├── persistence/
 │   └── dataPersistenceManager.js # Duomenų saugojimas
-├── app.js                 # Pagrindinis aplikacijos kontroleris
-├── index.html             # Pagrindinis HTML failas
-└── styles.css             # Papildomi stiliai
+├── supabase/
+│   ├── migrations/         # SQL scenarijai (Supabase CLI)
+│   └── seeds/              # Pradiniai CSV duomenys
+├── app.js                  # Pagrindinis aplikacijos kontroleris
+├── index.html              # Pagrindinis HTML failas
+└── styles.css              # Papildomi stiliai
 ```
+
+## Supabase integracijos pradžia
+
+Šiame etape ruošiame Supabase duomenų bazę. Atliekami veiksmai nepaliečia dar veikiančio lokaliojo saugojimo, todėl galima
+testuoti paraleliai.
+
+### 1. Migracijų paleidimas
+
+1. Įsitikinkite, kad turite [Supabase CLI](https://supabase.com/docs/reference/cli/overview).
+2. Prisijunkite prie projekto:
+   ```bash
+   supabase login
+   supabase link --project-ref YOUR_PROJECT_REF
+   ```
+3. Paleiskite duomenų bazės migraciją:
+   ```bash
+   supabase db push --file supabase/migrations/0001_init.sql
+   ```
+
+> **Pastaba.** Scenarijus idempotentinis, todėl galima kartoti. Jei naudojate naršyklinį SQL redaktorių, nukopijuokite visą
+> failo turinį ir paleiskite vienu kartu.
+
+### 2. Lovų išdėstymo importas
+
+1. Atsisiųskite `supabase/seeds/bed_layout.csv`.
+2. Supabase valdymo pultuose pasirinkite lentelę `beds` → **Import** → įkelkite CSV.
+3. Patikrinkite, kad lovų skaičius sutampa su CSV (šiuo metu 4 įrašai pavyzdžiui).
+
+### Greitas patikrinimas
+
+- SQL redaktoriuje įvykdykite `select * from aggregated_bed_state;`.
+- Turėtumėte matyti bent keturias lovas su `NULL` statusais/užimtumu.
 
 ## Diegimas
 

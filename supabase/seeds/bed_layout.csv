@@ -1,0 +1,5 @@
+label,zone,details,nfc_code
+A1,Šoko zona,"Prie monitoriaus",nfc-a1-001
+A2,Šoko zona,"Prie sienos",nfc-a2-002
+B1,Stebėjimas,"Langas į kiemą",nfc-b1-010
+B2,Stebėjimas,"Arčiau posto",nfc-b2-011
