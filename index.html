@@ -66,11 +66,14 @@
       background: #64748b;
     }
   </style>
-  <!-- PapaParse CSV parser -->
-  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
   <link rel="stylesheet" href="styles.css">
 </head>
-<body class="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+<body
+  class="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100"
+  data-supabase-url=""
+  data-supabase-key=""
+>
+  <!-- Supabase konfigūracija: diegimo metu įrašykite projekto URL ir anon raktą į data-* atributus. -->
   <div id="loader" class="hidden fixed inset-0 bg-black/25 flex items-center justify-center z-50">
     <div class="animate-spin h-8 w-8 border-4 border-white border-t-transparent rounded-full"></div>
   </div>
@@ -166,6 +169,6 @@
   </div>
 
     <script type="module" src="theme.js"></script>
-    <script src="working-app-fixed.js"></script>
+    <script type="module" src="app.js"></script>
 </body>
 </html>

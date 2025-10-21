@@ -1,3 +1,4 @@
+// ARCHYVUOTA: Senasis Google Sheets pagrįstas skriptas, paliktas tik nuorodai pereinant prie Supabase.
 console.log('Starting fixed bed management app...');
 
 // CSV data URLs

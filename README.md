@@ -1,6 +1,7 @@
 # Lovų valdymo sistema
 
 Pilna lovų švaros valdymo sistema su vietiniais skaičiavimais ir pranešimais.
+Palaipsniui migruojame į Supabase, todėl visas front-end veikia kaip ES moduliai ir gali naudoti Supabase konfigūraciją tiesiogiai iš HTML `data-*` atributų.
 
 ## Funkcijos
 
@@ -83,8 +84,14 @@ Pilna lovų švaros valdymo sistema su vietiniais skaičiavimais ir pranešimais
 
 ## Supabase integracijos pradžia
 
-Šiame etape ruošiame Supabase duomenų bazę. Atliekami veiksmai nepaliečia dar veikiančio lokaliojo saugojimo, todėl galima
+Šiame etape ruošiame Supabase duomenų bazę ir front-end modulį. Atliekami veiksmai nepaliečia dar veikiančio lokaliojo saugojimo, todėl galima
 testuoti paraleliai.
+
+### Supabase konfigūracija `index.html`
+
+- `index.html` faile `<body>` elemente užpildykite `data-supabase-url` ir `data-supabase-key` reikšmes savo projekto anon kliento duomenimis.
+- Jei reikšmės neįvestos, aplikacija veiks tik vietiniame (localStorage) režime ir konsolėje parodys informacinį pranešimą.
+- Senasis `working-app-fixed.js` failas perkeltas į `docs/archive/` katalogą ir nebenaudojamas gamyboje.
 
 ### 1. Migracijų paleidimas
 
@@ -133,12 +140,17 @@ testuoti paraleliai.
 ## Diegimas
 
 1. Atsisiųskite visus failus
-2. Atidarykite `index.html` naršyklėje
-3. Arba naudokite vietinį serverį:
+2. `index.html` faile įrašykite Supabase URL ir anon raktą į `data-supabase-url` ir `data-supabase-key` atributus (jei Supabase jau paruoštas).
+3. Atidarykite `index.html` naršyklėje
+4. Arba naudokite vietinį serverį:
    ```bash
    python -m http.server 8000
    ```
-4. Eikite į `http://localhost:8000`
+5. Eikite į `http://localhost:8000`
+
+### Archyvuoti failai
+
+- `docs/archive/working-app-fixed.js` – paskutinė versija su Google Sheets CSV integracija; naudokite tik kaip atsarginį variantą, kol Supabase dar nepasiekiamas.
 
 ## Duomenų saugojimas
 
