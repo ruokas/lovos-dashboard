@@ -113,6 +113,23 @@ testuoti paraleliai.
 - SQL redaktoriuje įvykdykite `select * from aggregated_bed_state;`.
 - Turėtumėte matyti bent keturias lovas su `NULL` statusais/užimtumu.
 
+### 2. RLS politikos ir autentikacija
+
+1. Supabase Authentication skiltyje įjunkite prisijungimą el. paštu arba „magic link“.
+2. Priskirkite naudotojams roles (`cleaning_staff`, `auditor`, `admin`) per `user_metadata` lauką.
+3. Paleiskite RLS politikų scenarijų:
+   ```bash
+   supabase db push --file supabase/policies/0001_security.sql
+   ```
+4. Jei naudojate naršyklinį SQL redaktorių, nukopijuokite visą failo turinį.
+5. (Pasirinktinai) `supabase functions serve supabase/edge-functions/report-export` – patikrinkite, ar Edge Function grąžina 200 atsakymą
+   su galiojančiu JWT.
+
+### Greitas patikrinimas
+
+- Naudodami `curl` be `Authorization` antraštės turėtumėte gauti `401` atsakymą.
+- Su autentikuotu JWT `insert` į `bed_status_events` turi būti sėkmingas (`201`).
+
 ## Diegimas
 
 1. Atsisiųskite visus failus
