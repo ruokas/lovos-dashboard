@@ -14,6 +14,8 @@ export class BedManagementApp {
     this.settingsManager = new SettingsManager();
     this.persistenceManager = new DataPersistenceManager();
     this.notificationManager = new NotificationManager(this.settingsManager);
+
+    this.supabaseConfig = { url: '', anonKey: '' };
     
     this.bedStatusForm = new BedStatusForm((formResponse) => this.handleFormResponse(formResponse));
     this.occupancyForm = new OccupancyForm((occupancyData) => this.handleOccupancyData(occupancyData));
@@ -28,8 +30,11 @@ export class BedManagementApp {
    */
   async init() {
     if (this.isInitialized) return;
-    
+
     try {
+      // Read Supabase configuration from HTML data attributes
+      this.supabaseConfig = this.readSupabaseConfig();
+
       // Load saved data
       await this.loadSavedData();
       
@@ -48,6 +53,25 @@ export class BedManagementApp {
       console.error('Failed to initialize app:', error);
       this.showError('Nepavyko inicializuoti programos');
     }
+  }
+
+  /**
+   * Read Supabase configuration from data attributes.
+   * @returns {{url: string, anonKey: string}}
+   */
+  readSupabaseConfig() {
+    const hostElement = document.body || document.documentElement;
+    const dataset = hostElement?.dataset ?? {};
+    const url = (dataset.supabaseUrl || '').trim();
+    const anonKey = (dataset.supabaseKey || '').trim();
+
+    if (!url || !anonKey) {
+      console.info('Supabase konfigūracija nerasta – aplikacija veikia vietiniu režimu.');
+    } else if (typeof window !== 'undefined') {
+      window.__SUPABASE_CONFIG__ = { url, anonKey };
+    }
+
+    return { url, anonKey };
   }
 
   /**
@@ -455,12 +479,144 @@ export class BedManagementApp {
   }
 }
 
-// Initialize the app when DOM is loaded
-document.addEventListener('DOMContentLoaded', () => {
-  console.log('DOM loaded, initializing app...');
-  const app = new BedManagementApp();
-  app.init();
-  
-  // Make app globally available for debugging
-  window.bedManagementApp = app;
-});
+const STATUS_ICON_PRIORITY = {
+  '🧹': 0,
+  '🚫': 1,
+  '🟩': 2,
+  '✅': 3,
+  '🛏️': 4,
+  '🧰': 5,
+  '⛔': 7,
+};
+
+const CLEANING_ICON = '🧹';
+const SLA_ICON = '⛔';
+
+const normalizeText = (value = '') => value?.toString().toLowerCase();
+
+const resolveRowIdentifier = (row, fallbackIndex) => {
+  if (row?.lova && row.lova.trim()) {
+    return row.lova.trim();
+  }
+
+  const order = typeof row?.order === 'number' ? row.order : fallbackIndex;
+  return `row-${order}`;
+};
+
+export function applyFilters(rows = [], filters = {}) {
+  const statusFilter = normalizeText(filters.status).trim();
+  const slaFilter = normalizeText(filters.sla).trim();
+  const query = normalizeText(filters.query).trim();
+
+  return rows.filter((row) => {
+    const statusText = normalizeText(row?.galutine);
+    const slaText = normalizeText(row?.sla);
+    const lovaText = normalizeText(row?.lova);
+    const whoText = normalizeText(row?.who);
+
+    if (statusFilter && !statusText.includes(statusFilter)) {
+      return false;
+    }
+
+    if (slaFilter && !slaText.includes(slaFilter)) {
+      return false;
+    }
+
+    if (query) {
+      const matchesQuery = [lovaText, statusText, slaText, whoText]
+        .some((field) => field.includes(query));
+      if (!matchesQuery) {
+        return false;
+      }
+    }
+
+    return true;
+  });
+}
+
+export function statusPriority(status) {
+  if (!status || typeof status !== 'string') {
+    return 99;
+  }
+
+  const trimmed = status.trim();
+  if (!trimmed) {
+    return 99;
+  }
+
+  const icon = Array.from(trimmed)[0];
+  if (Object.prototype.hasOwnProperty.call(STATUS_ICON_PRIORITY, icon)) {
+    return STATUS_ICON_PRIORITY[icon];
+  }
+
+  return 9;
+}
+
+export function formatDuration(hours) {
+  if (typeof hours !== 'number' || !Number.isFinite(hours) || hours < 0) {
+    return '';
+  }
+
+  const totalMinutes = Math.round(hours * 60);
+  const wholeHours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (wholeHours === 0 && minutes === 0) {
+    return '0 min';
+  }
+
+  if (minutes === 0) {
+    return `${wholeHours} val`;
+  }
+
+  if (wholeHours === 0) {
+    return `${minutes} min`;
+  }
+
+  return `${wholeHours} val ${minutes} min`;
+}
+
+export function buildCriticalSet(rows = []) {
+  const set = new Set();
+
+  rows.forEach((row, index) => {
+    const identifier = resolveRowIdentifier(row, index);
+    const statusText = row?.galutine || '';
+    const slaText = row?.sla || '';
+
+    if (statusText.includes(CLEANING_ICON)) {
+      set.add(`cleaning|${identifier}`);
+    }
+
+    if (slaText.includes(SLA_ICON)) {
+      set.add(`sla|${identifier}`);
+    }
+  });
+
+  return set;
+}
+
+export function detectNewCritical(previousSet = new Set(), rows = []) {
+  const currentSet = buildCriticalSet(rows);
+  const newOnes = [];
+
+  currentSet.forEach((key) => {
+    if (!previousSet.has(key)) {
+      newOnes.push(key);
+    }
+  });
+
+  return { newOnes, currentSet };
+}
+
+// Initialize the app when DOM is loaded (browser environment only)
+if (typeof document !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM loaded, initializing app...');
+    const app = new BedManagementApp();
+    app.init();
+
+    // Make app globally available for debugging
+    window.bedManagementApp = app;
+  });
+}
