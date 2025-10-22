@@ -12,7 +12,7 @@ export class BedManagementApp {
   constructor() {
     this.bedDataManager = new BedDataManager();
     this.settingsManager = new SettingsManager();
-    this.persistenceManager = new DataPersistenceManager();
+    this.persistenceManager = new DataPersistenceManager({ document: typeof document !== 'undefined' ? document : undefined });
     this.notificationManager = new NotificationManager(this.settingsManager);
 
     this.supabaseConfig = { url: '', anonKey: '' };
@@ -42,7 +42,7 @@ export class BedManagementApp {
       this.setupEventListeners();
       
       // Initial render
-      this.render();
+      await this.render();
       
       // Start auto-refresh
       this.startAutoRefresh();
@@ -81,17 +81,17 @@ export class BedManagementApp {
     try {
       // Check if data needs migration
       if (this.persistenceManager.needsMigration()) {
-        this.persistenceManager.migrateData();
+        await this.persistenceManager.migrateData();
       }
-      
+
       // Load form responses
-      const formResponses = this.persistenceManager.loadFormResponses();
+      const formResponses = await this.persistenceManager.loadFormResponses();
       formResponses.forEach(response => {
         this.bedDataManager.addFormResponse(response);
       });
-      
+
       // Load occupancy data
-      const occupancyData = this.persistenceManager.loadOccupancyData();
+      const occupancyData = await this.persistenceManager.loadOccupancyData();
       occupancyData.forEach(data => {
         this.bedDataManager.addOccupancyData(data);
       });
@@ -204,17 +204,17 @@ export class BedManagementApp {
   /**
    * Handle form response submission
    */
-  handleFormResponse(formResponse) {
+  async handleFormResponse(formResponse) {
     try {
       // Add to data manager
       this.bedDataManager.addFormResponse(formResponse);
-      
+
       // Save to persistence
-      this.persistenceManager.saveFormResponse(formResponse);
-      
+      await this.persistenceManager.saveFormResponse(formResponse);
+
       // Refresh display
-      this.render();
-      
+      await this.render();
+
       console.log('Form response saved:', formResponse);
     } catch (error) {
       console.error('Failed to handle form response:', error);
@@ -225,17 +225,17 @@ export class BedManagementApp {
   /**
    * Handle occupancy data submission
    */
-  handleOccupancyData(occupancyData) {
+  async handleOccupancyData(occupancyData) {
     try {
       // Add to data manager
       this.bedDataManager.addOccupancyData(occupancyData);
-      
+
       // Save to persistence
-      this.persistenceManager.saveOccupancyData(occupancyData);
-      
+      await this.persistenceManager.saveOccupancyData(occupancyData);
+
       // Refresh display
-      this.render();
-      
+      await this.render();
+
       console.log('Occupancy data saved:', occupancyData);
     } catch (error) {
       console.error('Failed to handle occupancy data:', error);
@@ -246,17 +246,17 @@ export class BedManagementApp {
   /**
    * Handle settings changes
    */
-  handleSettingsChange(settings) {
+  async handleSettingsChange(settings) {
     try {
       // Update bed data manager settings
       this.bedDataManager.updateSettings(settings);
-      
+
       // Update auto-refresh interval
       this.startAutoRefresh();
-      
+
       // Refresh display
-      this.render();
-      
+      await this.render();
+
       console.log('Settings updated:', settings);
     } catch (error) {
       console.error('Failed to handle settings change:', error);
@@ -266,12 +266,12 @@ export class BedManagementApp {
   /**
    * Render the main UI
    */
-  render() {
+  async render() {
     try {
       this.renderKPIs();
       this.renderBedGrid();
       this.renderNotificationSummary();
-      this.updateLastSyncDisplay();
+      await this.updateLastSyncDisplay();
     } catch (error) {
       console.error('Failed to render UI:', error);
       this.showError('Nepavyko atnaujinti sąsajos');
@@ -357,11 +357,11 @@ export class BedManagementApp {
   /**
    * Update last sync display
    */
-  updateLastSyncDisplay() {
+  async updateLastSyncDisplay() {
     const lastSyncElement = document.getElementById('lastSync');
     if (!lastSyncElement) return;
-    
-    const lastSync = this.persistenceManager.getLastSync();
+
+    const lastSync = await this.persistenceManager.getLastSync();
     if (lastSync) {
       const syncDate = new Date(lastSync);
       lastSyncElement.textContent = `Paskutinis atnaujinimas: ${syncDate.toLocaleString('lt-LT')}`;
@@ -392,7 +392,7 @@ export class BedManagementApp {
    */
   refresh() {
     try {
-      this.render();
+      void this.render();
       this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds());
     } catch (error) {
       console.error('Failed to refresh:', error);
@@ -402,9 +402,9 @@ export class BedManagementApp {
   /**
    * Export data
    */
-  exportData() {
+  async exportData() {
     try {
-      this.persistenceManager.downloadData();
+      await this.persistenceManager.downloadData();
     } catch (error) {
       console.error('Failed to export data:', error);
       this.showError('Nepavyko eksportuoti duomenų');
@@ -424,7 +424,7 @@ export class BedManagementApp {
         try {
           await this.persistenceManager.uploadData(file);
           await this.loadSavedData();
-          this.render();
+          await this.render();
           alert('Duomenys sėkmingai importuoti');
         } catch (error) {
           console.error('Failed to import data:', error);
@@ -438,12 +438,12 @@ export class BedManagementApp {
   /**
    * Clear all data
    */
-  clearAllData() {
+  async clearAllData() {
     if (confirm('Ar tikrai norite ištrinti visus duomenis? Šis veiksmas negrįžtamas.')) {
       try {
-        this.persistenceManager.clearAllData();
+        await this.persistenceManager.clearAllData();
         this.bedDataManager = new BedDataManager();
-        this.render();
+        await this.render();
         alert('Visi duomenys ištrinti');
       } catch (error) {
         console.error('Failed to clear data:', error);
