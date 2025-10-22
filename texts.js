@@ -40,6 +40,23 @@ export const texts = {
     soundOn: { lt: "Garso signalai įjungti", en: "" },
     soundOff: { lt: "Garso signalai išjungti", en: "" },
   },
+  forms: {
+    validationError: { lt: "Prašome užpildyti visus privalomus laukus.", en: "" },
+    descriptionRequired: { lt: "Aprašykite problemą, kai pasirenkama \"Kita\".", en: "" },
+    submitInProgress: { lt: "Siunčiama...", en: "" },
+    submitSuccess: { lt: "Duomenys išsaugoti.", en: "" },
+    submitError: { lt: "Nepavyko išsaugoti duomenų. Pabandykite dar kartą.", en: "" },
+    prefilledFromNfc: { lt: "Lova pasirinkta iš NFC žymos.", en: "" },
+  },
+  nfc: {
+    notSupported: { lt: "NFC skaitytuvas neprieinamas šiame įrenginyje.", en: "" },
+    lookupFailed: { lt: "Nepavyko nustatyti NFC žymos.", en: "" },
+    tagNotFound: { lt: "NFC žyma neatpažinta.", en: "" },
+    offlineMode: { lt: "NFC veikia tik offline režimu – suveskite lovą rankiniu būdu.", en: "" },
+  },
+  logger: {
+    offline: { lt: "Veiksmas užfiksuotas tik vietoje (offline režimas).", en: "" },
+  },
 };
 
 export const currentLang = DEFAULT_LANG;

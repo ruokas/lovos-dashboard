@@ -3,24 +3,38 @@
  */
 
 import { STATUS_OPTIONS, BED_LAYOUT } from '../models/bedData.js';
+import { t, texts } from '../texts.js';
 
 export class BedStatusForm {
-  constructor(onSubmit) {
+  constructor(onSubmit, options = {}) {
     this.onSubmit = onSubmit;
+    this.logger = options.logger ?? null;
     this.isOpen = false;
     this.modal = null;
+    this.isSubmitting = false;
+    this.submitButton = null;
+    this.feedbackElement = null;
+    this.currentTrigger = 'ui';
   }
 
   /**
    * Show the form modal
    */
-  show(bedId = null) {
+  show(bedId = null, options = {}) {
     if (this.isOpen) return;
-    
+
     this.isOpen = true;
+    this.currentTrigger = options.trigger ?? 'ui';
     this.createModal(bedId);
     document.body.appendChild(this.modal);
-    
+
+    if (this.logger?.logInteraction) {
+      void this.logger.logInteraction('bed_status_form_opened', {
+        bedLabel: bedId,
+        trigger: this.currentTrigger,
+      });
+    }
+
     // Focus first input
     setTimeout(() => {
       const firstInput = this.modal.querySelector('input, select');
@@ -33,10 +47,17 @@ export class BedStatusForm {
    */
   hide() {
     if (!this.isOpen || !this.modal) return;
-    
+
     this.isOpen = false;
     document.body.removeChild(this.modal);
+    this.setSubmitting(false);
+    if (this.feedbackElement) {
+      this.feedbackElement.className = 'hidden text-sm mb-4';
+      this.feedbackElement.textContent = '';
+    }
     this.modal = null;
+    this.submitButton = null;
+    this.feedbackElement = null;
   }
 
   /**
@@ -56,7 +77,9 @@ export class BedStatusForm {
               </svg>
             </button>
           </div>
-          
+
+          <div id="formFeedback" class="hidden text-sm mb-4"></div>
+
           <form id="bedStatusForm" class="space-y-4">
             <!-- Email -->
             <div>
@@ -159,15 +182,16 @@ export class BedStatusForm {
             
             <!-- Actions -->
             <div class="flex justify-end space-x-3 pt-4">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 id="cancelForm"
                 class="px-4 py-2 text-sm font-medium text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 rounded-md transition-colors"
               >
                 Atšaukti
               </button>
-              <button 
+              <button
                 type="submit"
+                id="submitStatus"
                 class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md transition-colors"
               >
                 Pranešti
@@ -179,6 +203,12 @@ export class BedStatusForm {
     `;
     
     this.attachEventListeners();
+
+    this.feedbackElement = this.modal.querySelector('#formFeedback');
+    this.submitButton = this.modal.querySelector('#submitStatus');
+    if (this.submitButton && !this.submitButton.dataset.defaultText) {
+      this.submitButton.dataset.defaultText = this.submitButton.textContent;
+    }
   }
 
   /**
@@ -206,7 +236,7 @@ export class BedStatusForm {
     // Form submission
     this.modal.querySelector('#bedStatusForm').addEventListener('submit', (e) => {
       e.preventDefault();
-      this.handleSubmit();
+      void this.handleSubmit();
     });
 
     // Click outside to close
@@ -244,9 +274,11 @@ export class BedStatusForm {
   /**
    * Handle form submission
    */
-  handleSubmit() {
+  async handleSubmit() {
+    if (this.isSubmitting) return;
+
     const formData = new FormData(this.modal.querySelector('#bedStatusForm'));
-    
+
     const formResponse = {
       timestamp: new Date().toISOString(),
       email: formData.get('email'),
@@ -257,22 +289,74 @@ export class BedStatusForm {
 
     // Validate required fields
     if (!formResponse.email || !formResponse.bedId || !formResponse.status) {
-      alert('Prašome užpildyti visus privalomus laukus.');
+      this.showFeedback(t(texts.forms.validationError), 'error');
       return;
     }
 
     // Validate "Other" status requires description
     if (formResponse.status === STATUS_OPTIONS.OTHER && !formResponse.description) {
-      alert('Prašome aprašyti problemą.');
+      this.showFeedback(t(texts.forms.descriptionRequired), 'error');
       return;
     }
 
-    // Submit the form
-    if (this.onSubmit) {
-      this.onSubmit(formResponse);
-    }
+    this.setSubmitting(true);
+    this.showFeedback(t(texts.forms.submitInProgress), 'info');
 
-    this.hide();
+    try {
+      let result = { success: true };
+      if (this.onSubmit) {
+        const submitResult = await this.onSubmit(formResponse);
+        result = typeof submitResult === 'undefined' ? { success: true } : submitResult;
+      }
+
+      if (!result || result.success === false) {
+        const errorMessage = typeof result?.error === 'string'
+          ? result.error
+          : result?.error?.message || t(texts.forms.submitError);
+        this.showFeedback(errorMessage, 'error');
+        this.setSubmitting(false);
+        return;
+      }
+
+      this.showFeedback(t(texts.forms.submitSuccess), 'success');
+      setTimeout(() => {
+        this.hide();
+      }, 800);
+    } catch (error) {
+      console.error('Nepavyko pateikti lovos būsenos formos:', error);
+      this.showFeedback(t(texts.forms.submitError), 'error');
+      this.setSubmitting(false);
+    }
+  }
+
+  showFeedback(message, type = 'info') {
+    if (!this.feedbackElement) return;
+
+    const baseClasses = ['hidden', 'text-sm', 'mb-4'];
+    const colorClasses = {
+      info: 'text-blue-600 dark:text-blue-300',
+      error: 'text-red-600 dark:text-red-300',
+      success: 'text-emerald-600 dark:text-emerald-300',
+    };
+
+    this.feedbackElement.className = `${baseClasses.filter((cls) => cls !== 'hidden').join(' ')} ${colorClasses[type] ?? colorClasses.info}`;
+    this.feedbackElement.textContent = message;
+    this.feedbackElement.classList.remove('hidden');
+  }
+
+  setSubmitting(isSubmitting) {
+    this.isSubmitting = isSubmitting;
+    if (!this.submitButton) return;
+
+    this.submitButton.disabled = isSubmitting;
+    if (isSubmitting) {
+      this.submitButton.textContent = t(texts.forms.submitInProgress);
+      this.submitButton.classList.add('opacity-70', 'cursor-wait');
+    } else {
+      const defaultText = this.submitButton.dataset.defaultText || 'Pranešti';
+      this.submitButton.textContent = defaultText;
+      this.submitButton.classList.remove('opacity-70', 'cursor-wait');
+    }
   }
 }
 
