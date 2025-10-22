@@ -60,7 +60,7 @@ create table if not exists public.user_interactions (
   action text not null,
   bed_id uuid,
   payload jsonb default '{}'::jsonb,
-  created_by text,
+  performed_by text,
   created_at timestamptz not null default now()
 );
 

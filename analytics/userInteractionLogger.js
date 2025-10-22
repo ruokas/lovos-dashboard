@@ -36,7 +36,7 @@ export class UserInteractionLogger {
       action,
       bed_id: metadata.bedUuid ?? null,
       payload: metadata.payload ?? metadata,
-      created_by: metadata.email ?? metadata.user ?? metadata.createdBy ?? null,
+      performed_by: metadata.email ?? metadata.user ?? metadata.createdBy ?? null,
     };
 
     if (!this.client) {
