@@ -235,6 +235,17 @@ export class BedManagementApp {
         await this.persistenceManager.migrateData();
       }
 
+      if (typeof this.persistenceManager.loadAggregatedBedState === 'function') {
+        try {
+          const aggregatedState = await this.persistenceManager.loadAggregatedBedState();
+          if (aggregatedState) {
+            this.bedDataManager.applyAggregatedState(aggregatedState);
+          }
+        } catch (aggregatedError) {
+          console.warn('Nepavyko gauti suvestinės iš Supabase, tęsiama su įvykių istorija.', aggregatedError);
+        }
+      }
+
       // Load form responses
       const formResponses = await this.persistenceManager.loadFormResponses();
       formResponses.forEach(response => {
