@@ -304,7 +304,7 @@ export class ReportingService {
         }
       }
 
-      if (priority !== null) {
+      if (priority !== null && priority > 0) {
         notificationBuckets.total += 1;
         if (PRIORITY_BUCKETS.high(priority)) {
           notificationBuckets.high += 1;
