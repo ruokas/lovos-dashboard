@@ -69,12 +69,12 @@ all_days as (
 select
   d.day,
   coalesce(ds.status_updates, 0) as status_updates,
-  coalesce(do.occupancy_updates, 0) as occupancy_updates,
+  coalesce(doc.occupancy_updates, 0) as occupancy_updates,
   ds.avg_minutes_between_status_and_occupancy,
   coalesce(ds.sla_breaches, 0) as sla_breaches
 from all_days d
 left join daily_status ds on ds.day = d.day
-left join daily_occupancy do on do.day = d.day
+left join daily_occupancy doc on doc.day = d.day
 order by d.day desc;
 
 create unique index if not exists daily_bed_metrics_day_idx
