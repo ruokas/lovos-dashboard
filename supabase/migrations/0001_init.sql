@@ -57,12 +57,64 @@ create index if not exists occupancy_events_bed_id_idx
 
 create table if not exists public.user_interactions (
   id uuid primary key default gen_random_uuid(),
-  action text not null,
-  bed_id uuid,
+  interaction_type text not null,
+  bed_id uuid references public.beds(id) on delete set null,
+  tag_code text,
   payload jsonb default '{}'::jsonb,
   performed_by text,
-  created_at timestamptz not null default now()
+  occurred_at timestamptz not null default now()
 );
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'user_interactions'
+      and column_name = 'action'
+  ) then
+    alter table public.user_interactions rename column action to interaction_type;
+  end if;
+exception
+  when duplicate_column then null;
+end $$;
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'user_interactions'
+      and column_name = 'created_at'
+  ) then
+    alter table public.user_interactions rename column created_at to occurred_at;
+  end if;
+exception
+  when duplicate_column then null;
+end $$;
+
+alter table if exists public.user_interactions
+  add column if not exists tag_code text,
+  alter column payload set default '{}'::jsonb;
+
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'user_interactions'
+      and column_name = 'bed_id'
+  ) then
+    alter table public.user_interactions
+      add constraint user_interactions_bed_id_fkey
+      foreign key (bed_id) references public.beds(id) on delete set null;
+  end if;
+exception
+  when duplicate_object then null;
+end $$;
+
+create index if not exists user_interactions_type_idx
+  on public.user_interactions (interaction_type, occurred_at desc);
 
 create table if not exists public.nfc_tags (
   id uuid primary key default gen_random_uuid(),
