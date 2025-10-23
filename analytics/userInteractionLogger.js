@@ -8,6 +8,8 @@ export class UserInteractionLogger {
   constructor(options = {}) {
     this.document = options.document;
     this.client = options.client ?? this.#createClient(options.document);
+    this.cachedUserEmail = null;
+    this.emailLookupAttempted = false;
   }
 
   #createClient(doc) {
@@ -32,13 +34,18 @@ export class UserInteractionLogger {
    * @returns {Promise<{stored: boolean, error?: Error}>}
    */
   async logInteraction(interactionType, metadata = {}) {
+    const payloadMetadata = metadata ?? {};
     const basePayload = {
       interaction_type: interactionType,
-      bed_id: metadata.bedUuid ?? metadata.bedId ?? null,
+      bed_id: payloadMetadata.bedUuid ?? payloadMetadata.bedId ?? null,
       tag_code:
-        metadata.tagCode ?? metadata.tag_code ?? metadata.tag ?? metadata.payload?.tag ?? null,
-      payload: metadata.payload ?? metadata,
-      performed_by: metadata.email ?? metadata.user ?? metadata.createdBy ?? null,
+        payloadMetadata.tagCode ??
+        payloadMetadata.tag_code ??
+        payloadMetadata.tag ??
+        payloadMetadata.payload?.tag ??
+        null,
+      payload: payloadMetadata.payload ?? payloadMetadata,
+      performed_by: await this.#resolvePerformedBy(payloadMetadata),
     };
 
     if (!this.client) {
@@ -46,11 +53,19 @@ export class UserInteractionLogger {
       return { stored: false, message: t(texts.logger.offline) };
     }
 
+    if (!basePayload.performed_by) {
+      console.info('[Offline log]', interactionType, basePayload);
+      console.warn(
+        'Supabase naudotojo el. paštas nerastas – veiksmas išsaugotas tik vietoje. Prisijunkite prie Supabase ir bandykite dar kartą.'
+      );
+      return { stored: false, message: t(texts.logger.offline), missingEmail: true };
+    }
+
     try {
       const { error } = await this.client.from('user_interactions').insert(basePayload);
       if (error) {
         if (this.#isMissingColumnError(error, 'interaction_type')) {
-          await this.#insertLegacySchema(interactionType, metadata);
+          await this.#insertLegacySchema(interactionType, payloadMetadata, basePayload.performed_by);
           return { stored: true, downgraded: true };
         }
         if (this.#isMissingColumnError(error, 'tag_code')) {
@@ -62,22 +77,61 @@ export class UserInteractionLogger {
           }
           return { stored: true, downgraded: true };
         }
+        if (this.#isRlsViolation(error)) {
+          console.warn('Supabase RLS atmetė naudotojo veiksmo įrašą:', error);
+          return { stored: false, error, rlsViolation: true };
+        }
         throw error;
       }
       return { stored: true };
     } catch (error) {
       if (this.#isMissingColumnError(error, 'interaction_type')) {
         try {
-          await this.#insertLegacySchema(interactionType, metadata);
+          await this.#insertLegacySchema(interactionType, payloadMetadata, basePayload.performed_by);
           return { stored: true, downgraded: true };
         } catch (legacyError) {
           console.error('Nepavyko įrašyti naudotojo veiksmo (legacy schema) į Supabase:', legacyError);
           return { stored: false, error: legacyError };
         }
       }
+      if (this.#isRlsViolation(error)) {
+        console.warn('Supabase RLS atmetė naudotojo veiksmo įrašą:', error);
+        return { stored: false, error, rlsViolation: true };
+      }
       console.error('Nepavyko įrašyti naudotojo veiksmo į Supabase:', error);
       return { stored: false, error };
     }
+  }
+
+  async #resolvePerformedBy(metadata) {
+    const directValue = metadata?.email ?? metadata?.user ?? metadata?.createdBy ?? null;
+    if (directValue) {
+      return directValue;
+    }
+    return this.#getAuthenticatedEmail();
+  }
+
+  async #getAuthenticatedEmail() {
+    if (!this.client) {
+      return null;
+    }
+
+    if (this.emailLookupAttempted) {
+      return this.cachedUserEmail;
+    }
+
+    this.emailLookupAttempted = true;
+    try {
+      const { data, error } = await this.client.auth.getUser();
+      if (error) {
+        throw error;
+      }
+      this.cachedUserEmail = data?.user?.email ?? null;
+    } catch (error) {
+      console.warn('Nepavyko nustatyti prisijungusio naudotojo el. pašto Supabase kliente:', error);
+      this.cachedUserEmail = null;
+    }
+    return this.cachedUserEmail;
   }
 
   #isMissingColumnError(error, columnName) {
@@ -85,12 +139,16 @@ export class UserInteractionLogger {
     return error?.code === 'PGRST204' && message.includes(`'${columnName}'`);
   }
 
-  async #insertLegacySchema(action, metadata) {
+  #isRlsViolation(error) {
+    return error?.code === '42501';
+  }
+
+  async #insertLegacySchema(action, metadata, performedBy) {
     const legacyPayload = this.#stripUndefined({
       action,
       bed_id: metadata?.bedUuid ?? metadata?.bedId ?? null,
       payload: metadata?.payload ?? metadata,
-      performed_by: metadata?.email ?? metadata?.user ?? metadata?.createdBy ?? null,
+      performed_by: performedBy ?? metadata?.email ?? metadata?.user ?? metadata?.createdBy ?? null,
     });
 
     const { error } = await this.client.from('user_interactions').insert(legacyPayload);
