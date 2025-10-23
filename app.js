@@ -30,6 +30,7 @@ export class BedManagementApp {
     this.refreshInterval = null;
     this.isInitialized = false;
     this.nfcHandler = null;
+    this.realtimeChannel = null;
   }
 
   /**
@@ -45,6 +46,9 @@ export class BedManagementApp {
       // Load saved data
       await this.loadSavedData();
 
+      // Mark current notifications as jau matytos, kad realaus laiko įvykiai neskambėtų du kartus
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), { suppressAlerts: true });
+
       // Initialize NFC ir URL srautus
       await this.initNfcFlow();
 
@@ -53,6 +57,9 @@ export class BedManagementApp {
 
       // Initial render
       await this.render();
+
+      // Subscribe to Supabase real-time, jei pasiekiama
+      await this.subscribeToRealtimeUpdates();
 
       // Start auto-refresh
       this.startAutoRefresh();
@@ -65,6 +72,112 @@ export class BedManagementApp {
     } catch (error) {
       console.error('Failed to initialize app:', error);
       this.showError('Nepavyko inicializuoti programos');
+    }
+  }
+
+  async subscribeToRealtimeUpdates() {
+    const client = this.persistenceManager?.client;
+    if (!client || typeof client.channel !== 'function') {
+      console.info('Supabase realaus laiko kanalas neaktyvus.');
+      return;
+    }
+
+    if (this.realtimeChannel) {
+      try {
+        await this.realtimeChannel.unsubscribe();
+      } catch (error) {
+        console.warn('Nepavyko atsisakyti seno realaus laiko kanalo:', error);
+      }
+    }
+
+    const channel = client.channel('public:bed-events');
+
+    channel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'bed_status_events' }, (payload) => {
+        if (!payload?.new) return;
+        void this.handleRealtimeStatusEvent(payload.new, payload.eventType ?? payload.type ?? 'INSERT');
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'occupancy_events' }, (payload) => {
+        if (!payload?.new) return;
+        void this.handleRealtimeOccupancyEvent(payload.new, payload.eventType ?? payload.type ?? 'INSERT');
+      });
+
+    const status = await channel.subscribe();
+    if (status === 'SUBSCRIBED') {
+      console.log('Prisijungta prie realaus laiko atnaujinimų.');
+    }
+
+    this.realtimeChannel = channel;
+  }
+
+  async handleRealtimeStatusEvent(record, eventType = 'INSERT') {
+    try {
+      const bedLabel = await this.persistenceManager.getBedLabelById(record.bed_id);
+      if (!bedLabel) {
+        console.warn('Gautas realaus laiko įvykis su nežinoma lova:', record);
+        return;
+      }
+
+      const isNew = this.bedDataManager.addFormResponse({
+        id: record.id,
+        timestamp: record.created_at,
+        email: record.reported_by ?? null,
+        bedId: bedLabel,
+        status: record.status,
+        description: record.notes ?? record.metadata?.description ?? null,
+        priority: record.priority,
+        metadata: record.metadata ?? {},
+      }, { allowUpdate: eventType === 'UPDATE' });
+
+      if (!isNew && eventType !== 'UPDATE') {
+        return;
+      }
+
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds());
+      await this.render();
+
+      void this.userInteractionLogger.logInteraction('realtime_status_event_received', {
+        bedLabel,
+        payload: { status: record.status },
+      });
+    } catch (error) {
+      console.error('Klaida apdorojant realaus laiko būsenos įvykį:', error);
+    }
+  }
+
+  async handleRealtimeOccupancyEvent(record, eventType = 'INSERT') {
+    try {
+      const bedLabel = await this.persistenceManager.getBedLabelById(record.bed_id);
+      if (!bedLabel) {
+        console.warn('Gautas realaus laiko užimtumo įvykis su nežinoma lova:', record);
+        return;
+      }
+
+      const isNew = this.bedDataManager.addOccupancyData({
+        id: record.id,
+        timestamp: record.created_at,
+        bedId: bedLabel,
+        status: record.occupancy_state,
+        patientCode: record.patient_code ?? null,
+        expectedUntil: record.expected_until ?? null,
+        notes: record.notes ?? null,
+        createdBy: record.created_by ?? null,
+        metadata: record.metadata ?? {},
+      }, { allowUpdate: eventType === 'UPDATE' });
+
+      if (!isNew && eventType !== 'UPDATE') {
+        return;
+      }
+
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds());
+      await this.render();
+
+      void this.userInteractionLogger.logInteraction('realtime_occupancy_event_received', {
+        bedLabel,
+        payload: { status: record.occupancy_state },
+      });
+    } catch (error) {
+      console.error('Klaida apdorojant realaus laiko užimtumo įvykį:', error);
     }
   }
 
