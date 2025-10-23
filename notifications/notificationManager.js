@@ -35,10 +35,11 @@ export class NotificationManager {
   /**
    * Update notifications from bed data
    */
-  updateNotifications(beds) {
+  updateNotifications(beds, options = {}) {
+    const { suppressAlerts = false } = options;
     const newNotifications = [];
     const currentNotificationIds = new Set();
-    
+
     beds.forEach(bed => {
       bed.notifications.forEach(notification => {
         const notificationId = `${bed.bedId}-${notification.type}`;
@@ -55,12 +56,12 @@ export class NotificationManager {
         }
       });
     });
-    
+
     // Update stored notification IDs
     this.lastNotificationIds = currentNotificationIds;
-    
+
     // Show new notifications
-    if (newNotifications.length > 0) {
+    if (!suppressAlerts && newNotifications.length > 0) {
       this.showNotifications(newNotifications);
     }
     
@@ -72,11 +73,13 @@ export class NotificationManager {
    * Show new notifications
    */
   showNotifications(notifications) {
+    if (typeof window === 'undefined') return;
+
     // Play sound if enabled
     if (this.soundEnabled && notifications.length > 0) {
       this.playNotificationSound();
     }
-    
+
     // Show browser notification if supported and enabled
     if (this.settingsManager.getSettings().notificationsEnabled && 'Notification' in window) {
       this.showBrowserNotifications(notifications);

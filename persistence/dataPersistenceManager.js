@@ -102,6 +102,11 @@ export class DataPersistenceManager {
     return this.bedIdToLabel.get(id) ?? null;
   }
 
+  async getBedLabelById(id) {
+    await this.#ensureBedsLoaded();
+    return this.#resolveBedLabel(id) ?? null;
+  }
+
   #updateLocalLastSync(timestamp) {
     try {
       if (!timestamp) return;

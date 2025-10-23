@@ -232,7 +232,9 @@ export class BedDataManager {
     this.settings = { ...DEFAULT_SETTINGS };
     this.formResponses = [];
     this.occupancyData = [];
-    
+    this.formResponseIndex = new Map();
+    this.occupancyRecordIndex = new Map();
+
     // Initialize all beds
     BED_LAYOUT.forEach(bedId => {
       this.beds.set(bedId, new BedData(bedId));
@@ -242,25 +244,55 @@ export class BedDataManager {
   /**
    * Add form response and update bed data
    */
-  addFormResponse(formResponse) {
-    this.formResponses.push(formResponse);
+  addFormResponse(formResponse, options = {}) {
+    const { allowUpdate = false } = options;
+    const recordId = formResponse?.id ?? `${formResponse?.bedId ?? 'unknown'}-${formResponse?.timestamp ?? Date.now()}`;
+    const existingIndex = recordId !== undefined ? this.formResponseIndex.get(recordId) : undefined;
+
+    if (typeof existingIndex === 'number') {
+      if (!allowUpdate) {
+        return false;
+      }
+      this.formResponses[existingIndex] = formResponse;
+    } else {
+      this.formResponses.push(formResponse);
+      if (recordId) {
+        this.formResponseIndex.set(recordId, this.formResponses.length - 1);
+      }
+    }
     const bed = this.beds.get(formResponse.bedId);
     if (bed) {
       bed.updateStatus(formResponse);
       bed.calculateNotifications(this.settings);
     }
+    return true;
   }
 
   /**
    * Add occupancy data and update bed data
    */
-  addOccupancyData(occupancyData) {
-    this.occupancyData.push(occupancyData);
+  addOccupancyData(occupancyData, options = {}) {
+    const { allowUpdate = false } = options;
+    const recordId = occupancyData?.id ?? `${occupancyData?.bedId ?? 'unknown'}-${occupancyData?.timestamp ?? Date.now()}`;
+    const existingIndex = recordId !== undefined ? this.occupancyRecordIndex.get(recordId) : undefined;
+
+    if (typeof existingIndex === 'number') {
+      if (!allowUpdate) {
+        return false;
+      }
+      this.occupancyData[existingIndex] = occupancyData;
+    } else {
+      this.occupancyData.push(occupancyData);
+      if (recordId) {
+        this.occupancyRecordIndex.set(recordId, this.occupancyData.length - 1);
+      }
+    }
     const bed = this.beds.get(occupancyData.bedId);
     if (bed) {
       bed.updateOccupancy(occupancyData);
       bed.calculateNotifications(this.settings);
     }
+    return true;
   }
 
   /**
@@ -346,20 +378,32 @@ export class BedDataManager {
     if (data.settings) {
       this.settings = { ...DEFAULT_SETTINGS, ...data.settings };
     }
-    
+
     if (data.formResponses) {
-      this.formResponses = data.formResponses;
+      this.formResponses = [];
+      this.formResponseIndex.clear();
       // Rebuild bed data from form responses
       this.beds.clear();
       BED_LAYOUT.forEach(bedId => {
         this.beds.set(bedId, new BedData(bedId));
       });
-      data.formResponses.forEach(response => this.addFormResponse(response));
+      data.formResponses
+        .slice()
+        .sort((a, b) => new Date(a.timestamp ?? 0) - new Date(b.timestamp ?? 0))
+        .forEach(response => {
+          this.addFormResponse(response);
+        });
     }
-    
+
     if (data.occupancyData) {
-      this.occupancyData = data.occupancyData;
-      data.occupancyData.forEach(occupancy => this.addOccupancyData(occupancy));
+      this.occupancyData = [];
+      this.occupancyRecordIndex.clear();
+      data.occupancyData
+        .slice()
+        .sort((a, b) => new Date(a.timestamp ?? 0) - new Date(b.timestamp ?? 0))
+        .forEach(occupancy => {
+          this.addOccupancyData(occupancy);
+        });
     }
   }
 }
