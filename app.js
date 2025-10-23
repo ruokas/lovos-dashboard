@@ -7,6 +7,8 @@ import { SettingsManager, SettingsUI } from './settings/settingsManager.js';
 import { BedStatusForm, OccupancyForm } from './forms/bedStatusForm.js';
 import { NotificationManager } from './notifications/notificationManager.js';
 import { DataPersistenceManager } from './persistence/dataPersistenceManager.js';
+import { UserInteractionLogger } from './analytics/userInteractionLogger.js';
+import { NfcHandler } from './nfc/nfcHandler.js';
 
 export class BedManagementApp {
   constructor() {
@@ -14,15 +16,20 @@ export class BedManagementApp {
     this.settingsManager = new SettingsManager();
     this.persistenceManager = new DataPersistenceManager({ document: typeof document !== 'undefined' ? document : undefined });
     this.notificationManager = new NotificationManager(this.settingsManager);
+    const sharedDocument = typeof document !== 'undefined' ? document : undefined;
+    this.userInteractionLogger = new UserInteractionLogger({ document: sharedDocument, client: this.persistenceManager.client });
 
     this.supabaseConfig = { url: '', anonKey: '' };
-    
-    this.bedStatusForm = new BedStatusForm((formResponse) => this.handleFormResponse(formResponse));
+
+    this.bedStatusForm = new BedStatusForm((formResponse) => this.handleFormResponse(formResponse), {
+      logger: this.userInteractionLogger,
+    });
     this.occupancyForm = new OccupancyForm((occupancyData) => this.handleOccupancyData(occupancyData));
     this.settingsUI = new SettingsUI(this.settingsManager, (settings) => this.handleSettingsChange(settings));
-    
+
     this.refreshInterval = null;
     this.isInitialized = false;
+    this.nfcHandler = null;
   }
 
   /**
@@ -37,18 +44,24 @@ export class BedManagementApp {
 
       // Load saved data
       await this.loadSavedData();
-      
+
+      // Initialize NFC ir URL srautus
+      await this.initNfcFlow();
+
       // Setup UI event listeners
       this.setupEventListeners();
-      
+
       // Initial render
       await this.render();
-      
+
       // Start auto-refresh
       this.startAutoRefresh();
-      
+
       this.isInitialized = true;
       console.log('Bed Management App initialized successfully');
+      void this.userInteractionLogger.logInteraction('app_initialized', {
+        payload: { initializedAt: new Date().toISOString() },
+      });
     } catch (error) {
       console.error('Failed to initialize app:', error);
       this.showError('Nepavyko inicializuoti programos');
@@ -102,6 +115,28 @@ export class BedManagementApp {
     }
   }
 
+  async initNfcFlow() {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!this.nfcHandler) {
+      this.nfcHandler = new NfcHandler({
+        bedStatusForm: this.bedStatusForm,
+        client: this.persistenceManager.client,
+        logger: this.userInteractionLogger,
+      });
+    } else {
+      this.nfcHandler.client = this.persistenceManager.client;
+    }
+
+    try {
+      await this.nfcHandler.processCurrentTag();
+    } catch (error) {
+      console.error('NFC inicializavimo klaida:', error);
+    }
+  }
+
   /**
    * Setup UI event listeners
    */
@@ -121,7 +156,10 @@ export class BedManagementApp {
     const addStatusBtn = document.getElementById('addStatusBtn');
     if (addStatusBtn) {
       console.log('Found add status button');
-      addStatusBtn.addEventListener('click', () => this.bedStatusForm.show());
+      addStatusBtn.addEventListener('click', () => {
+        void this.userInteractionLogger.logInteraction('status_form_open_button', { trigger: 'toolbar' });
+        this.bedStatusForm.show(null, { trigger: 'toolbar' });
+      });
     } else {
       console.log('Add status button not found');
     }
@@ -130,7 +168,10 @@ export class BedManagementApp {
     const addOccupancyBtn = document.getElementById('addOccupancyBtn');
     if (addOccupancyBtn) {
       console.log('Found add occupancy button');
-      addOccupancyBtn.addEventListener('click', () => this.occupancyForm.show());
+      addOccupancyBtn.addEventListener('click', () => {
+        void this.userInteractionLogger.logInteraction('occupancy_form_open_button', { trigger: 'toolbar' });
+        this.occupancyForm.show();
+      });
     } else {
       console.log('Add occupancy button not found');
     }
@@ -186,14 +227,16 @@ export class BedManagementApp {
         cell.addEventListener('click', (e) => {
           const bedId = e.currentTarget.dataset.bedId;
           if (bedId) {
-            this.bedStatusForm.show(bedId);
+            void this.userInteractionLogger.logInteraction('bed_cell_clicked', { bedLabel: bedId });
+            this.bedStatusForm.show(bedId, { trigger: 'grid' });
           }
         });
-        
+
         cell.addEventListener('contextmenu', (e) => {
           e.preventDefault();
           const bedId = e.currentTarget.dataset.bedId;
           if (bedId) {
+            void this.userInteractionLogger.logInteraction('bed_cell_context_menu', { bedLabel: bedId });
             this.occupancyForm.show(bedId);
           }
         });
@@ -206,19 +249,27 @@ export class BedManagementApp {
    */
   async handleFormResponse(formResponse) {
     try {
-      // Add to data manager
+      const saved = await this.persistenceManager.saveFormResponse(formResponse);
+      if (!saved) {
+        throw new Error('Formos duomenys nebuvo išsaugoti');
+      }
+
       this.bedDataManager.addFormResponse(formResponse);
-
-      // Save to persistence
-      await this.persistenceManager.saveFormResponse(formResponse);
-
-      // Refresh display
       await this.render();
-
       console.log('Form response saved:', formResponse);
+      void this.userInteractionLogger.logInteraction('bed_status_saved', {
+        bedLabel: formResponse.bedId,
+        email: formResponse.email,
+        payload: { status: formResponse.status },
+      });
+      return { success: true };
     } catch (error) {
       console.error('Failed to handle form response:', error);
-      this.showError('Nepavyko išsaugoti formos duomenų');
+      void this.userInteractionLogger.logInteraction('bed_status_save_failed', {
+        bedLabel: formResponse?.bedId,
+        payload: { error: error.message },
+      });
+      return { success: false, error };
     }
   }
 
@@ -227,19 +278,29 @@ export class BedManagementApp {
    */
   async handleOccupancyData(occupancyData) {
     try {
-      // Add to data manager
+      const saved = await this.persistenceManager.saveOccupancyData(occupancyData);
+      if (!saved) {
+        throw new Error('Užimtumo įrašas nebuvo išsaugotas');
+      }
+
       this.bedDataManager.addOccupancyData(occupancyData);
-
-      // Save to persistence
-      await this.persistenceManager.saveOccupancyData(occupancyData);
-
-      // Refresh display
       await this.render();
 
       console.log('Occupancy data saved:', occupancyData);
+      void this.userInteractionLogger.logInteraction('occupancy_saved', {
+        bedLabel: occupancyData.bedId,
+        email: occupancyData.email,
+        payload: { status: occupancyData.status },
+      });
+      return { success: true };
     } catch (error) {
       console.error('Failed to handle occupancy data:', error);
+      void this.userInteractionLogger.logInteraction('occupancy_save_failed', {
+        bedLabel: occupancyData?.bedId,
+        payload: { error: error.message },
+      });
       this.showError('Nepavyko išsaugoti užimtumo duomenų');
+      return { success: false, error };
     }
   }
 
