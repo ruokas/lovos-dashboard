@@ -1,3 +1,5 @@
+import { parseSupabaseTimestamp } from '../utils/time.js';
+
 /**
  * Data models and calculation engine for bed cleanliness management system
  */
@@ -238,6 +240,75 @@ export class BedDataManager {
     // Initialize all beds
     BED_LAYOUT.forEach(bedId => {
       this.beds.set(bedId, new BedData(bedId));
+    });
+  }
+
+  #resetBedState(bed) {
+    bed.currentStatus = STATUS_OPTIONS.CLEAN;
+    bed.occupancyStatus = 'free';
+    bed.lastOccupiedTime = null;
+    bed.lastFreedTime = null;
+    bed.lastCheckedTime = null;
+    bed.lastCheckedBy = null;
+    bed.lastCheckedEmail = null;
+    bed.problemDescription = null;
+    bed.notifications = [];
+    bed.history = [];
+  }
+
+  applyAggregatedState(records = []) {
+    if (!Array.isArray(records)) {
+      return;
+    }
+
+    this.formResponses = [];
+    this.occupancyData = [];
+    this.formResponseIndex.clear();
+    this.occupancyRecordIndex.clear();
+
+    this.beds.forEach((bed) => {
+      this.#resetBedState(bed);
+    });
+
+    records.forEach((record) => {
+      if (!record) return;
+      const bedId = record.bedId ?? record.label;
+      if (!bedId) return;
+      const bed = this.beds.get(bedId);
+      if (!bed) {
+        return;
+      }
+
+      if (record.status) {
+        bed.currentStatus = record.status;
+        bed.problemDescription = record.statusNotes ?? record.statusMetadata?.description ?? null;
+        const statusDate = parseSupabaseTimestamp(record.statusCreatedAt);
+        bed.lastCheckedTime = statusDate;
+        bed.lastCheckedBy = record.statusReportedBy ?? null;
+        bed.lastCheckedEmail = record.statusReportedBy ?? null;
+      }
+
+      if (record.occupancyState) {
+        const normalized = String(record.occupancyState).toLowerCase();
+        const occupancyDate = parseSupabaseTimestamp(record.occupancyCreatedAt);
+        if (normalized === 'occupied') {
+          bed.occupancyStatus = 'occupied';
+          bed.lastOccupiedTime = occupancyDate;
+        } else if (normalized === 'free' || normalized === 'available') {
+          bed.occupancyStatus = 'free';
+          bed.lastFreedTime = occupancyDate;
+        } else {
+          bed.occupancyStatus = normalized;
+        }
+      } else {
+        bed.occupancyStatus = 'free';
+      }
+
+      bed.calculateNotifications(this.settings);
+    });
+
+    this.beds.forEach((bed) => {
+      bed.calculateNotifications(this.settings);
     });
   }
 

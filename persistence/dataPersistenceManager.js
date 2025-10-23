@@ -1,6 +1,7 @@
-import { STATUS_OPTIONS, PRIORITY_LEVELS } from '../models/bedData.js';
+import { BED_LAYOUT, STATUS_OPTIONS, PRIORITY_LEVELS } from '../models/bedData.js';
 import { getSupabaseClient } from './supabaseClient.js';
 import { getLastSupabaseUpdate } from './syncMetadataService.js';
+import { parseSupabaseTimestamp } from '../utils/time.js';
 
 const LOCAL_STORAGE_KEYS = {
   formResponses: 'bed-management-form-responses',
@@ -41,6 +42,23 @@ function saveLocalArray(key, value) {
   } catch (error) {
     console.error('Nepavyko įrašyti localStorage:', error);
   }
+}
+
+function normalizeIsoTimestamp(value) {
+  const parsed = parseSupabaseTimestamp(value);
+  return parsed ? parsed.toISOString() : null;
+}
+
+function pickLatestTimestamp(existing, candidate) {
+  const currentDate = existing ? new Date(existing) : null;
+  const candidateDate = candidate ? new Date(candidate) : null;
+  if (!candidateDate || Number.isNaN(candidateDate.getTime())) {
+    return existing ?? null;
+  }
+  if (!currentDate || Number.isNaN(currentDate.getTime())) {
+    return candidateDate.toISOString();
+  }
+  return candidateDate > currentDate ? candidateDate.toISOString() : currentDate.toISOString();
 }
 
 export class DataPersistenceManager {
@@ -205,6 +223,153 @@ export class DataPersistenceManager {
     const createdAt = data?.[0]?.created_at ?? occupancyData.timestamp ?? new Date().toISOString();
     this.lastSyncCache = createdAt;
     return true;
+  }
+
+  async loadAggregatedBedState() {
+    if (!this.#isSupabaseAvailable()) {
+      return this.#buildLocalAggregatedState();
+    }
+
+    await this.#ensureBedsLoaded();
+    const { data, error } = await this.client
+      .from('aggregated_bed_state')
+      .select(`
+        bed_id,
+        label,
+        status,
+        priority,
+        status_notes,
+        status_reported_by,
+        status_metadata,
+        status_created_at,
+        occupancy_state,
+        patient_code,
+        expected_until,
+        occupancy_notes,
+        occupancy_created_by,
+        occupancy_metadata,
+        occupancy_created_at
+      `);
+
+    if (error) {
+      throw new Error(`Nepavyko gauti suvestinės iš Supabase: ${error.message}`);
+    }
+
+    const aggregated = (data ?? [])
+      .map((row) => {
+        const bedLabel = row.label ?? this.#resolveBedLabel(row.bed_id) ?? null;
+        if (!bedLabel) {
+          return null;
+        }
+
+        const statusCreatedAt = normalizeIsoTimestamp(row.status_created_at);
+        const occupancyCreatedAt = normalizeIsoTimestamp(row.occupancy_created_at);
+
+        return {
+          bedId: bedLabel,
+          bedUuid: row.bed_id ?? null,
+          status: row.status ?? null,
+          statusNotes: row.status_notes ?? row.status_metadata?.description ?? null,
+          priority: typeof row.priority === 'number' ? row.priority : calculatePriority(row.status),
+          statusReportedBy: row.status_reported_by ?? null,
+          statusCreatedAt,
+          statusMetadata: row.status_metadata ?? {},
+          occupancyState: row.occupancy_state ?? null,
+          patientCode: row.patient_code ?? null,
+          expectedUntil: row.expected_until ?? null,
+          occupancyNotes: row.occupancy_notes ?? null,
+          occupancyCreatedBy: row.occupancy_created_by ?? null,
+          occupancyCreatedAt,
+          occupancyMetadata: row.occupancy_metadata ?? {},
+        };
+      })
+      .filter(Boolean);
+
+    let latest = null;
+    aggregated.forEach((record) => {
+      latest = pickLatestTimestamp(latest, record.statusCreatedAt);
+      latest = pickLatestTimestamp(latest, record.occupancyCreatedAt);
+    });
+
+    if (latest) {
+      this.lastSyncCache = latest;
+    }
+
+    return aggregated;
+  }
+
+  #buildLocalAggregatedState() {
+    const formResponses = createLocalArray(LOCAL_STORAGE_KEYS.formResponses);
+    const occupancyRecords = createLocalArray(LOCAL_STORAGE_KEYS.occupancyData);
+
+    const latestStatus = new Map();
+    formResponses.forEach((response) => {
+      const bedId = response?.bedId;
+      if (!bedId) return;
+      const timestamp = normalizeIsoTimestamp(response.timestamp);
+      const existing = latestStatus.get(bedId);
+      const existingTimestamp = existing?.timestamp ?? null;
+      const chosen = pickLatestTimestamp(existingTimestamp, timestamp);
+      if (!existing || chosen !== existingTimestamp) {
+        latestStatus.set(bedId, { ...response, timestamp: chosen ?? timestamp });
+      }
+    });
+
+    const latestOccupancy = new Map();
+    occupancyRecords.forEach((record) => {
+      const bedId = record?.bedId;
+      if (!bedId) return;
+      const timestamp = normalizeIsoTimestamp(record.timestamp);
+      const existing = latestOccupancy.get(bedId);
+      const existingTimestamp = existing?.timestamp ?? null;
+      const chosen = pickLatestTimestamp(existingTimestamp, timestamp);
+      if (!existing || chosen !== existingTimestamp) {
+        latestOccupancy.set(bedId, { ...record, timestamp: chosen ?? timestamp });
+      }
+    });
+
+    const aggregated = [];
+    const bedIds = new Set([
+      ...BED_LAYOUT,
+      ...latestStatus.keys(),
+      ...latestOccupancy.keys(),
+    ]);
+
+    let latest = null;
+    bedIds.forEach((bedId) => {
+      const statusRecord = latestStatus.get(bedId) ?? null;
+      const occupancyRecord = latestOccupancy.get(bedId) ?? null;
+      const statusCreatedAt = statusRecord ? normalizeIsoTimestamp(statusRecord.timestamp) : null;
+      const occupancyCreatedAt = occupancyRecord ? normalizeIsoTimestamp(occupancyRecord.timestamp) : null;
+
+      latest = pickLatestTimestamp(latest, statusCreatedAt);
+      latest = pickLatestTimestamp(latest, occupancyCreatedAt);
+
+      aggregated.push({
+        bedId,
+        bedUuid: null,
+        status: statusRecord?.status ?? null,
+        statusNotes: statusRecord?.description ?? null,
+        priority: statusRecord?.priority ?? calculatePriority(statusRecord?.status),
+        statusReportedBy: statusRecord?.email ?? null,
+        statusCreatedAt,
+        statusMetadata: statusRecord?.metadata ?? {},
+        occupancyState: occupancyRecord?.status ?? null,
+        patientCode: occupancyRecord?.patientCode ?? null,
+        expectedUntil: occupancyRecord?.expectedUntil ?? null,
+        occupancyNotes: occupancyRecord?.notes ?? null,
+        occupancyCreatedBy: occupancyRecord?.createdBy ?? occupancyRecord?.email ?? null,
+        occupancyCreatedAt,
+        occupancyMetadata: occupancyRecord?.metadata ?? {},
+      });
+    });
+
+    if (latest) {
+      this.#updateLocalLastSync(latest);
+      this.lastSyncCache = latest;
+    }
+
+    return aggregated;
   }
 
   async loadFormResponses() {
