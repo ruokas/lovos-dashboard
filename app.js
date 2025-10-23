@@ -9,6 +9,22 @@ import { NotificationManager } from './notifications/notificationManager.js';
 import { DataPersistenceManager } from './persistence/dataPersistenceManager.js';
 import { UserInteractionLogger } from './analytics/userInteractionLogger.js';
 import { NfcHandler } from './nfc/nfcHandler.js';
+import { ReportingService } from './reports/reportingService.js';
+
+const HTML_ESCAPE_MAP = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value).replace(/[&<>"']/g, (char) => HTML_ESCAPE_MAP[char] ?? char);
+}
 
 export class BedManagementApp {
   constructor() {
@@ -17,6 +33,12 @@ export class BedManagementApp {
     this.persistenceManager = new DataPersistenceManager({ document: typeof document !== 'undefined' ? document : undefined });
     this.notificationManager = new NotificationManager(this.settingsManager);
     const sharedDocument = typeof document !== 'undefined' ? document : undefined;
+    this.reportingService = new ReportingService({
+      client: this.persistenceManager.client,
+      bedDataManager: this.bedDataManager,
+      notificationManager: this.notificationManager,
+      settings: this.settingsManager.getSettings(),
+    });
     this.userInteractionLogger = new UserInteractionLogger({ document: sharedDocument, client: this.persistenceManager.client });
 
     this.supabaseConfig = { url: '', anonKey: '' };
@@ -42,6 +64,9 @@ export class BedManagementApp {
     try {
       // Read Supabase configuration from HTML data attributes
       this.supabaseConfig = this.readSupabaseConfig();
+      if (this.reportingService) {
+        this.reportingService.setClient(this.persistenceManager.client);
+      }
 
       // Load saved data
       await this.loadSavedData();
@@ -325,6 +350,13 @@ export class BedManagementApp {
       console.log('Clear data button not found');
     }
 
+    document.querySelectorAll('[data-report-export]').forEach((button) => {
+      const format = button.dataset.reportExport || 'json';
+      button.addEventListener('click', () => {
+        void this.handleReportExport(format);
+      });
+    });
+
     // Bed click handlers for quick status updates
     this.setupBedClickHandlers();
   }
@@ -424,6 +456,7 @@ export class BedManagementApp {
     try {
       // Update bed data manager settings
       this.bedDataManager.updateSettings(settings);
+      this.reportingService.setSettings(settings);
 
       // Update auto-refresh interval
       this.startAutoRefresh();
@@ -442,9 +475,10 @@ export class BedManagementApp {
    */
   async render() {
     try {
-      this.renderKPIs();
+      await this.renderKPIs();
       this.renderBedGrid();
       this.renderNotificationSummary();
+      await this.renderAuditTrail();
       await this.updateLastSyncDisplay();
     } catch (error) {
       console.error('Failed to render UI:', error);
@@ -455,31 +489,108 @@ export class BedManagementApp {
   /**
    * Render KPI cards
    */
-  renderKPIs() {
+  async renderKPIs() {
     const kpiContainer = document.getElementById('kpis');
     if (!kpiContainer) return;
-    
-    const stats = this.bedDataManager.getStatistics();
-    const notificationStats = this.notificationManager.getNotificationStats(this.bedDataManager.getAllBeds());
-    
-    kpiContainer.innerHTML = `
-      <div class="card kpi-card bg-white dark:bg-slate-800">
-        <h3 class="kpi-title">Sutvarkytos lovos</h3>
-        <div class="kpi-value bg-emerald-100 text-emerald-800">${stats.cleanBeds}</div>
-      </div>
-      <div class="card kpi-card bg-white dark:bg-slate-800">
-        <h3 class="kpi-title">Reikia sutvarkyti</h3>
-        <div class="kpi-value bg-yellow-100 text-yellow-800">${stats.messyBeds + stats.missingEquipment + stats.otherProblems}</div>
-      </div>
-      <div class="card kpi-card bg-white dark:bg-slate-800">
-        <h3 class="kpi-title">Užimtos lovos</h3>
-        <div class="kpi-value bg-rose-100 text-rose-800">${stats.occupiedBeds}</div>
-      </div>
-      <div class="card kpi-card bg-white dark:bg-slate-800">
-        <h3 class="kpi-title">Pranešimai</h3>
-        <div class="kpi-value ${notificationStats.high > 0 ? 'bg-red-100 text-red-800' : notificationStats.medium > 0 ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}">${notificationStats.total}</div>
-      </div>
-    `;
+
+    const loadingIndicator = document.getElementById('loadingIndicator');
+    loadingIndicator?.classList.remove('hidden');
+
+    try {
+      const [snapshot, dailyMetrics] = await Promise.all([
+        this.reportingService.fetchKpiSnapshot(),
+        this.reportingService.fetchDailyMetrics({ limit: 1 }),
+      ]);
+
+      const totals = snapshot?.totals ?? {};
+      const notifications = snapshot?.notifications ?? { total: 0, high: 0, medium: 0, low: 0 };
+      const todayMetrics = dailyMetrics?.data?.[0] ?? null;
+      const avgMinutes = todayMetrics?.avgMinutesBetweenStatusAndOccupancy;
+      const avgText = avgMinutes === null || avgMinutes === undefined
+        ? '–'
+        : `${Math.round(avgMinutes)} min`;
+
+      kpiContainer.innerHTML = `
+        <div class="card kpi-card bg-white dark:bg-slate-800">
+          <h3 class="kpi-title">Sutvarkytos lovos</h3>
+          <div class="kpi-value bg-emerald-100 text-emerald-800">${totals.cleanBeds ?? 0}</div>
+          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Iš viso: ${totals.totalBeds ?? 0}</p>
+        </div>
+        <div class="card kpi-card bg-white dark:bg-slate-800">
+          <h3 class="kpi-title">Reikia dėmesio</h3>
+          <div class="kpi-value bg-yellow-100 text-yellow-800">${totals.attentionBeds ?? 0}</div>
+          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Problemos: ${(totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0)}</p>
+          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Pranešimai: ${notifications.total ?? 0}</p>
+        </div>
+        <div class="card kpi-card bg-white dark:bg-slate-800">
+          <h3 class="kpi-title">Užimtos lovos</h3>
+          <div class="kpi-value bg-rose-100 text-rose-800">${totals.occupiedBeds ?? 0}</div>
+          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Laisvos: ${totals.freeBeds ?? 0}</p>
+        </div>
+        <div class="card kpi-card bg-white dark:bg-slate-800">
+          <h3 class="kpi-title">SLA pažeidimai (24h)</h3>
+          <div class="kpi-value ${todayMetrics?.slaBreaches ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}">${todayMetrics?.slaBreaches ?? 0}</div>
+          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Vid. reakcija: ${avgText}</p>
+        </div>
+      `;
+
+      if (snapshot?.source === 'supabase' && dailyMetrics?.source === 'supabase') {
+        const generatedAt = snapshot?.generatedAt ? new Date(snapshot.generatedAt).toLocaleString('lt-LT') : '';
+        this.setReportingNotice(generatedAt ? `Supabase KPI atnaujinta ${generatedAt}.` : 'Supabase KPI atnaujinta.', 'success');
+      } else if (snapshot?.error || dailyMetrics?.error) {
+        this.setReportingNotice('Supabase duomenys nepasiekiami – rodome vietinius KPI.', 'warning');
+      } else if (snapshot?.source !== 'supabase' || dailyMetrics?.source !== 'supabase') {
+        this.setReportingNotice('Supabase nepasiekiamas – rodomi vietiniai KPI duomenys.', 'warning');
+      }
+    } catch (error) {
+      console.error('Failed to render KPI korteles:', error);
+      kpiContainer.innerHTML = '<p class="text-sm text-red-600">Nepavyko įkelti KPI kortelių.</p>';
+      this.setReportingNotice('Nepavyko įkelti KPI duomenų.', 'error');
+    } finally {
+      loadingIndicator?.classList.add('hidden');
+    }
+  }
+
+  async renderAuditTrail() {
+    const container = document.getElementById('auditContent');
+    if (!container) return;
+
+    try {
+      const audit = await this.reportingService.fetchInteractionAudit({ limit: 10 });
+      if (audit.source !== 'supabase') {
+        container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Supabase nepasiekiamas – audito žurnalas nerodomas.</p>';
+        return;
+      }
+
+      if (!audit.data.length) {
+        container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Kol kas nėra audito įrašų.</p>';
+        return;
+      }
+
+      container.innerHTML = audit.data.map((item) => {
+        const occurred = item.occurredAt ? new Date(item.occurredAt) : null;
+        const occurredText = occurred && !Number.isNaN(occurred.getTime())
+          ? occurred.toLocaleString('lt-LT')
+          : '–';
+        const bedLabel = item.payload?.bedLabel ?? item.payload?.bedId ?? item.bedId ?? '–';
+        const performer = item.performedBy ?? 'Nežinomas naudotojas';
+        const details = item.payload?.payload?.status ?? item.payload?.status ?? '';
+
+        return `
+          <div class="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-200 dark:border-slate-700 py-2 last:border-b-0">
+            <div class="flex-1 pr-2">
+              <p class="text-sm font-medium text-slate-800 dark:text-slate-100">${escapeHtml(item.interactionType)}</p>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Lova: ${escapeHtml(bedLabel)}${details ? ` • ${escapeHtml(details)}` : ''}</p>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Vykdytojas: ${escapeHtml(performer)}</p>
+            </div>
+            <span class="text-xs text-slate-500 dark:text-slate-400 mt-1 md:mt-0">${escapeHtml(occurredText)}</span>
+          </div>
+        `;
+      }).join('');
+    } catch (error) {
+      console.error('Failed to render audit trail:', error);
+      container.innerHTML = '<p class="text-sm text-red-600">Nepavyko įkelti audito įrašų.</p>';
+    }
   }
 
   /**
@@ -516,6 +627,64 @@ export class BedManagementApp {
     
     // Re-setup click handlers
     this.setupBedClickHandlers();
+  }
+
+  setReportingNotice(message, variant = 'info') {
+    const noticeElement = document.getElementById('reportingNotice');
+    if (!noticeElement) {
+      return;
+    }
+
+    const variantClasses = {
+      info: ['border-blue-200', 'bg-blue-50', 'text-blue-700', 'dark:border-blue-500/40', 'dark:bg-blue-900/40', 'dark:text-blue-100'],
+      warning: ['border-amber-200', 'bg-amber-50', 'text-amber-700', 'dark:border-amber-500/40', 'dark:bg-amber-900/40', 'dark:text-amber-100'],
+      success: ['border-emerald-200', 'bg-emerald-50', 'text-emerald-700', 'dark:border-emerald-500/40', 'dark:bg-emerald-900/40', 'dark:text-emerald-100'],
+      error: ['border-red-200', 'bg-red-50', 'text-red-700', 'dark:border-red-500/40', 'dark:bg-red-900/40', 'dark:text-red-100'],
+    };
+
+    Object.values(variantClasses).forEach((classes) => {
+      classes.forEach((cls) => noticeElement.classList.remove(cls));
+    });
+
+    if (!message) {
+      noticeElement.classList.add('hidden');
+      noticeElement.textContent = '';
+      return;
+    }
+
+    noticeElement.textContent = message;
+    noticeElement.classList.remove('hidden');
+    const selected = variantClasses[variant] ?? variantClasses.info;
+    selected.forEach((cls) => noticeElement.classList.add(cls));
+  }
+
+  async handleReportExport(format = 'json') {
+    try {
+      const exportResult = await this.reportingService.exportReport({ format });
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      if (exportResult.format === 'csv') {
+        this.downloadReportFile(exportResult.data, `rslsmps-ataskaita-${timestamp}.csv`, 'text/csv');
+      } else {
+        const jsonString = JSON.stringify(exportResult.data, null, 2);
+        this.downloadReportFile(jsonString, `rslsmps-ataskaita-${timestamp}.json`, 'application/json');
+      }
+      this.setReportingNotice(`Ataskaita (${exportResult.format.toUpperCase()}) atsisiųsta.`, 'success');
+    } catch (error) {
+      console.error('Failed to export audit report:', error);
+      this.showError('Nepavyko eksportuoti ataskaitos. Patikrinkite prisijungimą.');
+    }
+  }
+
+  downloadReportFile(content, filename, mimeType = 'application/octet-stream') {
+    const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   }
 
   /**
