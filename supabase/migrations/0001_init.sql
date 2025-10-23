@@ -124,7 +124,7 @@ create table if not exists public.nfc_tags (
   created_at timestamptz not null default now()
 );
 
-create view if not exists public.aggregated_bed_state as
+create or replace view public.aggregated_bed_state as
   with latest_status as (
     select distinct on (bed_id)
       bed_id,

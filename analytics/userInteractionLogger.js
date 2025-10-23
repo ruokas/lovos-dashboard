@@ -35,6 +35,7 @@ export class UserInteractionLogger {
    */
   async logInteraction(interactionType, metadata = {}) {
     const payloadMetadata = metadata ?? {};
+    const performedBy = await this.#resolvePerformedBy();
     const basePayload = {
       interaction_type: interactionType,
       bed_id: payloadMetadata.bedUuid ?? payloadMetadata.bedId ?? null,
@@ -45,7 +46,7 @@ export class UserInteractionLogger {
         payloadMetadata.payload?.tag ??
         null,
       payload: payloadMetadata.payload ?? payloadMetadata,
-      performed_by: await this.#resolvePerformedBy(payloadMetadata),
+      performed_by: performedBy,
     };
 
     if (!this.client) {
@@ -103,11 +104,7 @@ export class UserInteractionLogger {
     }
   }
 
-  async #resolvePerformedBy(metadata) {
-    const directValue = metadata?.email ?? metadata?.user ?? metadata?.createdBy ?? null;
-    if (directValue) {
-      return directValue;
-    }
+  async #resolvePerformedBy() {
     return this.#getAuthenticatedEmail();
   }
 
