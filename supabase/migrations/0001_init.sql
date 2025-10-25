@@ -119,7 +119,7 @@ create index if not exists user_interactions_type_idx
 create table if not exists public.nfc_tags (
   id uuid primary key default gen_random_uuid(),
   bed_id uuid references public.beds(id) on delete cascade,
-  tag_uid text not null unique,
+  tag_code text not null unique,
   description text,
   created_at timestamptz not null default now()
 );

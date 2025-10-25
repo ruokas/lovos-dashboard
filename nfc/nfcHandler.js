@@ -16,7 +16,7 @@ export class NfcHandler {
       return;
     }
 
-    await this.logger?.logInteraction?.('nfc_tag_detected', { payload: { tag } });
+    await this.logger?.logInteraction?.('nfc_tag_detected', { payload: { tag, tagCode: tag } });
 
     if (!this.client) {
       this.form?.show(null, { trigger: 'nfc' });
@@ -28,7 +28,7 @@ export class NfcHandler {
       const { data, error } = await this.client
         .from('nfc_tags')
         .select('bed_id, bed:bed_id(label)')
-        .eq('tag_uid', tag)
+        .eq('tag_code', tag)
         .limit(1);
 
       if (error) {
@@ -39,7 +39,7 @@ export class NfcHandler {
       if (!record || !record.bed?.label) {
         this.form?.show(null, { trigger: 'nfc' });
         this.form?.showFeedback(t(texts.nfc.tagNotFound), 'error');
-        await this.logger?.logInteraction?.('nfc_tag_unmatched', { payload: { tag } });
+        await this.logger?.logInteraction?.('nfc_tag_unmatched', { payload: { tag, tagCode: tag } });
         return;
       }
 
@@ -48,13 +48,15 @@ export class NfcHandler {
       this.form?.showFeedback(t(texts.forms.prefilledFromNfc), 'success');
       await this.logger?.logInteraction?.('nfc_tag_matched', {
         bedUuid: record.bed_id,
-        payload: { tag, bedLabel },
+        payload: { tag, tagCode: tag, bedLabel },
       });
     } catch (error) {
       console.error('NFC žymos apdorojimo klaida:', error);
       this.form?.show(null, { trigger: 'nfc' });
       this.form?.showFeedback(t(texts.nfc.lookupFailed), 'error');
-      await this.logger?.logInteraction?.('nfc_tag_error', { payload: { tag, error: error.message } });
+      await this.logger?.logInteraction?.('nfc_tag_error', {
+        payload: { tag, tagCode: tag, error: error.message },
+      });
     } finally {
       this.#clearTagParam();
     }
