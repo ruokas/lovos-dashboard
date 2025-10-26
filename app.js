@@ -12,6 +12,7 @@ import { NfcHandler } from './nfc/nfcHandler.js';
 import { ReportingService } from './reports/reportingService.js';
 import { SupabaseAuthManager } from './auth/supabaseAuth.js';
 import { t, texts } from './texts.js';
+import { clampFontSizeLevel, readStoredFontSizeLevel, storeFontSizeLevel, applyFontSizeClasses } from './utils/fontSize.js';
 
 const HTML_ESCAPE_MAP = {
   '&': '&amp;',
@@ -20,6 +21,10 @@ const HTML_ESCAPE_MAP = {
   '"': '&quot;',
   "'": '&#39;',
 };
+
+const VIEW_MODE_STORAGE_KEY = 'bedViewMode';
+const BED_LIST_VISIBILITY_KEY = 'bedListVisible';
+const SEARCH_DEBOUNCE_MS = 150;
 
 function escapeHtml(value) {
   if (value === null || value === undefined) {
@@ -32,8 +37,14 @@ export class BedManagementApp {
   constructor() {
     this.bedDataManager = new BedDataManager();
     this.settingsManager = new SettingsManager();
+    this.fontSizeLevel = readStoredFontSizeLevel();
+    this.viewMode = this.readViewMode();
+    this.isGridView = this.viewMode === 'grid';
+    this.isBedListVisible = this.readBedListVisibility();
+    this.currentSearchTerm = '';
+    this.searchDebounceTimer = null;
     this.persistenceManager = new DataPersistenceManager({ document: typeof document !== 'undefined' ? document : undefined });
-    this.notificationManager = new NotificationManager(this.settingsManager);
+    this.notificationManager = new NotificationManager(this.settingsManager, { fontSizeLevel: this.fontSizeLevel });
     const sharedDocument = typeof document !== 'undefined' ? document : undefined;
     this.reportingService = new ReportingService({
       client: this.persistenceManager.client,
@@ -89,13 +100,18 @@ export class BedManagementApp {
       await this.loadSavedData();
 
       // Mark current notifications as jau matytos, kad realaus laiko įvykiai neskambėtų du kartus
-      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), { suppressAlerts: true });
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), {
+        suppressAlerts: true,
+        fontSizeLevel: this.fontSizeLevel,
+      });
 
       // Initialize NFC ir URL srautus
       await this.initNfcFlow();
 
       // Setup UI event listeners
       this.setupEventListeners();
+      this.applyBedListVisibility();
+      this.updateViewToggleButton();
 
       // Initial render
       await this.render();
@@ -238,7 +254,9 @@ export class BedManagementApp {
         return;
       }
 
-      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds());
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), {
+        fontSizeLevel: this.fontSizeLevel,
+      });
       await this.render();
 
       void this.userInteractionLogger.logInteraction('realtime_status_event_received', {
@@ -274,7 +292,9 @@ export class BedManagementApp {
         return;
       }
 
-      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds());
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), {
+        fontSizeLevel: this.fontSizeLevel,
+      });
       await this.render();
 
       void this.userInteractionLogger.logInteraction('realtime_occupancy_event_received', {
@@ -441,6 +461,46 @@ export class BedManagementApp {
       console.log('Clear data button not found');
     }
 
+    const bedListBtn = document.getElementById('bedListBtn');
+    if (bedListBtn) {
+      bedListBtn.addEventListener('click', () => {
+        this.toggleBedListVisibility();
+        void this.userInteractionLogger.logInteraction('bed_list_toggle', { visible: this.isBedListVisible });
+      });
+      bedListBtn.setAttribute('aria-expanded', this.isBedListVisible ? 'true' : 'false');
+    }
+
+    const fontSizeUpBtn = document.getElementById('fontSizeBtn');
+    if (fontSizeUpBtn) {
+      fontSizeUpBtn.addEventListener('click', () => {
+        this.changeFontSize(1);
+        void this.userInteractionLogger.logInteraction('font_size_increase', { level: this.fontSizeLevel });
+      });
+    }
+
+    const fontSizeDownBtn = document.getElementById('fontSizeDownBtn');
+    if (fontSizeDownBtn) {
+      fontSizeDownBtn.addEventListener('click', () => {
+        this.changeFontSize(-1);
+        void this.userInteractionLogger.logInteraction('font_size_decrease', { level: this.fontSizeLevel });
+      });
+    }
+
+    const viewToggleBtn = document.getElementById('viewToggle');
+    if (viewToggleBtn) {
+      viewToggleBtn.addEventListener('click', () => {
+        this.toggleViewMode();
+        void this.userInteractionLogger.logInteraction('view_mode_toggle', { mode: this.isGridView ? 'grid' : 'list' });
+      });
+    }
+
+    const bedSearchInput = document.getElementById('bedSearch');
+    if (bedSearchInput) {
+      bedSearchInput.addEventListener('input', (event) => {
+        this.handleBedSearch(event.target.value ?? '');
+      });
+    }
+
     document.querySelectorAll('[data-report-export]').forEach((button) => {
       const format = button.dataset.reportExport || 'json';
       button.addEventListener('click', () => {
@@ -450,6 +510,140 @@ export class BedManagementApp {
 
     // Bed click handlers for quick status updates
     this.setupBedClickHandlers();
+  }
+
+  readViewMode() {
+    try {
+      const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(VIEW_MODE_STORAGE_KEY) : null;
+      if (stored === 'grid' || stored === 'list') {
+        return stored;
+      }
+    } catch (error) {
+      console.warn('Nepavyko nuskaityti lovų rodinio nustatymo:', error);
+    }
+    return 'list';
+  }
+
+  saveViewMode(mode) {
+    try {
+      localStorage?.setItem?.(VIEW_MODE_STORAGE_KEY, mode);
+    } catch (error) {
+      console.warn('Nepavyko išsaugoti lovų rodinio nustatymo:', error);
+    }
+  }
+
+  readBedListVisibility() {
+    try {
+      const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(BED_LIST_VISIBILITY_KEY) : null;
+      if (stored === 'true') return true;
+      if (stored === 'false') return false;
+    } catch (error) {
+      console.warn('Nepavyko nuskaityti lovų sąrašo matomumo:', error);
+    }
+    return false;
+  }
+
+  saveBedListVisibility(value) {
+    try {
+      localStorage?.setItem?.(BED_LIST_VISIBILITY_KEY, value ? 'true' : 'false');
+    } catch (error) {
+      console.warn('Nepavyko išsaugoti lovų sąrašo matomumo:', error);
+    }
+  }
+
+  toggleBedListVisibility() {
+    this.isBedListVisible = !this.isBedListVisible;
+    this.saveBedListVisibility(this.isBedListVisible);
+    this.applyBedListVisibility();
+  }
+
+  applyBedListVisibility() {
+    const section = document.getElementById('bedListSection');
+    const button = document.getElementById('bedListBtn');
+    if (section) {
+      section.style.display = this.isBedListVisible ? 'block' : 'none';
+    }
+    if (button) {
+      button.textContent = this.isBedListVisible ? t(texts.ui.hideBedList) : t(texts.ui.showBedList);
+      button.setAttribute('aria-expanded', this.isBedListVisible ? 'true' : 'false');
+    }
+  }
+
+  toggleViewMode() {
+    this.isGridView = !this.isGridView;
+    const mode = this.isGridView ? 'grid' : 'list';
+    this.saveViewMode(mode);
+    this.updateViewToggleButton();
+    this.renderBedGrid();
+  }
+
+  updateViewToggleButton() {
+    const viewToggleBtn = document.getElementById('viewToggle');
+    if (!viewToggleBtn) {
+      return;
+    }
+    const listIcon = `
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+      </svg>
+    `;
+    const gridIcon = `
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"></path>
+      </svg>
+    `;
+    const label = this.isGridView ? t(texts.ui.listView) : t(texts.ui.gridView);
+    viewToggleBtn.innerHTML = this.isGridView ? listIcon : gridIcon;
+    viewToggleBtn.setAttribute('title', label);
+    viewToggleBtn.setAttribute('aria-label', label);
+  }
+
+  handleBedSearch(value) {
+    const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+    this.currentSearchTerm = normalized;
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+    }
+    this.searchDebounceTimer = setTimeout(() => {
+      this.renderBedGrid();
+    }, SEARCH_DEBOUNCE_MS);
+  }
+
+  changeFontSize(delta) {
+    const nextLevel = clampFontSizeLevel(this.fontSizeLevel + delta);
+    if (nextLevel === this.fontSizeLevel) {
+      return;
+    }
+    this.fontSizeLevel = storeFontSizeLevel(nextLevel);
+    this.notificationManager.setFontSizeLevel?.(this.fontSizeLevel);
+    this.renderNotificationSummary();
+    this.renderBedGrid();
+  }
+
+  applyFontSizeClass(classNames) {
+    return applyFontSizeClasses(classNames, this.fontSizeLevel);
+  }
+
+  getStatusBadgeClass(status) {
+    switch (status) {
+      case STATUS_OPTIONS.CLEAN:
+        return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100';
+      case STATUS_OPTIONS.MESSY_BED:
+        return 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-200';
+      case STATUS_OPTIONS.MISSING_EQUIPMENT:
+        return 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100';
+      case STATUS_OPTIONS.OTHER:
+        return 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-100';
+      default:
+        return 'bg-slate-100 text-slate-700 dark:bg-slate-800/50 dark:text-slate-200';
+    }
+  }
+
+  getOccupancyBadgeClass(status) {
+    if (status === 'occupied') {
+      return 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200';
+    }
+    return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100';
   }
 
   /**
@@ -567,6 +761,8 @@ export class BedManagementApp {
   async render() {
     try {
       await this.renderKPIs();
+      this.applyBedListVisibility();
+      this.updateViewToggleButton();
       this.renderBedGrid();
       this.renderNotificationSummary();
       await this.renderAuditTrail();
@@ -690,33 +886,85 @@ export class BedManagementApp {
   renderBedGrid() {
     const gridContainer = document.getElementById('bedGrid');
     if (!gridContainer) return;
-    
+
     const beds = this.bedDataManager.getAllBeds();
-    const bedsWithNotifications = this.bedDataManager.getBedsWithNotifications();
-    const notificationBedIds = new Set(bedsWithNotifications.map(bed => bed.bedId));
-    
-    gridContainer.innerHTML = BED_LAYOUT.map(bedId => {
-      const bed = beds.find(b => b.bedId === bedId);
-      if (!bed) return '';
-      
-      const statusClass = bed.getStatusColorClass();
-      const occupancyClass = bed.getOccupancyColorClass();
-      const hasNotifications = notificationBedIds.has(bedId);
-      const notificationClass = hasNotifications ? 'ring-2 ring-red-400' : '';
-      
-      return `
-        <div class="bed-cell ${statusClass} ${occupancyClass} ${notificationClass}" data-bed-id="${bedId}">
-          <div class="bed-id">${bedId}</div>
-          <div class="bed-info">
-            <div class="text-xs">${bed.currentStatus}</div>
-            <div class="text-xs">${bed.occupancyStatus === 'occupied' ? '🔴 Užimta' : '🟢 Laisva'}</div>
-            ${hasNotifications ? '<div class="text-xs text-red-600 font-bold">!</div>' : ''}
-          </div>
+    const bedMap = new Map(beds.map((bed) => [bed.bedId, bed]));
+    const baseClasses = ['custom-scrollbar', 'max-h-64', 'overflow-y-auto'];
+
+    const filteredBedIds = BED_LAYOUT.filter((bedId) => {
+      if (!this.currentSearchTerm) return true;
+      return bedId.toLowerCase().includes(this.currentSearchTerm);
+    });
+
+    if (filteredBedIds.length === 0) {
+      gridContainer.className = `${baseClasses.join(' ')} flex items-center justify-center`;
+      gridContainer.innerHTML = `
+        <div class="${this.applyFontSizeClass('text-sm text-slate-500 dark:text-slate-300')}">
+          ${escapeHtml(t(texts.ui.noBedsFound))}
         </div>
       `;
-    }).join('');
-    
-    // Re-setup click handlers
+      return;
+    }
+
+    if (this.isGridView) {
+      gridContainer.className = `${baseClasses.join(' ')} grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3`;
+      gridContainer.innerHTML = filteredBedIds.map((bedId) => {
+        const bed = bedMap.get(bedId);
+        if (!bed) return '';
+        const statusBadge = this.getStatusBadgeClass(bed.currentStatus);
+        const occupancyBadge = this.getOccupancyBadgeClass(bed.occupancyStatus);
+        const occupancyText = bed.occupancyStatus === 'occupied' ? '🔴 Užimta' : '🟢 Laisva';
+        const notificationCount = bed.notifications.length;
+        const notificationBadge = notificationCount > 0
+          ? `<span class="${this.applyFontSizeClass('text-[11px] font-semibold text-red-600 dark:text-red-300')}">⚠️ ${notificationCount}</span>`
+          : '';
+
+        return `
+          <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-3 flex flex-col items-center gap-2 hover:border-blue-400 hover:shadow-sm transition cursor-pointer" data-bed-id="${escapeHtml(bedId)}">
+            <div class="${this.applyFontSizeClass('text-sm font-semibold text-slate-900 dark:text-slate-100')}">${escapeHtml(`${t(texts.ui.bedLabel)} ${bedId}`)}</div>
+            <div class="flex flex-wrap items-center justify-center gap-2">
+              <span class="px-2 py-0.5 rounded-md ${this.applyFontSizeClass('text-xs font-medium')} ${statusBadge}">${escapeHtml(bed.currentStatus)}</span>
+              <span class="px-2 py-0.5 rounded-md ${this.applyFontSizeClass('text-xs font-medium')} ${occupancyBadge}">${escapeHtml(occupancyText)}</span>
+            </div>
+            ${notificationBadge}
+          </div>
+        `;
+      }).join('');
+    } else {
+      gridContainer.className = `${baseClasses.join(' ')} space-y-2`;
+      gridContainer.innerHTML = filteredBedIds.map((bedId) => {
+        const bed = bedMap.get(bedId);
+        if (!bed) return '';
+        const statusBadge = this.getStatusBadgeClass(bed.currentStatus);
+        const occupancyBadge = this.getOccupancyBadgeClass(bed.occupancyStatus);
+        const occupancyText = bed.occupancyStatus === 'occupied' ? '🔴 Užimta' : '🟢 Laisva';
+        const lastChecked = bed.lastCheckedTime instanceof Date && !Number.isNaN(bed.lastCheckedTime)
+          ? bed.lastCheckedTime.toLocaleString('lt-LT')
+          : t(texts.ui.noData);
+        const lastCheckedBy = bed.lastCheckedBy ? bed.lastCheckedBy : t(texts.ui.unknownUser);
+        const notificationBadge = bed.notifications.length
+          ? `<span class="${this.applyFontSizeClass('text-[11px] font-semibold text-red-600 dark:text-red-300')}">⚠️ ${bed.notifications.length}</span>`
+          : '';
+
+        return `
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-3 hover:border-blue-400 transition cursor-pointer" data-bed-id="${escapeHtml(bedId)}">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:gap-3">
+              <span class="rounded-md px-2 py-0.5 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 ${this.applyFontSizeClass('text-xs font-semibold')}">${escapeHtml(`${t(texts.ui.bedLabel)} ${bedId}`)}</span>
+              <div class="mt-1 sm:mt-0 flex flex-wrap items-center gap-2">
+                <span class="px-2 py-0.5 rounded-md ${this.applyFontSizeClass('text-xs font-medium')} ${statusBadge}">${escapeHtml(bed.currentStatus)}</span>
+                <span class="px-2 py-0.5 rounded-md ${this.applyFontSizeClass('text-xs font-medium')} ${occupancyBadge}">${escapeHtml(occupancyText)}</span>
+                ${notificationBadge}
+              </div>
+            </div>
+            <div class="flex flex-col sm:items-end ${this.applyFontSizeClass('text-[11px] text-slate-500 dark:text-slate-300')}">
+              <span>${escapeHtml(t(texts.ui.lastChecked))}: ${escapeHtml(lastChecked)}</span>
+              <span>${escapeHtml(t(texts.ui.checkedBy))}: ${escapeHtml(lastCheckedBy)}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
     this.setupBedClickHandlers();
   }
 
@@ -784,8 +1032,10 @@ export class BedManagementApp {
   renderNotificationSummary() {
     const notificationContainer = document.getElementById('notificationSummary');
     if (!notificationContainer) return;
-    
-    this.notificationManager.renderNotificationDisplay(this.bedDataManager.getAllBeds());
+
+    this.notificationManager.renderNotificationDisplay(this.bedDataManager.getAllBeds(), {
+      fontSizeLevel: this.fontSizeLevel,
+    });
   }
 
   /**
@@ -837,7 +1087,9 @@ export class BedManagementApp {
   refresh() {
     try {
       void this.render();
-      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds());
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), {
+        fontSizeLevel: this.fontSizeLevel,
+      });
     } catch (error) {
       console.error('Failed to refresh:', error);
     }

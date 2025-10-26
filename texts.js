@@ -5,6 +5,18 @@
 export const DEFAULT_LANG = "lt";
 
 export const texts = {
+  ui: {
+    showBedList: { lt: 'Rodyti lovų sąrašą', en: '' },
+    hideBedList: { lt: 'Slėpti lovų sąrašą', en: '' },
+    bedLabel: { lt: 'Lova', en: '' },
+    noBedsFound: { lt: 'Nerasta lovų pagal paiešką.', en: '' },
+    lastChecked: { lt: 'Paskutinį kartą tikrinta', en: '' },
+    checkedBy: { lt: 'Pažymėjo', en: '' },
+    unknownUser: { lt: 'Nežinomas', en: '' },
+    noData: { lt: 'Nėra duomenų', en: '' },
+    listView: { lt: 'Sąrašo rodinys', en: '' },
+    gridView: { lt: 'Tinklelio rodinys', en: '' },
+  },
   theme: {
     dark: { lt: "Tamsi tema", en: "" },
     light: { lt: "Šviesi tema", en: "" },
@@ -39,6 +51,9 @@ export const texts = {
     needsCleaningAlert: { lt: "Reikia sutvarkyti lovą", en: "" },
     soundOn: { lt: "Garso signalai įjungti", en: "" },
     soundOff: { lt: "Garso signalai išjungti", en: "" },
+  },
+  notifications: {
+    allClear: { lt: '✅ Visos lovos tvarkingos', en: '' },
   },
   forms: {
     validationError: { lt: "Prašome užpildyti visus privalomus laukus.", en: "" },

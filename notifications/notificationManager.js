@@ -3,14 +3,32 @@
  */
 
 import { PRIORITY_LEVELS } from '../models/bedData.js';
+import { clampFontSizeLevel, applyFontSizeClasses } from '../utils/fontSize.js';
+import { t, texts } from '../texts.js';
+
+const HTML_ESCAPE_MAP = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+function escapeHtml(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  return String(value).replace(/[&<>"']/g, (char) => HTML_ESCAPE_MAP[char] ?? char);
+}
 
 export class NotificationManager {
-  constructor(settingsManager) {
+  constructor(settingsManager, options = {}) {
     this.settingsManager = settingsManager;
     this.notifications = [];
     this.lastNotificationIds = new Set();
     this.audioContext = null;
     this.soundEnabled = true;
+    this.fontSizeLevel = clampFontSizeLevel(options.fontSizeLevel ?? 0);
     
     // Initialize audio context
     this.initAudio();
@@ -36,7 +54,10 @@ export class NotificationManager {
    * Update notifications from bed data
    */
   updateNotifications(beds, options = {}) {
-    const { suppressAlerts = false } = options;
+    const { suppressAlerts = false, fontSizeLevel } = options;
+    if (typeof fontSizeLevel === 'number') {
+      this.fontSizeLevel = clampFontSizeLevel(fontSizeLevel);
+    }
     const newNotifications = [];
     const currentNotificationIds = new Set();
 
@@ -66,7 +87,7 @@ export class NotificationManager {
     }
     
     // Update notification display
-    this.renderNotificationDisplay(beds);
+    this.renderNotificationDisplay(beds, { fontSizeLevel: this.fontSizeLevel });
   }
 
   /**
@@ -189,57 +210,114 @@ export class NotificationManager {
   /**
    * Render notification display in the UI
    */
-  renderNotificationDisplay(beds) {
+  renderNotificationDisplay(beds, options = {}) {
     const notificationContainer = document.getElementById('notificationSummary');
     if (!notificationContainer) return;
-    
-    const bedsWithNotifications = beds.filter(bed => bed.notifications.length > 0);
-    
+
+    const level = typeof options.fontSizeLevel === 'number'
+      ? clampFontSizeLevel(options.fontSizeLevel)
+      : this.fontSizeLevel;
+
+    const bedsWithNotifications = beds
+      .filter(bed => bed.notifications.length > 0)
+      .map((bed) => ({
+        ...bed,
+        notifications: [...bed.notifications].sort((a, b) => a.priority - b.priority),
+      }));
+
     if (bedsWithNotifications.length === 0) {
-      notificationContainer.innerHTML = '<div class="text-green-600 dark:text-green-400">✅ Visos lovos tvarkingos</div>';
+      notificationContainer.innerHTML = `
+        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-900/30 dark:text-emerald-100 ${applyFontSizeClasses('text-sm font-medium', level)}">
+          ${escapeHtml(t(texts.notifications.allClear))}
+        </div>
+      `;
       return;
     }
-    
-    // Sort by priority
+
     bedsWithNotifications.sort((a, b) => {
       const aPriority = Math.min(...a.notifications.map(n => n.priority));
       const bPriority = Math.min(...b.notifications.map(n => n.priority));
       return aPriority - bPriority;
     });
-    
-    const notificationHTML = bedsWithNotifications.map(bed => {
-      const highestPriorityNotification = bed.notifications[0];
-      const priorityClass = this.getPriorityClass(highestPriorityNotification.priority);
-      
+
+    const cards = bedsWithNotifications.map((bed) => {
+      const highestPriority = bed.notifications[0];
+      const borderClass = this.getCardBorderClass(highestPriority.priority);
+      const occupancyBadge = bed.occupancyStatus === 'occupied'
+        ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-200'
+        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100';
+      const occupancyText = bed.occupancyStatus === 'occupied' ? '🔴 Užimta' : '🟢 Laisva';
+      const lastCheckedTime = bed.lastCheckedTime instanceof Date && !Number.isNaN(bed.lastCheckedTime)
+        ? bed.lastCheckedTime.toLocaleString('lt-LT')
+        : t(texts.ui.noData);
+      const lastCheckedBy = bed.lastCheckedBy ? bed.lastCheckedBy : t(texts.ui.unknownUser);
+
+      const notifications = bed.notifications.map((notification) => {
+        const badgeClass = this.getPriorityClass(notification.priority);
+        const message = escapeHtml(notification.message ?? '');
+        const relativeTime = notification.timestamp ? this.formatTime(notification.timestamp) : '';
+        return `
+          <div class="flex items-center justify-between gap-2 rounded-md px-2 py-1 ${badgeClass}">
+            <span class="${applyFontSizeClasses('text-xs font-semibold', level)}">${message}</span>
+            <span class="${applyFontSizeClasses('text-[10px] font-medium', level)} text-slate-600 dark:text-slate-300">${escapeHtml(relativeTime)}</span>
+          </div>
+        `;
+      }).join('');
+
       return `
-        <div class="notification-item ${priorityClass} p-2 rounded border-l-4 mb-2">
-          <div class="flex justify-between items-start">
-            <div>
-              <span class="font-semibold">Lova ${bed.bedId}</span>
-              <div class="text-sm">${highestPriorityNotification.message}</div>
+        <div class="rounded-lg border ${borderClass} bg-white dark:bg-slate-900/40 p-3 transition hover:border-blue-400 hover:shadow-sm cursor-pointer" data-bed-id="${escapeHtml(bed.bedId)}">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="${applyFontSizeClasses('text-sm font-semibold text-slate-900 dark:text-slate-100', level)}">${escapeHtml(`${t(texts.ui.bedLabel)} ${bed.bedId}`)}</span>
+              <span class="rounded-md px-2 py-0.5 ${applyFontSizeClasses('text-xs font-medium', level)} ${occupancyBadge}">${escapeHtml(occupancyText)}</span>
             </div>
-            <div class="text-xs text-slate-500 dark:text-slate-400">
-              ${this.formatTime(highestPriorityNotification.timestamp)}
+            <div class="${applyFontSizeClasses('text-[11px] text-slate-500 dark:text-slate-400', level)}">
+              ${escapeHtml(t(texts.ui.lastChecked))}: ${escapeHtml(lastCheckedTime)} • ${escapeHtml(t(texts.ui.checkedBy))}: ${escapeHtml(lastCheckedBy)}
             </div>
+          </div>
+          <div class="mt-3 grid gap-2 sm:grid-cols-2">
+            ${notifications}
           </div>
         </div>
       `;
     }).join('');
-    
-    notificationContainer.innerHTML = notificationHTML;
+
+    notificationContainer.innerHTML = cards;
   }
 
   /**
    * Get CSS class for priority level
    */
   getPriorityClass(priority) {
-    if (priority <= PRIORITY_LEVELS.MISSING_EQUIPMENT) {
-      return 'bg-red-50 border-red-400 text-red-800 dark:bg-red-900/20 dark:border-red-500 dark:text-red-200';
-    } else if (priority <= PRIORITY_LEVELS.OTHER_PROBLEM) {
-      return 'bg-yellow-50 border-yellow-400 text-yellow-800 dark:bg-yellow-900/20 dark:border-yellow-500 dark:text-yellow-200';
-    } else {
-      return 'bg-blue-50 border-blue-400 text-blue-800 dark:bg-blue-900/20 dark:border-blue-500 dark:text-blue-200';
+    if (priority <= PRIORITY_LEVELS.MESSY_BED) {
+      return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200';
     }
+    if (priority <= PRIORITY_LEVELS.MISSING_EQUIPMENT) {
+      return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100';
+    }
+    if (priority <= PRIORITY_LEVELS.OTHER_PROBLEM) {
+      return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-100';
+    }
+    if (priority <= PRIORITY_LEVELS.RECENTLY_FREED) {
+      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100';
+    }
+    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-100';
+  }
+
+  getCardBorderClass(priority) {
+    if (priority <= PRIORITY_LEVELS.MESSY_BED) {
+      return 'border-red-300 dark:border-red-500/70';
+    }
+    if (priority <= PRIORITY_LEVELS.MISSING_EQUIPMENT) {
+      return 'border-amber-300 dark:border-amber-500/70';
+    }
+    if (priority <= PRIORITY_LEVELS.OTHER_PROBLEM) {
+      return 'border-orange-300 dark:border-orange-500/70';
+    }
+    if (priority <= PRIORITY_LEVELS.RECENTLY_FREED) {
+      return 'border-emerald-300 dark:border-emerald-500/70';
+    }
+    return 'border-blue-300 dark:border-blue-500/70';
   }
 
   /**
@@ -303,5 +381,9 @@ export class NotificationManager {
     });
     
     return stats;
+  }
+
+  setFontSizeLevel(level) {
+    this.fontSizeLevel = clampFontSizeLevel(level);
   }
 }
