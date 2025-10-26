@@ -137,6 +137,14 @@ testuoti paraleliai.
 - Naudodami `curl` be `Authorization` antraštės turėtumėte gauti `401` atsakymą.
 - Su autentikuotu JWT `insert` į `bed_status_events` turi būti sėkmingas (`201`).
 
+### Prisijungimas programoje
+
+- Įkėlus `index.html` su Supabase URL ir anon raktu, viršutiniame dešiniajame kampe matomas prisijungimo indikatorius.
+- Jei aktyvios sesijos nėra, automatiškai atidaromas prisijungimo dialogas. Įveskite skyriui priskirtą el. paštą ir slaptažodį (Supabase Auth naudotojas).
+- Sėkmingai prisijungus indikatorius rodo el. paštą ir mygtuką **Atsijungti**.
+- Atsijungus ar pasibaigus sesijai dialogas pasirodo iš naujo, automatinis atnaujinimas sustabdomas, o duomenys nerodomi iš Supabase, kol vėl prisijungsite.
+- Jei Supabase pasiekti nepavyksta, rodoma žinutė „Supabase neprieinamas – dirbama offline režimu.“ ir naudojamas lokalus `localStorage` režimas.
+
 ## Diegimas
 
 1. Atsisiųskite visus failus

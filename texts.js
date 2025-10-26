@@ -57,6 +57,24 @@ export const texts = {
   logger: {
     offline: { lt: "Veiksmas užfiksuotas tik vietoje (offline režimas).", en: "" },
   },
+  auth: {
+    title: { lt: "Prisijunkite prie Supabase", en: "" },
+    description: {
+      lt: "Įveskite skyriui priskirtą el. paštą ir slaptažodį, kad duomenys būtų sinchronizuojami per Supabase.",
+      en: "",
+    },
+    emailLabel: { lt: "El. paštas", en: "" },
+    passwordLabel: { lt: "Slaptažodis", en: "" },
+    submit: { lt: "Prisijungti", en: "" },
+    signingIn: { lt: "Jungiama...", en: "" },
+    missingCredentials: { lt: "Įveskite el. paštą ir slaptažodį.", en: "" },
+    signInError: { lt: "Nepavyko prisijungti. Patikrinkite duomenis.", en: "" },
+    signedInAs: { lt: "Prisijungęs:", en: "" },
+    signOut: { lt: "Atsijungti", en: "" },
+    signOutSuccess: { lt: "Atsijungta. Prisijunkite iš naujo, kad pasiektumėte Supabase.", en: "" },
+    offline: { lt: "Supabase neprieinamas – dirbama offline režimu.", en: "" },
+    loginRequired: { lt: "Prisijunkite, kad pasiektumėte Supabase duomenis.", en: "" },
+  },
 };
 
 export const currentLang = DEFAULT_LANG;

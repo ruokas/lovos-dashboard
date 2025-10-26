@@ -10,6 +10,8 @@ import { DataPersistenceManager } from './persistence/dataPersistenceManager.js'
 import { UserInteractionLogger } from './analytics/userInteractionLogger.js';
 import { NfcHandler } from './nfc/nfcHandler.js';
 import { ReportingService } from './reports/reportingService.js';
+import { SupabaseAuthManager } from './auth/supabaseAuth.js';
+import { t, texts } from './texts.js';
 
 const HTML_ESCAPE_MAP = {
   '&': '&amp;',
@@ -41,7 +43,16 @@ export class BedManagementApp {
     });
     this.userInteractionLogger = new UserInteractionLogger({ document: sharedDocument, client: this.persistenceManager.client });
 
+    this.authManager = new SupabaseAuthManager({
+      client: this.persistenceManager.client,
+      document: sharedDocument,
+      onAuthStateChanged: (session, context) => {
+        void this.handleAuthStateChange(session, context);
+      },
+    });
+
     this.supabaseConfig = { url: '', anonKey: '' };
+    this.isAuthenticated = false;
 
     this.bedStatusForm = new BedStatusForm((formResponse) => this.handleFormResponse(formResponse), {
       logger: this.userInteractionLogger,
@@ -66,6 +77,12 @@ export class BedManagementApp {
       this.supabaseConfig = this.readSupabaseConfig();
       if (this.reportingService) {
         this.reportingService.setClient(this.persistenceManager.client);
+      }
+
+      if (this.authManager) {
+        this.authManager.setClient(this.persistenceManager.client);
+        const authResult = await this.ensureAuthentication();
+        this.isAuthenticated = authResult?.status === 'authenticated';
       }
 
       // Load saved data
@@ -133,6 +150,69 @@ export class BedManagementApp {
     }
 
     this.realtimeChannel = channel;
+  }
+
+  async ensureAuthentication() {
+    if (!this.authManager) {
+      return { status: 'offline' };
+    }
+
+    this.authManager.setClient(this.persistenceManager.client);
+    const result = await this.authManager.ensureAuthenticated();
+
+    if (result?.status === 'offline') {
+      this.persistenceManager.setClient(null);
+      this.reportingService?.setClient(null);
+      this.userInteractionLogger.setClient(null);
+      this.authManager.setClient(null);
+      this.isAuthenticated = false;
+      this.setReportingNotice(t(texts.auth.offline), 'warning');
+    } else if (result?.status === 'authenticated') {
+      this.reportingService?.setClient(this.persistenceManager.client);
+      this.userInteractionLogger.setClient(this.persistenceManager.client);
+      this.userInteractionLogger.resetCachedEmail?.();
+      this.isAuthenticated = true;
+    }
+
+    return result;
+  }
+
+  async handleAuthStateChange(session, context = {}) {
+    if (session) {
+      this.isAuthenticated = true;
+      this.userInteractionLogger.resetCachedEmail?.();
+      this.userInteractionLogger.setClient(this.persistenceManager.client);
+      this.reportingService?.setClient(this.persistenceManager.client);
+
+      if (this.isInitialized) {
+        await this.loadSavedData();
+        await this.render();
+        await this.subscribeToRealtimeUpdates();
+        this.startAutoRefresh();
+      }
+      return;
+    }
+
+    this.isAuthenticated = false;
+    this.userInteractionLogger.resetCachedEmail?.();
+
+    if (this.realtimeChannel) {
+      try {
+        await this.realtimeChannel.unsubscribe();
+      } catch (error) {
+        console.warn('Nepavyko atsisakyti realaus laiko kanalo po atsijungimo:', error);
+      }
+      this.realtimeChannel = null;
+    }
+
+    this.stopAutoRefresh();
+
+    if (this.isInitialized) {
+      const message = context?.reason === 'offline'
+        ? t(texts.auth.offline)
+        : t(texts.auth.loginRequired);
+      this.setReportingNotice(message, 'warning');
+    }
   }
 
   async handleRealtimeStatusEvent(record, eventType = 'INSERT') {
@@ -721,6 +801,16 @@ export class BedManagementApp {
       lastSyncElement.textContent = `Paskutinis atnaujinimas: ${syncDate.toLocaleString('lt-LT')}`;
     } else {
       lastSyncElement.textContent = 'Duomenys nebuvo sinchronizuoti';
+    }
+  }
+
+  /**
+   * Stop auto-refresh timer
+   */
+  stopAutoRefresh() {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = null;
     }
   }
 
