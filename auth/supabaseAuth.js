@@ -17,15 +17,28 @@ export class SupabaseAuthManager {
     this.pendingResolve = null;
     this.isSubmitting = false;
     this.signOutListenerAttached = false;
+    this.authStateSubscription = null;
+
+    if (this.client) {
+      this.#subscribeToAuthChanges();
+    }
   }
 
   setClient(client) {
+    if (this.client === client) {
+      return;
+    }
+
+    this.#cleanupAuthSubscription();
     this.client = client ?? null;
     if (!this.client) {
       this.session = null;
       this.hideOverlay();
       this.updateStatus(t(texts.auth.offline), 'offline');
+      return;
     }
+
+    this.#subscribeToAuthChanges();
   }
 
   async ensureAuthenticated() {
@@ -33,6 +46,8 @@ export class SupabaseAuthManager {
       this.updateStatus(t(texts.auth.offline), 'offline');
       return { status: 'offline' };
     }
+
+    this.#subscribeToAuthChanges();
 
     try {
       const { data, error } = await this.client.auth.getSession();
@@ -276,5 +291,55 @@ export class SupabaseAuthManager {
       container.classList.remove('hidden');
       signOutButton.classList.add('hidden');
     }
+  }
+
+  #subscribeToAuthChanges() {
+    if (!this.client?.auth?.onAuthStateChange || this.authStateSubscription) {
+      return;
+    }
+
+    try {
+      const { data, error } = this.client.auth.onAuthStateChange((event, session) => {
+        this.#handleAuthEvent(event, session);
+      });
+
+      if (error) {
+        console.warn('Supabase auth prenumeratos klaida:', error);
+        return;
+      }
+
+      this.authStateSubscription = data?.subscription ?? null;
+    } catch (error) {
+      console.warn('Supabase auth prenumeratos išimtis:', error);
+    }
+  }
+
+  #handleAuthEvent(event, session) {
+    if (session) {
+      this.session = session;
+      const email = session.user?.email ?? '';
+      this.hideOverlay();
+      this.updateStatus(`${t(texts.auth.signedInAs)} ${email}`, 'authenticated');
+      this.bindSignOutButton();
+    } else {
+      this.session = null;
+      if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+        this.renderOverlay();
+      }
+      this.updateStatus(t(texts.auth.loginRequired), 'needs-auth');
+    }
+
+    if (this.onAuthStateChanged) {
+      this.onAuthStateChanged(session ?? null, { reason: 'auth-event', event });
+    }
+  }
+
+  #cleanupAuthSubscription() {
+    try {
+      this.authStateSubscription?.unsubscribe?.();
+    } catch (error) {
+      console.warn('Nepavyko nutraukti Supabase auth prenumeratos:', error);
+    }
+    this.authStateSubscription = null;
   }
 }
