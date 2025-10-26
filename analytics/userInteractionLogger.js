@@ -22,9 +22,8 @@ export class UserInteractionLogger {
   }
 
   setClient(client) {
-    if (client) {
-      this.client = client;
-    }
+    this.client = client ?? null;
+    this.resetCachedEmail();
   }
 
   /**
@@ -129,6 +128,11 @@ export class UserInteractionLogger {
       this.cachedUserEmail = null;
     }
     return this.cachedUserEmail;
+  }
+
+  resetCachedEmail() {
+    this.cachedUserEmail = null;
+    this.emailLookupAttempted = false;
   }
 
   #isMissingColumnError(error, columnName) {

@@ -612,6 +612,16 @@ export class DataPersistenceManager {
     }
   }
 
+  setClient(client) {
+    this.client = client ?? null;
+    this.bedsLoaded = false;
+    this.bedLabelToId.clear();
+    this.bedIdToLabel.clear();
+    if (!this.#isSupabaseAvailable()) {
+      this.lastSyncCache = null;
+    }
+  }
+
   needsMigration() {
     if (this.#isSupabaseAvailable()) {
       return false;
