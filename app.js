@@ -41,7 +41,6 @@ export class BedManagementApp {
     this.viewMode = this.readViewMode();
     this.isGridView = this.viewMode === 'grid';
     this.isBedListVisible = this.readBedListVisibility();
-    this.isAuditVisible = false;
     this.currentSearchTerm = '';
     this.searchDebounceTimer = null;
     this.persistenceManager = new DataPersistenceManager({ document: typeof document !== 'undefined' ? document : undefined });
@@ -112,7 +111,6 @@ export class BedManagementApp {
       // Setup UI event listeners
       this.setupEventListeners();
       this.applyBedListVisibility();
-      this.applyAuditVisibility();
       this.updateViewToggleButton();
 
       // Initial render
@@ -475,10 +473,11 @@ export class BedManagementApp {
     const auditLogBtn = document.getElementById('auditLogBtn');
     if (auditLogBtn) {
       auditLogBtn.addEventListener('click', () => {
-        this.toggleAuditVisibility();
-        void this.userInteractionLogger.logInteraction('audit_log_toggle', { visible: this.isAuditVisible });
+        void this.openAuditLogWindow();
       });
-      auditLogBtn.setAttribute('aria-expanded', this.isAuditVisible ? 'true' : 'false');
+      auditLogBtn.setAttribute('aria-haspopup', 'dialog');
+      auditLogBtn.setAttribute('title', t(texts.ui.showAuditLog));
+      auditLogBtn.setAttribute('aria-label', t(texts.ui.showAuditLog));
     } else {
       console.log('Audit log button not found');
     }
@@ -525,31 +524,644 @@ export class BedManagementApp {
     this.setupBedClickHandlers();
   }
 
-  toggleAuditVisibility() {
-    this.isAuditVisible = !this.isAuditVisible;
-    this.applyAuditVisibility();
+  async openAuditLogWindow() {
+    if (typeof window === 'undefined') {
+      console.info('Veiksmų žurnalo langas pasiekiamas tik naršyklėje.');
+      return;
+    }
+
+    const auditWindow = window.open('', 'audit-log-window', 'width=1200,height=800,resizable=yes,scrollbars=yes');
+    if (!auditWindow) {
+      this.showError('Leiskite iššokančius langus, kad galėtumėte peržiūrėti veiksmų žurnalą.');
+      return;
+    }
+
+    const title = escapeHtml(t(texts.ui.showAuditLog));
+    auditWindow.document.open();
+    auditWindow.document.write(`<!DOCTYPE html>
+<html lang="lt">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    <style>
+      :root {
+        color-scheme: light dark;
+      }
+      body {
+        font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+        margin: 0;
+        background: #f8fafc;
+        color: #0f172a;
+      }
+      .dark body {
+        background: #0f172a;
+        color: #e2e8f0;
+      }
+      header {
+        padding: 16px 24px;
+        background: #0f766e;
+        color: #fff;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 1.25rem;
+      }
+      main {
+        padding: 16px 24px 32px;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .card {
+        background: #fff;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px -15px rgba(15, 23, 42, 0.35);
+        margin-bottom: 20px;
+        border: 1px solid #e2e8f0;
+      }
+      .card__body {
+        padding: 20px;
+      }
+      .card__title {
+        font-size: 1rem;
+        font-weight: 600;
+        margin-bottom: 12px;
+      }
+      label {
+        display: block;
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        font-weight: 600;
+        color: #475569;
+        margin-bottom: 4px;
+      }
+      select, input[type="search"] {
+        width: 100%;
+        padding: 8px 12px;
+        border-radius: 8px;
+        border: 1px solid #cbd5f5;
+        font-size: 0.95rem;
+        box-sizing: border-box;
+      }
+      select:focus, input[type="search"]:focus {
+        outline: 2px solid #0f766e;
+        outline-offset: 2px;
+      }
+      .filters {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 16px;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.9rem;
+      }
+      th, td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e2e8f0;
+        text-align: left;
+      }
+      th {
+        background: #f1f5f9;
+        font-size: 0.75rem;
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      tbody tr:nth-child(even) {
+        background: #f8fafc;
+      }
+      .muted {
+        color: #64748b;
+        font-size: 0.85rem;
+      }
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 16px;
+      }
+      .stat-card {
+        background: #0f766e;
+        color: #fff;
+        border-radius: 10px;
+        padding: 16px;
+      }
+      .stat-card h3 {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin: 0 0 6px;
+      }
+      .stat-card p {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 600;
+      }
+      .table-container {
+        max-height: 420px;
+        overflow: auto;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+      }
+      .table-container table {
+        border: none;
+      }
+      .status {
+        margin-top: 8px;
+        font-size: 0.85rem;
+        color: #475569;
+      }
+      @media (max-width: 640px) {
+        header, main {
+          padding-left: 16px;
+          padding-right: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>${title}</h1>
+      <p class="muted" style="color: rgba(255,255,255,0.85); margin-top:4px;">Analizuokite veiksmus realiuoju laiku ir filtruokite pagal komandą.</p>
+    </header>
+    <main>
+      <section class="card">
+        <div class="card__body">
+          <p class="muted">Įkeliami duomenys iš Supabase...</p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>`);
+    auditWindow.document.close();
+
+    try {
+      const audit = await this.reportingService.fetchInteractionAudit({ limit: 200 });
+      if (!auditWindow || auditWindow.closed) {
+        return;
+      }
+
+      if (audit.source !== 'supabase') {
+        auditWindow.document.open();
+        auditWindow.document.write(`<!DOCTYPE html>
+<html lang="lt">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    <style>
+      body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; margin: 0; padding: 32px; background: #fff; color: #0f172a; }
+      .notice { max-width: 640px; margin: 0 auto; padding: 24px; border-radius: 12px; border: 1px solid #f87171; background: #fee2e2; }
+      h1 { font-size: 1.5rem; margin-bottom: 12px; }
+      p { margin: 0; font-size: 1rem; }
+    </style>
+  </head>
+  <body>
+    <div class="notice">
+      <h1>Supabase nepasiekiamas</h1>
+      <p>Veiksmų žurnalo duomenys rodomi tik prisijungus prie Supabase. Patikrinkite ryšį ir bandykite dar kartą.</p>
+    </div>
+  </body>
+</html>`);
+        auditWindow.document.close();
+        return;
+      }
+
+      const normalizedRecords = (audit.data ?? []).map((item) => {
+        const occurredAt = item.occurredAt ?? null;
+        const occurredDate = occurredAt ? new Date(occurredAt) : null;
+        const occurredAtText = occurredDate && !Number.isNaN(occurredDate.getTime())
+          ? occurredDate.toLocaleString('lt-LT')
+          : '–';
+        const bedLabel = item.payload?.bedLabel ?? item.payload?.bedId ?? item.bedId ?? '—';
+        const performer = item.performedBy ?? 'Nežinomas naudotojas';
+        const details = item.payload?.payload?.status ?? item.payload?.status ?? '';
+
+        return {
+          id: item.id ?? '',
+          interactionType: item.interactionType ?? 'Nežinomas veiksmas',
+          bedLabel,
+          performedBy: performer,
+          details,
+          occurredAt,
+          occurredAtText,
+        };
+      });
+
+      this.#renderAuditWindow(auditWindow, normalizedRecords);
+      void this.userInteractionLogger.logInteraction('audit_log_open', {
+        total: normalizedRecords.length,
+      });
+    } catch (error) {
+      console.error('Failed to open audit log window:', error);
+      if (auditWindow && !auditWindow.closed) {
+        auditWindow.document.open();
+        auditWindow.document.write(`<!DOCTYPE html>
+<html lang="lt">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    <style>
+      body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; margin: 0; padding: 32px; background: #fff; color: #0f172a; }
+      .notice { max-width: 640px; margin: 0 auto; padding: 24px; border-radius: 12px; border: 1px solid #f97316; background: #ffedd5; }
+      h1 { font-size: 1.5rem; margin-bottom: 12px; }
+      p { margin: 0; font-size: 1rem; }
+    </style>
+  </head>
+  <body>
+    <div class="notice">
+      <h1>Nepavyko įkelti veiksmų žurnalo</h1>
+      <p>Patikrinkite interneto ryšį ir bandykite dar kartą.</p>
+    </div>
+  </body>
+</html>`);
+        auditWindow.document.close();
+      }
+      this.showError('Nepavyko atidaryti veiksmų žurnalo lango.');
+    }
   }
 
-  applyAuditVisibility() {
-    const section = typeof document !== 'undefined' ? document.getElementById('auditSection') : null;
-    const button = typeof document !== 'undefined' ? document.getElementById('auditLogBtn') : null;
-    const isVisible = this.isAuditVisible;
-
-    if (section) {
-      section.classList.toggle('hidden', !isVisible);
-      section.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
+  #renderAuditWindow(auditWindow, records) {
+    if (!auditWindow || auditWindow.closed) {
+      return;
     }
 
-    if (button) {
-      button.textContent = isVisible ? t(texts.ui.hideAuditLog) : t(texts.ui.showAuditLog);
-      button.setAttribute('aria-expanded', isVisible ? 'true' : 'false');
-    }
+    const sanitizedData = JSON.stringify(records).replace(/</g, '\\u003C').replace(/>/g, '\\u003E');
+    const title = escapeHtml(t(texts.ui.showAuditLog));
+    auditWindow.document.open();
+    auditWindow.document.write(`<!DOCTYPE html>
+<html lang="lt">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>${title}</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+      header { padding: 16px 24px; background: #0f766e; color: #fff; }
+      header h1 { margin: 0; font-size: 1.4rem; }
+      header p { margin: 6px 0 0; font-size: 0.9rem; color: rgba(255,255,255,0.85); }
+      main { padding: 16px 24px 32px; max-width: 1200px; margin: 0 auto; }
+      .card { background: #fff; border-radius: 12px; box-shadow: 0 10px 25px -15px rgba(15, 23, 42, 0.35); margin-bottom: 20px; border: 1px solid #e2e8f0; }
+      .card__body { padding: 20px; }
+      .card__title { font-size: 1rem; font-weight: 600; margin-bottom: 12px; color: #0f172a; }
+      .filters { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; }
+      label { display: block; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; color: #475569; margin-bottom: 4px; }
+      select, input[type="search"] { width: 100%; padding: 8px 12px; border-radius: 8px; border: 1px solid #cbd5f5; font-size: 0.95rem; box-sizing: border-box; }
+      select:focus, input[type="search"]:focus { outline: 2px solid #0f766e; outline-offset: 2px; }
+      .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }
+      .stat-card { background: #0f766e; color: #fff; border-radius: 10px; padding: 16px; }
+      .stat-card h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; margin: 0 0 6px; color: rgba(255,255,255,0.8); }
+      .stat-card p { margin: 0; font-size: 1.25rem; font-weight: 600; }
+      .table-container { max-height: 420px; overflow: auto; border-radius: 12px; border: 1px solid #e2e8f0; }
+      table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+      th, td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+      th { background: #f1f5f9; font-size: 0.75rem; letter-spacing: 0.02em; text-transform: uppercase; }
+      tbody tr:nth-child(even) { background: #f8fafc; }
+      .muted { color: #64748b; font-size: 0.85rem; }
+      .status { margin-top: 8px; font-size: 0.85rem; color: #475569; }
+      @media (max-width: 640px) { header, main { padding-left: 16px; padding-right: 16px; } }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>${title}</h1>
+      <p>Filtruokite veiksmus pagal komandą, lovas ir tipą.</p>
+    </header>
+    <main>
+      <section class="card">
+        <div class="card__body">
+          <div class="filters">
+            <div>
+              <label for="filter-performer">Kas atliko</label>
+              <select id="filter-performer" aria-label="Filtras pagal atlikėją"></select>
+            </div>
+            <div>
+              <label for="filter-type">Veiksmo tipas</label>
+              <select id="filter-type" aria-label="Filtras pagal veiksmą"></select>
+            </div>
+            <div>
+              <label for="filter-bed">Lova</label>
+              <select id="filter-bed" aria-label="Filtras pagal lovą"></select>
+            </div>
+            <div>
+              <label for="filter-search">Paieška</label>
+              <input id="filter-search" type="search" placeholder="Ieškoti pagal komentarus ar detales" aria-label="Paieška pagal tekstą" />
+            </div>
+          </div>
+        </div>
+      </section>
 
-    if (isVisible) {
-      void this.renderAuditTrail();
-    }
+      <section class="card">
+        <div class="card__body">
+          <h2 class="card__title">Santrauka</h2>
+          <div class="stat-grid">
+            <article class="stat-card" aria-live="polite">
+              <h3>Filtruotų įrašų skaičius</h3>
+              <p id="stat-total">0</p>
+            </article>
+            <article class="stat-card" aria-live="polite">
+              <h3>Vidutinis laikas tarp veiksmų</h3>
+              <p id="stat-average">–</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card__body">
+          <h2 class="card__title">Vidurkiai pagal veiksmų tipą</h2>
+          <div class="table-container" role="region" aria-live="polite">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Veiksmo tipas</th>
+                  <th scope="col">Įrašai</th>
+                  <th scope="col">Vid. tarpas</th>
+                </tr>
+              </thead>
+              <tbody id="table-action-stats"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card__body">
+          <h2 class="card__title">Vidurkiai pagal lovą</h2>
+          <div class="table-container" role="region" aria-live="polite">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Lova</th>
+                  <th scope="col">Įrašai</th>
+                  <th scope="col">Vid. tarpas</th>
+                </tr>
+              </thead>
+              <tbody id="table-bed-stats"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card__body">
+          <h2 class="card__title">Veiksmų istorija</h2>
+          <div class="table-container" role="region" aria-live="polite">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Laikas</th>
+                  <th scope="col">Veiksmas</th>
+                  <th scope="col">Lova</th>
+                  <th scope="col">Kas atliko</th>
+                  <th scope="col">Detalės</th>
+                </tr>
+              </thead>
+              <tbody id="table-rows"></tbody>
+            </table>
+          </div>
+          <p id="table-status" class="status"></p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const AUDIT_DATA = ${sanitizedData};
+      const state = { performer: 'viskas', type: 'viskas', bed: 'viskas', search: '' };
+
+      const performerSelect = document.getElementById('filter-performer');
+      const typeSelect = document.getElementById('filter-type');
+      const bedSelect = document.getElementById('filter-bed');
+      const searchInput = document.getElementById('filter-search');
+      const totalEl = document.getElementById('stat-total');
+      const averageEl = document.getElementById('stat-average');
+      const tableBody = document.getElementById('table-rows');
+      const actionStatsBody = document.getElementById('table-action-stats');
+      const bedStatsBody = document.getElementById('table-bed-stats');
+      const statusEl = document.getElementById('table-status');
+
+      const ALL_VALUE = 'viskas';
+
+      function escapeHtml(value) {
+        if (value === null || value === undefined) return '';
+        return String(value).replace(/[&<>"']/g, function (char) {
+          return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char] || char;
+        });
+      }
+
+      function uniqueValues(key) {
+        const set = new Set();
+        AUDIT_DATA.forEach(function (item) {
+          const value = item[key];
+          if (value && String(value).trim()) {
+            set.add(String(value).trim());
+          }
+        });
+        return Array.from(set).sort(function (a, b) {
+          return a.localeCompare(b, 'lt', { sensitivity: 'base' });
+        });
+      }
+
+      function buildOptions(select, values, label) {
+        const fragment = document.createDocumentFragment();
+        const defaultOption = document.createElement('option');
+        defaultOption.value = ALL_VALUE;
+        defaultOption.textContent = label;
+        fragment.appendChild(defaultOption);
+        values.forEach(function (value) {
+          const option = document.createElement('option');
+          option.value = value;
+          option.textContent = value;
+          fragment.appendChild(option);
+        });
+        select.innerHTML = '';
+        select.appendChild(fragment);
+      }
+
+      function parseDate(value) {
+        if (!value) return null;
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? null : date;
+      }
+
+      function calculateAverageGap(items) {
+        const sorted = items
+          .map(function (item) {
+            const parsed = parseDate(item.occurredAt);
+            return { item: item, timestamp: parsed ? parsed.getTime() : null };
+          })
+          .filter(function (entry) {
+            return Number.isFinite(entry.timestamp);
+          })
+          .sort(function (a, b) {
+            return a.timestamp - b.timestamp;
+          });
+
+        if (sorted.length < 2) {
+          return null;
+        }
+
+        let total = 0;
+        let count = 0;
+        for (let i = 1; i < sorted.length; i += 1) {
+          const gap = sorted[i].timestamp - sorted[i - 1].timestamp;
+          if (Number.isFinite(gap) && gap >= 0) {
+            total += gap;
+            count += 1;
+          }
+        }
+
+        if (!count) {
+          return null;
+        }
+
+        return total / count / 60000; // minutes
+      }
+
+      function formatDuration(minutes) {
+        if (!Number.isFinite(minutes) || minutes <= 0) {
+          return '–';
+        }
+        if (minutes < 1) {
+          const seconds = Math.round(minutes * 60);
+          return seconds <= 0 ? '<1 s' : seconds + ' s';
+        }
+        if (minutes >= 60) {
+          const hours = Math.floor(minutes / 60);
+          const mins = Math.round(minutes % 60);
+          return mins ? hours + ' val ' + mins + ' min' : hours + ' val';
+        }
+        return minutes.toFixed(1) + ' min';
+      }
+
+      function applyFilters() {
+        const searchTerm = state.search.toLowerCase();
+        return AUDIT_DATA.filter(function (item) {
+          const matchesPerformer = state.performer === ALL_VALUE || item.performedBy === state.performer;
+          const matchesType = state.type === ALL_VALUE || item.interactionType === state.type;
+          const matchesBed = state.bed === ALL_VALUE || item.bedLabel === state.bed;
+          if (!matchesPerformer || !matchesType || !matchesBed) {
+            return false;
+          }
+          if (!searchTerm) {
+            return true;
+          }
+          const haystack = [
+            item.interactionType || '',
+            item.bedLabel || '',
+            item.performedBy || '',
+            item.details || ''
+          ].join(' ').toLowerCase();
+          return haystack.includes(searchTerm);
+        });
+      }
+
+      function renderTable(rows) {
+        tableBody.innerHTML = '';
+        const fragment = document.createDocumentFragment();
+        rows.forEach(function (row) {
+          const tr = document.createElement('tr');
+          tr.innerHTML =
+            '<td>' + escapeHtml(row.occurredAtText) + '</td>' +
+            '<td>' + escapeHtml(row.interactionType) + '</td>' +
+            '<td>' + escapeHtml(row.bedLabel) + '</td>' +
+            '<td>' + escapeHtml(row.performedBy) + '</td>' +
+            '<td>' + escapeHtml(row.details || '') + '</td>';
+          fragment.appendChild(tr);
+        });
+        tableBody.appendChild(fragment);
+        statusEl.textContent = rows.length ? '' : 'Pagal pasirinktus filtrus įrašų nėra.';
+      }
+
+      function renderStats(rows) {
+        totalEl.textContent = rows.length.toString();
+        averageEl.textContent = formatDuration(calculateAverageGap(rows));
+
+        function renderGrouped(key, container) {
+          container.innerHTML = '';
+          const groups = new Map();
+          rows.forEach(function (row) {
+            const groupKey = row[key] || 'Nežinoma';
+            if (!groups.has(groupKey)) {
+              groups.set(groupKey, []);
+            }
+            groups.get(groupKey).push(row);
+          });
+
+          const entries = Array.from(groups.entries())
+            .map(function (entry) {
+              const groupKey = entry[0];
+              const items = entry[1];
+              return {
+                label: groupKey,
+                count: items.length,
+                avg: calculateAverageGap(items)
+              };
+            })
+            .sort(function (a, b) {
+              return a.label.localeCompare(b.label, 'lt', { sensitivity: 'base' });
+            });
+
+          const fragment = document.createDocumentFragment();
+          entries.forEach(function (entry) {
+            const tr = document.createElement('tr');
+            tr.innerHTML =
+              '<td>' + escapeHtml(entry.label) + '</td>' +
+              '<td>' + entry.count + '</td>' +
+              '<td>' + formatDuration(entry.avg) + '</td>';
+            fragment.appendChild(tr);
+          });
+          container.appendChild(fragment);
+        }
+
+        renderGrouped('interactionType', actionStatsBody);
+        renderGrouped('bedLabel', bedStatsBody);
+      }
+
+      function render() {
+        const rows = applyFilters();
+        renderTable(rows);
+        renderStats(rows);
+      }
+
+      buildOptions(performerSelect, uniqueValues('performedBy'), 'Visi atlikėjai');
+      buildOptions(typeSelect, uniqueValues('interactionType'), 'Visi veiksmai');
+      buildOptions(bedSelect, uniqueValues('bedLabel'), 'Visos lovos');
+
+      performerSelect.addEventListener('change', function (event) {
+        state.performer = event.target.value;
+        render();
+      });
+      typeSelect.addEventListener('change', function (event) {
+        state.type = event.target.value;
+        render();
+      });
+      bedSelect.addEventListener('change', function (event) {
+        state.bed = event.target.value;
+        render();
+      });
+
+      let searchTimer = null;
+      searchInput.addEventListener('input', function (event) {
+        const value = event.target.value || '';
+        if (searchTimer) {
+          window.clearTimeout(searchTimer);
+        }
+        searchTimer = window.setTimeout(function () {
+          state.search = value.trim();
+          render();
+        }, 200);
+      });
+
+      render();
+    </script>
+  </body>
+</html>`);
+    auditWindow.document.close();
   }
-
   readViewMode() {
     try {
       const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(VIEW_MODE_STORAGE_KEY) : null;
@@ -803,9 +1415,6 @@ export class BedManagementApp {
       this.updateViewToggleButton();
       this.renderBedGrid();
       this.renderNotificationSummary();
-      if (this.isAuditVisible) {
-        await this.renderAuditTrail();
-      }
       await this.updateLastSyncDisplay();
     } catch (error) {
       console.error('Failed to render UI:', error);
@@ -940,48 +1549,6 @@ export class BedManagementApp {
       this.setReportingNotice('Nepavyko įkelti KPI duomenų.', 'error');
     } finally {
       loadingIndicator?.classList.add('hidden');
-    }
-  }
-
-  async renderAuditTrail() {
-    const container = document.getElementById('auditContent');
-    if (!container) return;
-
-    try {
-      const audit = await this.reportingService.fetchInteractionAudit({ limit: 10 });
-      if (audit.source !== 'supabase') {
-        container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Supabase nepasiekiamas – audito žurnalas nerodomas.</p>';
-        return;
-      }
-
-      if (!audit.data.length) {
-        container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Kol kas nėra audito įrašų.</p>';
-        return;
-      }
-
-      container.innerHTML = audit.data.map((item) => {
-        const occurred = item.occurredAt ? new Date(item.occurredAt) : null;
-        const occurredText = occurred && !Number.isNaN(occurred.getTime())
-          ? occurred.toLocaleString('lt-LT')
-          : '–';
-        const bedLabel = item.payload?.bedLabel ?? item.payload?.bedId ?? item.bedId ?? '–';
-        const performer = item.performedBy ?? 'Nežinomas naudotojas';
-        const details = item.payload?.payload?.status ?? item.payload?.status ?? '';
-
-        return `
-          <div class="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-200 dark:border-slate-700 py-2 last:border-b-0">
-            <div class="flex-1 pr-2">
-              <p class="text-sm font-medium text-slate-800 dark:text-slate-100">${escapeHtml(item.interactionType)}</p>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Lova: ${escapeHtml(bedLabel)}${details ? ` • ${escapeHtml(details)}` : ''}</p>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Vykdytojas: ${escapeHtml(performer)}</p>
-            </div>
-            <span class="text-xs text-slate-500 dark:text-slate-400 mt-1 md:mt-0">${escapeHtml(occurredText)}</span>
-          </div>
-        `;
-      }).join('');
-    } catch (error) {
-      console.error('Failed to render audit trail:', error);
-      container.innerHTML = '<p class="text-sm text-red-600">Nepavyko įkelti audito įrašų.</p>';
     }
   }
 
