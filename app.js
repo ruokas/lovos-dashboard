@@ -41,9 +41,9 @@ export class BedManagementApp {
     this.viewMode = this.readViewMode();
     this.isGridView = this.viewMode === 'grid';
     this.isBedListVisible = this.readBedListVisibility();
+    this.isAuditVisible = false;
     this.currentSearchTerm = '';
     this.searchDebounceTimer = null;
-    this.activeView = 'dashboard';
     this.persistenceManager = new DataPersistenceManager({ document: typeof document !== 'undefined' ? document : undefined });
     this.notificationManager = new NotificationManager(this.settingsManager, { fontSizeLevel: this.fontSizeLevel });
     const sharedDocument = typeof document !== 'undefined' ? document : undefined;
@@ -112,6 +112,7 @@ export class BedManagementApp {
       // Setup UI event listeners
       this.setupEventListeners();
       this.applyBedListVisibility();
+      this.applyAuditVisibility();
       this.updateViewToggleButton();
 
       // Initial render
@@ -471,6 +472,17 @@ export class BedManagementApp {
       bedListBtn.setAttribute('aria-expanded', this.isBedListVisible ? 'true' : 'false');
     }
 
+    const auditLogBtn = document.getElementById('auditLogBtn');
+    if (auditLogBtn) {
+      auditLogBtn.addEventListener('click', () => {
+        this.toggleAuditVisibility();
+        void this.userInteractionLogger.logInteraction('audit_log_toggle', { visible: this.isAuditVisible });
+      });
+      auditLogBtn.setAttribute('aria-expanded', this.isAuditVisible ? 'true' : 'false');
+    } else {
+      console.log('Audit log button not found');
+    }
+
     const fontSizeUpBtn = document.getElementById('fontSizeBtn');
     if (fontSizeUpBtn) {
       fontSizeUpBtn.addEventListener('click', () => {
@@ -509,66 +521,32 @@ export class BedManagementApp {
       });
     });
 
-    const viewButtons = document.querySelectorAll('[data-view-target]');
-    if (viewButtons.length > 0) {
-      viewButtons.forEach((button) => {
-        button.addEventListener('click', () => {
-          const targetView = button.dataset.viewTarget || 'dashboard';
-          this.switchView(targetView);
-        });
-      });
-    }
-
-    this.updateViewVisibility();
-
     // Bed click handlers for quick status updates
     this.setupBedClickHandlers();
   }
 
-  updateViewVisibility() {
-    const views = {
-      dashboard: typeof document !== 'undefined' ? document.getElementById('viewDashboard') : null,
-      audit: typeof document !== 'undefined' ? document.getElementById('viewAudit') : null,
-    };
-
-    Object.entries(views).forEach(([key, element]) => {
-      if (!element) return;
-      const isActive = key === this.activeView;
-      element.classList.toggle('hidden', !isActive);
-      if (isActive) {
-        element.setAttribute('aria-hidden', 'false');
-      } else {
-        element.setAttribute('aria-hidden', 'true');
-      }
-    });
-
-    if (typeof document !== 'undefined') {
-      document.querySelectorAll('[data-view-target]').forEach((button) => {
-        const isActive = button.dataset.viewTarget === this.activeView;
-        button.classList.toggle('nav-tab--active', isActive);
-        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-        if (isActive) {
-          button.setAttribute('aria-current', 'page');
-        } else {
-          button.removeAttribute('aria-current');
-        }
-      });
-    }
+  toggleAuditVisibility() {
+    this.isAuditVisible = !this.isAuditVisible;
+    this.applyAuditVisibility();
   }
 
-  switchView(view, { log = true } = {}) {
-    const allowedViews = new Set(['dashboard', 'audit']);
-    const targetView = allowedViews.has(view) ? view : 'dashboard';
-    const previousView = this.activeView;
-    this.activeView = targetView;
-    this.updateViewVisibility();
+  applyAuditVisibility() {
+    const section = typeof document !== 'undefined' ? document.getElementById('auditSection') : null;
+    const button = typeof document !== 'undefined' ? document.getElementById('auditLogBtn') : null;
+    const isVisible = this.isAuditVisible;
 
-    if (targetView === 'audit') {
-      void this.renderAuditTrail();
+    if (section) {
+      section.classList.toggle('hidden', !isVisible);
+      section.setAttribute('aria-hidden', isVisible ? 'false' : 'true');
     }
 
-    if (log && previousView !== targetView) {
-      void this.userInteractionLogger.logInteraction('primary_navigation_click', { view: targetView });
+    if (button) {
+      button.textContent = isVisible ? t(texts.ui.hideAuditLog) : t(texts.ui.showAuditLog);
+      button.setAttribute('aria-expanded', isVisible ? 'true' : 'false');
+    }
+
+    if (isVisible) {
+      void this.renderAuditTrail();
     }
   }
 
@@ -825,7 +803,9 @@ export class BedManagementApp {
       this.updateViewToggleButton();
       this.renderBedGrid();
       this.renderNotificationSummary();
-      await this.renderAuditTrail();
+      if (this.isAuditVisible) {
+        await this.renderAuditTrail();
+      }
       await this.updateLastSyncDisplay();
     } catch (error) {
       console.error('Failed to render UI:', error);

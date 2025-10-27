@@ -100,8 +100,11 @@
         <button id="addStatusBtn" type="button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium">
           Pranešti apie būklę
         </button>
-        <button id="bedListBtn" type="button" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium">
-          Lovų sąrašas
+        <button id="bedListBtn" type="button" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium" aria-controls="bedListSection">
+          Rodyti lovų sąrašą
+        </button>
+        <button id="auditLogBtn" type="button" class="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors text-sm font-medium" aria-controls="auditSection">
+          Rodyti veiksmų žurnalą
         </button>
         <button id="fontSizeBtn" type="button" class="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors font-bold text-sm" title="Padidinti mastelį">
           A+
@@ -133,15 +136,6 @@
         </div>
       </div>
     </header>
-
-    <nav id="primaryNavigation" class="mt-4 flex flex-wrap gap-2" aria-label="Puslapių navigacija">
-      <button type="button" class="nav-tab nav-tab--active" data-view-target="dashboard" aria-controls="viewDashboard" aria-pressed="true">
-        Pagrindinis ekranas
-      </button>
-      <button type="button" class="nav-tab" data-view-target="audit" aria-controls="viewAudit" aria-pressed="false">
-        Veiksmų žurnalas
-      </button>
-    </nav>
 
     <main id="viewDashboard" class="mt-4 space-y-3" aria-hidden="false">
       <div id="reportingNotice" class="hidden rounded-md border px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-200"></div>
@@ -192,7 +186,7 @@
       </div>
     </main>
 
-    <section id="viewAudit" class="hidden mt-4" aria-hidden="true">
+    <section id="auditSection" class="hidden mt-4" aria-hidden="true">
       <div class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100">
         <div class="p-4">
           <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
