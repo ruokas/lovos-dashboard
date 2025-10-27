@@ -796,29 +796,56 @@ export class BedManagementApp {
       const avgText = avgMinutes === null || avgMinutes === undefined
         ? '–'
         : `${Math.round(avgMinutes)} min`;
+      const formatValue = (value) => {
+        if (value === null || value === undefined) return '0';
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric.toLocaleString('lt-LT') : '0';
+      };
+      const problemCount = (totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0);
 
       kpiContainer.innerHTML = `
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">Sutvarkytos lovos</h3>
-          <div class="kpi-value bg-emerald-100 text-emerald-800">${totals.cleanBeds ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Iš viso: ${totals.totalBeds ?? 0}</p>
-        </div>
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">Reikia dėmesio</h3>
-          <div class="kpi-value bg-yellow-100 text-yellow-800">${totals.attentionBeds ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Problemos: ${(totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0)}</p>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Pranešimai: ${notifications.total ?? 0}</p>
-        </div>
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">Užimtos lovos</h3>
-          <div class="kpi-value bg-rose-100 text-rose-800">${totals.occupiedBeds ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Laisvos: ${totals.freeBeds ?? 0}</p>
-        </div>
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">SLA pažeidimai (24h)</h3>
-          <div class="kpi-value ${todayMetrics?.slaBreaches ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}">${todayMetrics?.slaBreaches ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Vid. reakcija: ${avgText}</p>
-        </div>
+        <article class="kpi-card kpi-card--clean">
+          <div class="kpi-card__header">
+            <span class="kpi-card__eyebrow">Sutvarkytos lovos</span>
+            <span class="kpi-card__icon" aria-hidden="true">🧺</span>
+          </div>
+          <p class="kpi-card__value">${formatValue(totals.cleanBeds)}</p>
+          <div class="kpi-card__meta">
+            <span class="kpi-card__meta-item">Iš viso: ${formatValue(totals.totalBeds)}</span>
+          </div>
+        </article>
+        <article class="kpi-card kpi-card--attention">
+          <div class="kpi-card__header">
+            <span class="kpi-card__eyebrow">Reikia dėmesio</span>
+            <span class="kpi-card__icon" aria-hidden="true">⚠️</span>
+          </div>
+          <p class="kpi-card__value">${formatValue(totals.attentionBeds)}</p>
+          <div class="kpi-card__meta">
+            <span class="kpi-card__meta-item">Problemos: ${formatValue(problemCount)}</span>
+            <span class="kpi-card__meta-item">Pranešimai: ${formatValue(notifications.total)}</span>
+          </div>
+        </article>
+        <article class="kpi-card kpi-card--occupied">
+          <div class="kpi-card__header">
+            <span class="kpi-card__eyebrow">Užimtos lovos</span>
+            <span class="kpi-card__icon" aria-hidden="true">🏥</span>
+          </div>
+          <p class="kpi-card__value">${formatValue(totals.occupiedBeds)}</p>
+          <div class="kpi-card__meta">
+            <span class="kpi-card__meta-item">Laisvos: ${formatValue(totals.freeBeds)}</span>
+          </div>
+        </article>
+        <article class="kpi-card kpi-card--sla">
+          <div class="kpi-card__header">
+            <span class="kpi-card__eyebrow">SLA pažeidimai</span>
+            <span class="kpi-card__icon" aria-hidden="true">⏱️</span>
+          </div>
+          <p class="kpi-card__value">${formatValue(todayMetrics?.slaBreaches ?? 0)}</p>
+          <div class="kpi-card__meta">
+            <span class="kpi-card__chip">24h</span>
+            <span class="kpi-card__meta-item">Vid. reakcija: ${avgText}</span>
+          </div>
+        </article>
       `;
 
       if (snapshot?.source === 'supabase' && dailyMetrics?.source === 'supabase') {
