@@ -451,6 +451,18 @@
 .notification-row__issue-meta {
   color: #475569;
   font-size: 0.95rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.notification-row__issue-meta time {
+  font-variant-numeric: tabular-nums;
+}
+
+.notification-row__meta-separator {
+  color: #94a3b8;
 }
 
 .notification-row__issue-body {
@@ -492,6 +504,10 @@
 .dark .notification-row__issue-meta,
 .dark .notification-row__issue-body {
   color: #cbd5f5;
+}
+
+.dark .notification-row__meta-separator {
+  color: #94a3b8;
 }
 
 .dark .notification-row__bed-id,

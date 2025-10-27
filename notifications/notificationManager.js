@@ -26,6 +26,7 @@ export class NotificationManager {
     this.settingsManager = settingsManager;
     this.notifications = [];
     this.lastNotificationIds = new Set();
+    this.notificationTimestamps = new Map();
     this.audioContext = null;
     this.soundEnabled = true;
     this.fontSizeLevel = clampFontSizeLevel(options.fontSizeLevel ?? 0);
@@ -65,14 +66,23 @@ export class NotificationManager {
       bed.notifications.forEach(notification => {
         const notificationId = `${bed.bedId}-${notification.type}`;
         currentNotificationIds.add(notificationId);
-        
+
+        if (!this.notificationTimestamps.has(notificationId)) {
+          const sourceTimestamp = notification.timestamp
+            ? new Date(notification.timestamp)
+            : new Date();
+          this.notificationTimestamps.set(notificationId, sourceTimestamp);
+        }
+
+        const storedTimestamp = this.notificationTimestamps.get(notificationId);
+
         // Check if this is a new notification
         if (!this.lastNotificationIds.has(notificationId)) {
           newNotifications.push({
             ...notification,
             id: notificationId,
             bedId: bed.bedId,
-            timestamp: new Date()
+            timestamp: storedTimestamp || new Date()
           });
         }
       });
@@ -80,6 +90,13 @@ export class NotificationManager {
 
     // Update stored notification IDs
     this.lastNotificationIds = currentNotificationIds;
+
+    // Remove timestamps for cleared notifications
+    Array.from(this.notificationTimestamps.keys()).forEach((notificationId) => {
+      if (!currentNotificationIds.has(notificationId)) {
+        this.notificationTimestamps.delete(notificationId);
+      }
+    });
 
     // Show new notifications
     if (!suppressAlerts && newNotifications.length > 0) {
@@ -220,10 +237,26 @@ export class NotificationManager {
 
     const bedsWithNotifications = beds
       .filter(bed => bed.notifications.length > 0)
-      .map((bed) => ({
-        ...bed,
-        notifications: [...bed.notifications].sort((a, b) => a.priority - b.priority),
-      }));
+      .map((bed) => {
+        const sortedNotifications = [...bed.notifications]
+          .sort((a, b) => a.priority - b.priority)
+          .map((notification) => {
+            const notificationId = `${bed.bedId}-${notification.type}`;
+            const storedTimestamp = this.notificationTimestamps.get(notificationId);
+            const timestamp = storedTimestamp
+              || (notification.timestamp ? new Date(notification.timestamp) : null);
+
+            return {
+              ...notification,
+              timestamp,
+            };
+          });
+
+        return {
+          ...bed,
+          notifications: sortedNotifications,
+        };
+      });
 
     if (bedsWithNotifications.length === 0) {
       notificationContainer.innerHTML = `
@@ -249,15 +282,18 @@ export class NotificationManager {
       const notifications = bed.notifications.map((notification) => {
         const issueVariant = this.getNotificationVariant(notification.priority);
         const { title, body } = this.parseNotificationMessage(notification.message);
-        const relativeTime = notification.timestamp ? this.formatTime(notification.timestamp) : '–';
+        const timeInfo = notification.timestamp ? this.formatTimestamp(notification.timestamp) : null;
         const issueTitle = title || 'Pranešimas';
+        const metaMarkup = timeInfo
+          ? `<span class="notification-row__issue-meta ${applyFontSizeClasses('text-sm font-medium', level)}"><time datetime="${escapeHtml(timeInfo.iso)}">${escapeHtml(timeInfo.absolute)}</time><span class="notification-row__meta-separator" aria-hidden="true">•</span><span>${escapeHtml(timeInfo.relative)}</span></span>`
+          : '';
         return `
           <li class="notification-row__issue" data-variant="${issueVariant}">
             <span class="notification-row__dot" aria-hidden="true"></span>
             <div class="notification-row__issue-content">
               <p class="notification-row__issue-title ${applyFontSizeClasses('text-base font-semibold', level)}">
                 <span>${escapeHtml(issueTitle)}</span>
-                <span class="notification-row__issue-meta ${applyFontSizeClasses('text-sm font-medium', level)}">${escapeHtml(relativeTime)}</span>
+                ${metaMarkup}
               </p>
               ${body ? `<p class="notification-row__issue-body ${applyFontSizeClasses('text-sm', level)}">${escapeHtml(body)}</p>` : ''}
             </div>
@@ -315,22 +351,51 @@ export class NotificationManager {
   /**
    * Format timestamp for display
    */
-  formatTime(timestamp) {
+  formatTimestamp(timestamp) {
+    const time = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    if (Number.isNaN(time.getTime())) {
+      return null;
+    }
+
+    return {
+      absolute: time.toLocaleTimeString('lt-LT', { hour: '2-digit', minute: '2-digit' }),
+      relative: this.formatRelativeTime(time),
+      iso: time.toISOString(),
+    };
+  }
+
+  /**
+   * Create relative time label in Lithuanian
+   */
+  formatRelativeTime(time) {
     const now = new Date();
-    const time = new Date(timestamp);
-    const diffMs = now - time;
+    const diffMs = now.getTime() - time.getTime();
+
+    if (diffMs < 0) {
+      return 'Neseniai';
+    }
+
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
     if (diffMins < 1) {
       return 'Dabar';
-    } else if (diffMins < 60) {
-      return `Prieš ${diffMins} min`;
-    } else if (diffHours < 24) {
-      return `Prieš ${diffHours} val`;
-    } else {
-      return time.toLocaleDateString('lt-LT');
     }
+
+    if (diffMins < 60) {
+      return `Prieš ${diffMins} min`;
+    }
+
+    if (diffHours < 24) {
+      return `Prieš ${diffHours} val`;
+    }
+
+    if (diffDays < 7) {
+      return `Prieš ${diffDays} d.`;
+    }
+
+    return time.toLocaleDateString('lt-LT');
   }
 
   /**
