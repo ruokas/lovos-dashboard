@@ -792,20 +792,98 @@ export class BedManagementApp {
         const numeric = Number(value);
         return Number.isFinite(numeric) ? numeric.toLocaleString('lt-LT') : '0';
       };
+      const toFiniteNumber = (value) => {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : 0;
+      };
+
+      const totalsForAttention = (totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0);
+      const totalBeds = toFiniteNumber(totals.totalBeds);
+      const occupiedBeds = toFiniteNumber(totals.occupiedBeds);
+
+      const resolveProgress = (value, total, direction = 'positive') => {
+        const KPI_COLORS = {
+          good: '#22c55e',
+          caution: '#facc15',
+          bad: '#ef4444',
+          neutral: '#94a3b8',
+        };
+
+        const numericValue = toFiniteNumber(value);
+        const numericTotal = toFiniteNumber(total);
+
+        if (numericTotal <= 0) {
+          return { percent: 0, color: KPI_COLORS.neutral };
+        }
+
+        const ratio = Math.min(Math.max(numericValue / numericTotal, 0), 1);
+        const thresholds = { low: 0.33, high: 0.66 };
+
+        let colorKey;
+        if (direction === 'positive') {
+          if (ratio >= thresholds.high) {
+            colorKey = 'good';
+          } else if (ratio >= thresholds.low) {
+            colorKey = 'caution';
+          } else {
+            colorKey = 'bad';
+          }
+        } else {
+          if (ratio <= thresholds.low) {
+            colorKey = 'good';
+          } else if (ratio <= thresholds.high) {
+            colorKey = 'caution';
+          } else {
+            colorKey = 'bad';
+          }
+        }
+
+        return { percent: Math.round(ratio * 100), color: KPI_COLORS[colorKey] };
+      };
+
       const cards = [
-        { label: 'Sutvarkytos', value: totals.cleanBeds, variant: 'clean' },
-        { label: 'Reikia sutvarkyti', value: totals.attentionBeds ?? ((totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0)), variant: 'attention' },
-        { label: 'Užimtos', value: totals.occupiedBeds, variant: 'occupied' },
-        { label: 'Reikia tikrinti', value: totals.bedsNeedingCheck ?? 0, variant: 'check' },
+        {
+          label: 'Sutvarkytos',
+          value: totals.cleanBeds,
+          variant: 'clean',
+          total: totalBeds,
+          direction: 'positive',
+        },
+        {
+          label: 'Reikia sutvarkyti',
+          value: totals.attentionBeds ?? totalsForAttention,
+          variant: 'attention',
+          total: totalBeds,
+          direction: 'negative',
+        },
+        {
+          label: 'Užimtos',
+          value: totals.occupiedBeds,
+          variant: 'occupied',
+          total: totalBeds,
+          direction: 'negative',
+        },
+        {
+          label: 'Reikia tikrinti',
+          value: totals.bedsNeedingCheck ?? 0,
+          variant: 'check',
+          total: occupiedBeds > 0 ? occupiedBeds : totalBeds,
+          direction: 'negative',
+        },
       ];
 
       kpiContainer.innerHTML = cards
-        .map((card) => `
-          <article class="kpi-card" data-variant="${card.variant}">
-            <h3 class="kpi-card__label">${card.label}</h3>
-            <p class="kpi-card__value">${formatValue(card.value)}</p>
-          </article>
-        `)
+        .map((card) => {
+          const { percent, color } = resolveProgress(card.value, card.total, card.direction);
+          const cardValue = formatValue(card.value);
+          const progressText = Number.isFinite(percent) ? `${percent}%` : '0%';
+          return `
+            <article class="kpi-card" data-variant="${card.variant}" style="--kpi-progress:${percent}%; --kpi-accent:${color};" aria-label="${escapeHtml(`${card.label}: ${cardValue} (${progressText})`)}">
+              <span class="kpi-card__label">${escapeHtml(card.label)}</span>
+              <span class="kpi-card__value">${cardValue}</span>
+            </article>
+          `;
+        })
         .join('');
 
       if (snapshot?.source === 'supabase') {
