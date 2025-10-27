@@ -26,6 +26,7 @@ export class NotificationManager {
     this.settingsManager = settingsManager;
     this.notifications = [];
     this.lastNotificationIds = new Set();
+    this.notificationTimestamps = new Map();
     this.audioContext = null;
     this.soundEnabled = true;
     this.fontSizeLevel = clampFontSizeLevel(options.fontSizeLevel ?? 0);
@@ -65,14 +66,23 @@ export class NotificationManager {
       bed.notifications.forEach(notification => {
         const notificationId = `${bed.bedId}-${notification.type}`;
         currentNotificationIds.add(notificationId);
-        
+
+        if (!this.notificationTimestamps.has(notificationId)) {
+          const sourceTimestamp = notification.timestamp
+            ? new Date(notification.timestamp)
+            : new Date();
+          this.notificationTimestamps.set(notificationId, sourceTimestamp);
+        }
+
+        const storedTimestamp = this.notificationTimestamps.get(notificationId);
+
         // Check if this is a new notification
         if (!this.lastNotificationIds.has(notificationId)) {
           newNotifications.push({
             ...notification,
             id: notificationId,
             bedId: bed.bedId,
-            timestamp: new Date()
+            timestamp: storedTimestamp || new Date()
           });
         }
       });
@@ -80,6 +90,13 @@ export class NotificationManager {
 
     // Update stored notification IDs
     this.lastNotificationIds = currentNotificationIds;
+
+    // Remove timestamps for cleared notifications
+    Array.from(this.notificationTimestamps.keys()).forEach((notificationId) => {
+      if (!currentNotificationIds.has(notificationId)) {
+        this.notificationTimestamps.delete(notificationId);
+      }
+    });
 
     // Show new notifications
     if (!suppressAlerts && newNotifications.length > 0) {
@@ -220,10 +237,26 @@ export class NotificationManager {
 
     const bedsWithNotifications = beds
       .filter(bed => bed.notifications.length > 0)
-      .map((bed) => ({
-        ...bed,
-        notifications: [...bed.notifications].sort((a, b) => a.priority - b.priority),
-      }));
+      .map((bed) => {
+        const sortedNotifications = [...bed.notifications]
+          .sort((a, b) => a.priority - b.priority)
+          .map((notification) => {
+            const notificationId = `${bed.bedId}-${notification.type}`;
+            const storedTimestamp = this.notificationTimestamps.get(notificationId);
+            const timestamp = storedTimestamp
+              || (notification.timestamp ? new Date(notification.timestamp) : null);
+
+            return {
+              ...notification,
+              timestamp,
+            };
+          });
+
+        return {
+          ...bed,
+          notifications: sortedNotifications,
+        };
+      });
 
     if (bedsWithNotifications.length === 0) {
       notificationContainer.innerHTML = `
@@ -242,103 +275,127 @@ export class NotificationManager {
 
     const cards = bedsWithNotifications.map((bed) => {
       const highestPriority = bed.notifications[0];
-      const borderClass = this.getCardBorderClass(highestPriority.priority);
-      const occupancyBadge = bed.occupancyStatus === 'occupied'
-        ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-200'
-        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100';
-      const occupancyText = bed.occupancyStatus === 'occupied' ? '🔴 Užimta' : '🟢 Laisva';
-      const lastCheckedTime = bed.lastCheckedTime instanceof Date && !Number.isNaN(bed.lastCheckedTime)
-        ? bed.lastCheckedTime.toLocaleString('lt-LT')
-        : t(texts.ui.noData);
-      const lastCheckedBy = bed.lastCheckedBy ? bed.lastCheckedBy : t(texts.ui.unknownUser);
+      const cardVariant = this.getNotificationVariant(highestPriority.priority);
+      const occupancyVariant = bed.occupancyStatus === 'occupied' ? 'busy' : 'free';
+      const occupancyText = bed.occupancyStatus === 'occupied' ? 'Užimta' : 'Laisva';
 
       const notifications = bed.notifications.map((notification) => {
-        const badgeClass = this.getPriorityClass(notification.priority);
-        const message = escapeHtml(notification.message ?? '');
-        const relativeTime = notification.timestamp ? this.formatTime(notification.timestamp) : '';
+        const issueVariant = this.getNotificationVariant(notification.priority);
+        const { title, body } = this.parseNotificationMessage(notification.message);
+        const timeInfo = notification.timestamp ? this.formatTimestamp(notification.timestamp) : null;
+        const issueTitle = title || 'Pranešimas';
+        const metaMarkup = timeInfo
+          ? `<span class="notification-row__issue-meta ${applyFontSizeClasses('text-sm font-medium', level)}"><time datetime="${escapeHtml(timeInfo.iso)}">${escapeHtml(timeInfo.absolute)}</time><span class="notification-row__meta-separator" aria-hidden="true">•</span><span>${escapeHtml(timeInfo.relative)}</span></span>`
+          : '';
         return `
-          <div class="flex items-center justify-between gap-2 rounded-md px-2 py-1 ${badgeClass}">
-            <span class="${applyFontSizeClasses('text-xs font-semibold', level)}">${message}</span>
-            <span class="${applyFontSizeClasses('text-[10px] font-medium', level)} text-slate-600 dark:text-slate-300">${escapeHtml(relativeTime)}</span>
-          </div>
+          <li class="notification-row__issue" data-variant="${issueVariant}">
+            <span class="notification-row__dot" aria-hidden="true"></span>
+            <div class="notification-row__issue-content">
+              <p class="notification-row__issue-title ${applyFontSizeClasses('text-base font-semibold', level)}">
+                <span>${escapeHtml(issueTitle)}</span>
+                ${metaMarkup}
+              </p>
+              ${body ? `<p class="notification-row__issue-body ${applyFontSizeClasses('text-sm', level)}">${escapeHtml(body)}</p>` : ''}
+            </div>
+          </li>
         `;
       }).join('');
 
       return `
-        <div class="rounded-lg border ${borderClass} bg-white dark:bg-slate-900/40 p-3 transition hover:border-blue-400 hover:shadow-sm cursor-pointer" data-bed-id="${escapeHtml(bed.bedId)}">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center gap-2">
-              <span class="${applyFontSizeClasses('text-sm font-semibold text-slate-900 dark:text-slate-100', level)}">${escapeHtml(`${t(texts.ui.bedLabel)} ${bed.bedId}`)}</span>
-              <span class="rounded-md px-2 py-0.5 ${applyFontSizeClasses('text-xs font-medium', level)} ${occupancyBadge}">${escapeHtml(occupancyText)}</span>
-            </div>
-            <div class="${applyFontSizeClasses('text-[11px] text-slate-500 dark:text-slate-400', level)}">
-              ${escapeHtml(t(texts.ui.lastChecked))}: ${escapeHtml(lastCheckedTime)} • ${escapeHtml(t(texts.ui.checkedBy))}: ${escapeHtml(lastCheckedBy)}
-            </div>
+        <article class="notification-row" data-variant="${cardVariant}" data-bed-id="${escapeHtml(bed.bedId)}">
+          <div class="notification-row__bed">
+            <span class="notification-row__bed-label ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(t(texts.ui.bedLabel))}</span>
+            <span class="notification-row__bed-id ${applyFontSizeClasses('text-2xl font-bold', level)}">${escapeHtml(bed.bedId)}</span>
           </div>
-          <div class="mt-3 grid gap-2 sm:grid-cols-2">
+          <span class="notification-row__occupancy notification-row__occupancy--${occupancyVariant} ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(occupancyText)}</span>
+          <ul class="notification-row__issues">
             ${notifications}
-          </div>
-        </div>
+          </ul>
+        </article>
       `;
     }).join('');
 
     notificationContainer.innerHTML = cards;
   }
 
-  /**
-   * Get CSS class for priority level
-   */
-  getPriorityClass(priority) {
+  getNotificationVariant(priority) {
     if (priority <= PRIORITY_LEVELS.MESSY_BED) {
-      return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200';
+      return 'critical';
     }
     if (priority <= PRIORITY_LEVELS.MISSING_EQUIPMENT) {
-      return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100';
+      return 'warning';
     }
     if (priority <= PRIORITY_LEVELS.OTHER_PROBLEM) {
-      return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-100';
+      return 'caution';
     }
     if (priority <= PRIORITY_LEVELS.RECENTLY_FREED) {
-      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100';
+      return 'info';
     }
-    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-100';
+    return 'neutral';
   }
 
-  getCardBorderClass(priority) {
-    if (priority <= PRIORITY_LEVELS.MESSY_BED) {
-      return 'border-red-300 dark:border-red-500/70';
+  parseNotificationMessage(message) {
+    const raw = typeof message === 'string' ? message.trim() : '';
+    if (!raw) {
+      return { title: '', body: '' };
     }
-    if (priority <= PRIORITY_LEVELS.MISSING_EQUIPMENT) {
-      return 'border-amber-300 dark:border-amber-500/70';
+    const separatorIndex = raw.indexOf(':');
+    if (separatorIndex === -1) {
+      return { title: raw, body: '' };
     }
-    if (priority <= PRIORITY_LEVELS.OTHER_PROBLEM) {
-      return 'border-orange-300 dark:border-orange-500/70';
-    }
-    if (priority <= PRIORITY_LEVELS.RECENTLY_FREED) {
-      return 'border-emerald-300 dark:border-emerald-500/70';
-    }
-    return 'border-blue-300 dark:border-blue-500/70';
+    const title = raw.slice(0, separatorIndex).trim();
+    const body = raw.slice(separatorIndex + 1).trim();
+    return { title, body };
   }
 
   /**
    * Format timestamp for display
    */
-  formatTime(timestamp) {
+  formatTimestamp(timestamp) {
+    const time = timestamp instanceof Date ? timestamp : new Date(timestamp);
+    if (Number.isNaN(time.getTime())) {
+      return null;
+    }
+
+    return {
+      absolute: time.toLocaleTimeString('lt-LT', { hour: '2-digit', minute: '2-digit' }),
+      relative: this.formatRelativeTime(time),
+      iso: time.toISOString(),
+    };
+  }
+
+  /**
+   * Create relative time label in Lithuanian
+   */
+  formatRelativeTime(time) {
     const now = new Date();
-    const time = new Date(timestamp);
-    const diffMs = now - time;
+    const diffMs = now.getTime() - time.getTime();
+
+    if (diffMs < 0) {
+      return 'Neseniai';
+    }
+
     const diffMins = Math.floor(diffMs / (1000 * 60));
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-    
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
     if (diffMins < 1) {
       return 'Dabar';
-    } else if (diffMins < 60) {
-      return `Prieš ${diffMins} min`;
-    } else if (diffHours < 24) {
-      return `Prieš ${diffHours} val`;
-    } else {
-      return time.toLocaleDateString('lt-LT');
     }
+
+    if (diffMins < 60) {
+      return `Prieš ${diffMins} min`;
+    }
+
+    if (diffHours < 24) {
+      return `Prieš ${diffHours} val`;
+    }
+
+    if (diffDays < 7) {
+      return `Prieš ${diffDays} d.`;
+    }
+
+    return time.toLocaleDateString('lt-LT');
   }
 
   /**

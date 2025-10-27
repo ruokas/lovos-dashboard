@@ -784,49 +784,114 @@ export class BedManagementApp {
     loadingIndicator?.classList.remove('hidden');
 
     try {
-      const [snapshot, dailyMetrics] = await Promise.all([
-        this.reportingService.fetchKpiSnapshot(),
-        this.reportingService.fetchDailyMetrics({ limit: 1 }),
-      ]);
+      const snapshot = await this.reportingService.fetchKpiSnapshot();
 
       const totals = snapshot?.totals ?? {};
-      const notifications = snapshot?.notifications ?? { total: 0, high: 0, medium: 0, low: 0 };
-      const todayMetrics = dailyMetrics?.data?.[0] ?? null;
-      const avgMinutes = todayMetrics?.avgMinutesBetweenStatusAndOccupancy;
-      const avgText = avgMinutes === null || avgMinutes === undefined
-        ? '–'
-        : `${Math.round(avgMinutes)} min`;
+      const formatValue = (value) => {
+        if (value === null || value === undefined) return '0';
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric.toLocaleString('lt-LT') : '0';
+      };
+      const toFiniteNumber = (value) => {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric : 0;
+      };
 
-      kpiContainer.innerHTML = `
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">Sutvarkytos lovos</h3>
-          <div class="kpi-value bg-emerald-100 text-emerald-800">${totals.cleanBeds ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Iš viso: ${totals.totalBeds ?? 0}</p>
-        </div>
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">Reikia dėmesio</h3>
-          <div class="kpi-value bg-yellow-100 text-yellow-800">${totals.attentionBeds ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Problemos: ${(totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0)}</p>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Pranešimai: ${notifications.total ?? 0}</p>
-        </div>
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">Užimtos lovos</h3>
-          <div class="kpi-value bg-rose-100 text-rose-800">${totals.occupiedBeds ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Laisvos: ${totals.freeBeds ?? 0}</p>
-        </div>
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">SLA pažeidimai (24h)</h3>
-          <div class="kpi-value ${todayMetrics?.slaBreaches ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}">${todayMetrics?.slaBreaches ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Vid. reakcija: ${avgText}</p>
-        </div>
-      `;
+      const totalsForAttention = (totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0);
+      const totalBeds = toFiniteNumber(totals.totalBeds);
+      const occupiedBeds = toFiniteNumber(totals.occupiedBeds);
 
-      if (snapshot?.source === 'supabase' && dailyMetrics?.source === 'supabase') {
+      const resolveProgress = (value, total, direction = 'positive') => {
+        const KPI_COLORS = {
+          good: '#22c55e',
+          caution: '#facc15',
+          bad: '#ef4444',
+          neutral: '#94a3b8',
+        };
+
+        const numericValue = toFiniteNumber(value);
+        const numericTotal = toFiniteNumber(total);
+
+        if (numericTotal <= 0) {
+          return { percent: 0, color: KPI_COLORS.neutral };
+        }
+
+        const ratio = Math.min(Math.max(numericValue / numericTotal, 0), 1);
+        const thresholds = { low: 0.33, high: 0.66 };
+
+        let colorKey;
+        if (direction === 'positive') {
+          if (ratio >= thresholds.high) {
+            colorKey = 'good';
+          } else if (ratio >= thresholds.low) {
+            colorKey = 'caution';
+          } else {
+            colorKey = 'bad';
+          }
+        } else {
+          if (ratio <= thresholds.low) {
+            colorKey = 'good';
+          } else if (ratio <= thresholds.high) {
+            colorKey = 'caution';
+          } else {
+            colorKey = 'bad';
+          }
+        }
+
+        return { percent: Math.round(ratio * 100), color: KPI_COLORS[colorKey] };
+      };
+
+      const cards = [
+        {
+          label: 'Sutvarkytos',
+          value: totals.cleanBeds,
+          variant: 'clean',
+          total: totalBeds,
+          direction: 'positive',
+        },
+        {
+          label: 'Reikia sutvarkyti',
+          value: totals.attentionBeds ?? totalsForAttention,
+          variant: 'attention',
+          total: totalBeds,
+          direction: 'negative',
+        },
+        {
+          label: 'Užimtos',
+          value: totals.occupiedBeds,
+          variant: 'occupied',
+          total: totalBeds,
+          direction: 'negative',
+        },
+        {
+          label: 'Reikia tikrinti',
+          value: totals.bedsNeedingCheck ?? 0,
+          variant: 'check',
+          total: occupiedBeds > 0 ? occupiedBeds : totalBeds,
+          direction: 'negative',
+        },
+      ];
+
+      kpiContainer.innerHTML = cards
+        .map((card) => {
+          const { percent, color } = resolveProgress(card.value, card.total, card.direction);
+          const cardValue = formatValue(card.value);
+          const progressText = Number.isFinite(percent) ? `${percent}%` : '0%';
+          return `
+            <article class="kpi-card" data-variant="${card.variant}" style="--kpi-progress:${percent}%; --kpi-accent:${color};" aria-label="${escapeHtml(`${card.label}: ${cardValue} (${progressText})`)}">
+              <span class="kpi-card__label">${escapeHtml(card.label)}</span>
+              <span class="kpi-card__value">${cardValue}</span>
+            </article>
+          `;
+        })
+        .join('');
+
+      if (snapshot?.source === 'supabase') {
         const generatedAt = snapshot?.generatedAt ? new Date(snapshot.generatedAt).toLocaleString('lt-LT') : '';
         this.setReportingNotice(generatedAt ? `Supabase KPI atnaujinta ${generatedAt}.` : 'Supabase KPI atnaujinta.', 'success');
-      } else if (snapshot?.error || dailyMetrics?.error) {
+      } else if (snapshot?.error) {
         this.setReportingNotice('Supabase duomenys nepasiekiami – rodome vietinius KPI.', 'warning');
-      } else if (snapshot?.source !== 'supabase' || dailyMetrics?.source !== 'supabase') {
+      } else if (snapshot && snapshot?.source !== 'supabase') {
         this.setReportingNotice('Supabase nepasiekiamas – rodomi vietiniai KPI duomenys.', 'warning');
       }
     } catch (error) {
