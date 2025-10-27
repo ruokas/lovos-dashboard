@@ -242,82 +242,81 @@ export class NotificationManager {
 
     const cards = bedsWithNotifications.map((bed) => {
       const highestPriority = bed.notifications[0];
-      const borderClass = this.getCardBorderClass(highestPriority.priority);
-      const occupancyBadge = bed.occupancyStatus === 'occupied'
-        ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-200'
-        : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100';
-      const occupancyText = bed.occupancyStatus === 'occupied' ? '🔴 Užimta' : '🟢 Laisva';
+      const cardVariant = this.getNotificationVariant(highestPriority.priority);
+      const occupancyVariant = bed.occupancyStatus === 'occupied' ? 'busy' : 'free';
+      const occupancyText = bed.occupancyStatus === 'occupied' ? 'Užimta' : 'Laisva';
       const lastCheckedTime = bed.lastCheckedTime instanceof Date && !Number.isNaN(bed.lastCheckedTime)
         ? bed.lastCheckedTime.toLocaleString('lt-LT')
         : t(texts.ui.noData);
       const lastCheckedBy = bed.lastCheckedBy ? bed.lastCheckedBy : t(texts.ui.unknownUser);
 
       const notifications = bed.notifications.map((notification) => {
-        const badgeClass = this.getPriorityClass(notification.priority);
-        const message = escapeHtml(notification.message ?? '');
-        const relativeTime = notification.timestamp ? this.formatTime(notification.timestamp) : '';
+        const issueVariant = this.getNotificationVariant(notification.priority);
+        const { title, body } = this.parseNotificationMessage(notification.message);
+        const relativeTime = notification.timestamp ? this.formatTime(notification.timestamp) : '–';
+        const issueTitle = title || 'Pranešimas';
         return `
-          <div class="flex items-center justify-between gap-2 rounded-md px-2 py-1 ${badgeClass}">
-            <span class="${applyFontSizeClasses('text-xs font-semibold', level)}">${message}</span>
-            <span class="${applyFontSizeClasses('text-[10px] font-medium', level)} text-slate-600 dark:text-slate-300">${escapeHtml(relativeTime)}</span>
-          </div>
+          <li class="notification-row__issue" data-variant="${issueVariant}">
+            <span class="notification-row__dot" aria-hidden="true"></span>
+            <div class="notification-row__issue-content">
+              <p class="notification-row__issue-title ${applyFontSizeClasses('text-sm font-medium', level)}">${escapeHtml(issueTitle)}</p>
+              <div class="notification-row__issue-meta ${applyFontSizeClasses('text-xs', level)}">${escapeHtml(relativeTime)}</div>
+              ${body ? `<p class="notification-row__issue-body ${applyFontSizeClasses('text-xs', level)}">${escapeHtml(body)}</p>` : ''}
+            </div>
+          </li>
         `;
       }).join('');
 
+      const metaText = `${t(texts.ui.lastChecked)}: ${lastCheckedTime} • ${t(texts.ui.checkedBy)}: ${lastCheckedBy}`;
+
       return `
-        <div class="rounded-lg border ${borderClass} bg-white dark:bg-slate-900/40 p-3 transition hover:border-blue-400 hover:shadow-sm cursor-pointer" data-bed-id="${escapeHtml(bed.bedId)}">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center gap-2">
-              <span class="${applyFontSizeClasses('text-sm font-semibold text-slate-900 dark:text-slate-100', level)}">${escapeHtml(`${t(texts.ui.bedLabel)} ${bed.bedId}`)}</span>
-              <span class="rounded-md px-2 py-0.5 ${applyFontSizeClasses('text-xs font-medium', level)} ${occupancyBadge}">${escapeHtml(occupancyText)}</span>
+        <article class="notification-row" data-variant="${cardVariant}" data-bed-id="${escapeHtml(bed.bedId)}">
+          <header class="notification-row__header">
+            <div class="notification-row__bed">
+              <span class="notification-row__bed-label ${applyFontSizeClasses('text-xs font-semibold', level)}">${escapeHtml(t(texts.ui.bedLabel))}</span>
+              <span class="notification-row__bed-id ${applyFontSizeClasses('text-xl font-bold', level)}">${escapeHtml(bed.bedId)}</span>
             </div>
-            <div class="${applyFontSizeClasses('text-[11px] text-slate-500 dark:text-slate-400', level)}">
-              ${escapeHtml(t(texts.ui.lastChecked))}: ${escapeHtml(lastCheckedTime)} • ${escapeHtml(t(texts.ui.checkedBy))}: ${escapeHtml(lastCheckedBy)}
-            </div>
-          </div>
-          <div class="mt-3 grid gap-2 sm:grid-cols-2">
+            <span class="notification-row__occupancy notification-row__occupancy--${occupancyVariant} ${applyFontSizeClasses('text-xs font-semibold', level)}">${escapeHtml(occupancyText)}</span>
+          </header>
+          <div class="notification-row__meta ${applyFontSizeClasses('text-xs', level)}">${escapeHtml(metaText)}</div>
+          <ul class="notification-row__issues">
             ${notifications}
-          </div>
-        </div>
+          </ul>
+        </article>
       `;
     }).join('');
 
     notificationContainer.innerHTML = cards;
   }
 
-  /**
-   * Get CSS class for priority level
-   */
-  getPriorityClass(priority) {
+  getNotificationVariant(priority) {
     if (priority <= PRIORITY_LEVELS.MESSY_BED) {
-      return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-200';
+      return 'critical';
     }
     if (priority <= PRIORITY_LEVELS.MISSING_EQUIPMENT) {
-      return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-100';
+      return 'warning';
     }
     if (priority <= PRIORITY_LEVELS.OTHER_PROBLEM) {
-      return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-100';
+      return 'caution';
     }
     if (priority <= PRIORITY_LEVELS.RECENTLY_FREED) {
-      return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-100';
+      return 'info';
     }
-    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-100';
+    return 'neutral';
   }
 
-  getCardBorderClass(priority) {
-    if (priority <= PRIORITY_LEVELS.MESSY_BED) {
-      return 'border-red-300 dark:border-red-500/70';
+  parseNotificationMessage(message) {
+    const raw = typeof message === 'string' ? message.trim() : '';
+    if (!raw) {
+      return { title: '', body: '' };
     }
-    if (priority <= PRIORITY_LEVELS.MISSING_EQUIPMENT) {
-      return 'border-amber-300 dark:border-amber-500/70';
+    const separatorIndex = raw.indexOf(':');
+    if (separatorIndex === -1) {
+      return { title: raw, body: '' };
     }
-    if (priority <= PRIORITY_LEVELS.OTHER_PROBLEM) {
-      return 'border-orange-300 dark:border-orange-500/70';
-    }
-    if (priority <= PRIORITY_LEVELS.RECENTLY_FREED) {
-      return 'border-emerald-300 dark:border-emerald-500/70';
-    }
-    return 'border-blue-300 dark:border-blue-500/70';
+    const title = raw.slice(0, separatorIndex).trim();
+    const body = raw.slice(separatorIndex + 1).trim();
+    return { title, body };
   }
 
   /**

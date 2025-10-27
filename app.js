@@ -796,29 +796,70 @@ export class BedManagementApp {
       const avgText = avgMinutes === null || avgMinutes === undefined
         ? '–'
         : `${Math.round(avgMinutes)} min`;
+      const formatValue = (value) => {
+        if (value === null || value === undefined) return '0';
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? numeric.toLocaleString('lt-LT') : '0';
+      };
+      const problemCount = (totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0);
 
       kpiContainer.innerHTML = `
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">Sutvarkytos lovos</h3>
-          <div class="kpi-value bg-emerald-100 text-emerald-800">${totals.cleanBeds ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Iš viso: ${totals.totalBeds ?? 0}</p>
-        </div>
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">Reikia dėmesio</h3>
-          <div class="kpi-value bg-yellow-100 text-yellow-800">${totals.attentionBeds ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Problemos: ${(totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0)}</p>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Pranešimai: ${notifications.total ?? 0}</p>
-        </div>
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">Užimtos lovos</h3>
-          <div class="kpi-value bg-rose-100 text-rose-800">${totals.occupiedBeds ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Laisvos: ${totals.freeBeds ?? 0}</p>
-        </div>
-        <div class="card kpi-card bg-white dark:bg-slate-800">
-          <h3 class="kpi-title">SLA pažeidimai (24h)</h3>
-          <div class="kpi-value ${todayMetrics?.slaBreaches ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}">${todayMetrics?.slaBreaches ?? 0}</div>
-          <p class="kpi-subtitle text-xs text-slate-500 dark:text-slate-400">Vid. reakcija: ${avgText}</p>
-        </div>
+        <article class="kpi-card" data-variant="clean">
+          <header class="kpi-card__header">
+            <span class="kpi-card__label">Sutvarkytos lovos</span>
+            <span class="kpi-card__badge">Iš viso ${formatValue(totals.totalBeds)}</span>
+          </header>
+          <p class="kpi-card__value">${formatValue(totals.cleanBeds)}</p>
+          <dl class="kpi-card__stats">
+            <div class="kpi-card__stat">
+              <dt class="kpi-card__stat-label">Dabartinis tikslas</dt>
+              <dd class="kpi-card__stat-value">${formatValue(totals.cleanTarget ?? totals.cleanBeds ?? 0)}</dd>
+            </div>
+          </dl>
+        </article>
+        <article class="kpi-card" data-variant="attention">
+          <header class="kpi-card__header">
+            <span class="kpi-card__label">Reikia dėmesio</span>
+            <span class="kpi-card__badge">Pranešimai ${formatValue(notifications.total)}</span>
+          </header>
+          <p class="kpi-card__value">${formatValue(totals.attentionBeds)}</p>
+          <dl class="kpi-card__stats">
+            <div class="kpi-card__stat">
+              <dt class="kpi-card__stat-label">Problemos</dt>
+              <dd class="kpi-card__stat-value">${formatValue(problemCount)}</dd>
+            </div>
+            <div class="kpi-card__stat">
+              <dt class="kpi-card__stat-label">Kritinės</dt>
+              <dd class="kpi-card__stat-value">${formatValue(notifications.high)}</dd>
+            </div>
+          </dl>
+        </article>
+        <article class="kpi-card" data-variant="occupied">
+          <header class="kpi-card__header">
+            <span class="kpi-card__label">Užimtos lovos</span>
+            <span class="kpi-card__badge">Užimtumas ${formatValue(totals.totalBeds ? Math.round((totals.occupiedBeds ?? 0) / Math.max(totals.totalBeds, 1) * 100) : 0)}%</span>
+          </header>
+          <p class="kpi-card__value">${formatValue(totals.occupiedBeds)}</p>
+          <dl class="kpi-card__stats">
+            <div class="kpi-card__stat">
+              <dt class="kpi-card__stat-label">Laisvos</dt>
+              <dd class="kpi-card__stat-value">${formatValue(totals.freeBeds)}</dd>
+            </div>
+          </dl>
+        </article>
+        <article class="kpi-card" data-variant="sla">
+          <header class="kpi-card__header">
+            <span class="kpi-card__label">SLA pažeidimai</span>
+            <span class="kpi-card__badge kpi-card__badge--chip">24h</span>
+          </header>
+          <p class="kpi-card__value">${formatValue(todayMetrics?.slaBreaches ?? 0)}</p>
+          <dl class="kpi-card__stats">
+            <div class="kpi-card__stat">
+              <dt class="kpi-card__stat-label">Vid. reakcija</dt>
+              <dd class="kpi-card__stat-value">${avgText}</dd>
+            </div>
+          </dl>
+        </article>
       `;
 
       if (snapshot?.source === 'supabase' && dailyMetrics?.source === 'supabase') {
