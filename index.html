@@ -137,71 +137,67 @@
       </div>
     </header>
 
-    <main id="viewDashboard" class="mt-4 space-y-3" aria-hidden="false">
-      <div id="reportingNotice" class="hidden rounded-md border px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-200"></div>
+    <div id="reportingNotice" class="hidden mb-2 rounded-md border px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-200"></div>
 
-      <!-- Error display -->
-      <div id="error" class="hidden p-3 bg-red-100 border border-red-400 text-red-800 rounded-md"></div>
+    <!-- Error display -->
+    <div id="error" class="hidden mb-4 p-3 bg-red-100 border border-red-400 text-red-800 rounded-md"></div>
 
-      <!-- KPI cards -->
-      <section id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-2"></section>
+    <!-- KPI cards -->
+    <section id="kpis" class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2"></section>
 
-      <!-- Notifications -->
-      <div id="alerts" class="hidden rounded-md border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 shadow-sm dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-100" role="status" aria-live="assertive"></div>
+    <!-- Notifications -->
+    <div id="alerts" class="hidden mb-4 rounded-md border border-amber-400 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900 shadow-sm dark:border-amber-500 dark:bg-amber-900/40 dark:text-amber-100" role="status" aria-live="assertive"></div>
 
-      <!-- Notification summary -->
-      <div class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100">
-        <div class="p-4">
-          <h2 class="text-lg font-semibold mb-3">Pranešimai</h2>
-          <div id="notificationSummary" class="space-y-2"></div>
-        </div>
+    <!-- Notification summary -->
+    <div class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100 mb-2">
+      <div class="p-4">
+        <h2 class="text-lg font-semibold mb-3">Pranešimai</h2>
+        <div id="notificationSummary" class="space-y-2"></div>
       </div>
+    </div>
 
-      <!-- Bed list -->
-      <div id="bedListSection" class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100" style="display: none;">
-        <div class="p-4">
-          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-2">
-            <h2 class="text-lg font-semibold">Lovų sąrašas</h2>
-            <div class="flex flex-col sm:flex-row gap-3">
-              <div class="relative">
-                <input type="text" id="bedSearch" placeholder="Ieškoti lovos..."
-                       class="w-full sm:w-64 px-4 py-2 pl-10 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
-                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                  <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
-                  </svg>
-                </div>
-              </div>
-              <div class="flex gap-2">
-                <button id="viewToggle" class="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
-                  </svg>
-                </button>
+    <!-- Bed list -->
+    <div id="bedListSection" class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100 mb-2" style="display: none;">
+      <div class="p-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-2">
+          <h2 class="text-lg font-semibold">Lovų sąrašas</h2>
+          <div class="flex flex-col sm:flex-row gap-3">
+            <div class="relative">
+              <input type="text" id="bedSearch" placeholder="Ieškoti lovos..."
+                     class="w-full sm:w-64 px-4 py-2 pl-10 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
               </div>
             </div>
-          </div>
-          <div id="bedGrid" class="space-y-2 custom-scrollbar max-h-48 overflow-y-auto"></div>
-        </div>
-      </div>
-    </main>
-
-    <section id="auditSection" class="hidden mt-4" aria-hidden="true">
-      <div class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100">
-        <div class="p-4">
-          <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
-            <h2 class="text-lg font-semibold">Veiksmų žurnalas</h2>
             <div class="flex gap-2">
-              <button type="button" class="px-3 py-2 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100" data-report-export="json">
-                JSON eksportas
-              </button>
-              <button type="button" class="px-3 py-2 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100" data-report-export="csv">
-                CSV eksportas
+              <button id="viewToggle" class="px-3 py-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path>
+                </svg>
               </button>
             </div>
           </div>
-          <div id="auditContent" class="space-y-2 text-sm" aria-live="polite"></div>
         </div>
+        <div id="bedGrid" class="space-y-2 custom-scrollbar max-h-48 overflow-y-auto"></div>
+      </div>
+    </div>
+
+    <section id="auditSection" class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100 mb-2 hidden" aria-hidden="true">
+      <div class="p-4">
+        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
+          <h2 class="text-lg font-semibold">Veiksmų žurnalas</h2>
+          <div class="flex gap-2">
+            <button type="button" class="px-3 py-2 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100" data-report-export="json">
+              JSON eksportas
+            </button>
+            <button type="button" class="px-3 py-2 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100" data-report-export="csv">
+              CSV eksportas
+            </button>
+          </div>
+        </div>
+        <div id="auditContent" class="space-y-2 text-sm" aria-live="polite"></div>
       </div>
     </section>
 
