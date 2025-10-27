@@ -33,6 +33,7 @@ let allRecords = [];
 let searchTimer = null;
 let reportingService = null;
 let logger = null;
+let hasBootstrapped = false;
 
 function toggleLoader(visible) {
   if (!elements.loader) return;
@@ -372,7 +373,12 @@ function initialiseServices() {
   }
 }
 
-function init() {
+export function initAuditPage() {
+  if (hasBootstrapped) {
+    return;
+  }
+
+  hasBootstrapped = true;
   setupEventListeners();
   initialiseServices();
   if (!reportingService) {
@@ -380,5 +386,3 @@ function init() {
   }
   void loadAuditData();
 }
-
-document.addEventListener('DOMContentLoaded', init);

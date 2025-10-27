@@ -146,6 +146,25 @@
       </main>
     </div>
 
-    <script type="module" src="./reports/auditPage.js"></script>
+    <script type="module">
+      async function bootAuditLog() {
+        try {
+          const module = await import('./reports/auditPage.js');
+          if (typeof module.initAuditPage === 'function') {
+            module.initAuditPage();
+          }
+        } catch (error) {
+          console.error('Nepavyko įkelti veiksmų žurnalo modulio.', error);
+          const status = document.getElementById('auditStatus');
+          if (status) {
+            status.textContent = 'Nepavyko įkelti veiksmų žurnalo. Patikrinkite interneto ryšį ir bandykite dar kartą.';
+            status.dataset.tone = 'error';
+            status.classList.remove('hidden');
+          }
+        }
+      }
+
+      bootAuditLog();
+    </script>
   </body>
 </html>
