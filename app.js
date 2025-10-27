@@ -784,90 +784,36 @@ export class BedManagementApp {
     loadingIndicator?.classList.remove('hidden');
 
     try {
-      const [snapshot, dailyMetrics] = await Promise.all([
-        this.reportingService.fetchKpiSnapshot(),
-        this.reportingService.fetchDailyMetrics({ limit: 1 }),
-      ]);
+      const snapshot = await this.reportingService.fetchKpiSnapshot();
 
       const totals = snapshot?.totals ?? {};
-      const notifications = snapshot?.notifications ?? { total: 0, high: 0, medium: 0, low: 0 };
-      const todayMetrics = dailyMetrics?.data?.[0] ?? null;
-      const avgMinutes = todayMetrics?.avgMinutesBetweenStatusAndOccupancy;
-      const avgText = avgMinutes === null || avgMinutes === undefined
-        ? '–'
-        : `${Math.round(avgMinutes)} min`;
       const formatValue = (value) => {
         if (value === null || value === undefined) return '0';
         const numeric = Number(value);
         return Number.isFinite(numeric) ? numeric.toLocaleString('lt-LT') : '0';
       };
-      const problemCount = (totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0);
+      const cards = [
+        { label: 'Sutvarkytos', value: totals.cleanBeds, variant: 'clean' },
+        { label: 'Reikia sutvarkyti', value: totals.attentionBeds ?? ((totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0)), variant: 'attention' },
+        { label: 'Užimtos', value: totals.occupiedBeds, variant: 'occupied' },
+        { label: 'Reikia tikrinti', value: totals.bedsNeedingCheck ?? 0, variant: 'check' },
+      ];
 
-      kpiContainer.innerHTML = `
-        <article class="kpi-card" data-variant="clean">
-          <header class="kpi-card__header">
-            <span class="kpi-card__label">Sutvarkytos lovos</span>
-            <span class="kpi-card__badge">Iš viso ${formatValue(totals.totalBeds)}</span>
-          </header>
-          <p class="kpi-card__value">${formatValue(totals.cleanBeds)}</p>
-          <dl class="kpi-card__stats">
-            <div class="kpi-card__stat">
-              <dt class="kpi-card__stat-label">Dabartinis tikslas</dt>
-              <dd class="kpi-card__stat-value">${formatValue(totals.cleanTarget ?? totals.cleanBeds ?? 0)}</dd>
-            </div>
-          </dl>
-        </article>
-        <article class="kpi-card" data-variant="attention">
-          <header class="kpi-card__header">
-            <span class="kpi-card__label">Reikia dėmesio</span>
-            <span class="kpi-card__badge">Pranešimai ${formatValue(notifications.total)}</span>
-          </header>
-          <p class="kpi-card__value">${formatValue(totals.attentionBeds)}</p>
-          <dl class="kpi-card__stats">
-            <div class="kpi-card__stat">
-              <dt class="kpi-card__stat-label">Problemos</dt>
-              <dd class="kpi-card__stat-value">${formatValue(problemCount)}</dd>
-            </div>
-            <div class="kpi-card__stat">
-              <dt class="kpi-card__stat-label">Kritinės</dt>
-              <dd class="kpi-card__stat-value">${formatValue(notifications.high)}</dd>
-            </div>
-          </dl>
-        </article>
-        <article class="kpi-card" data-variant="occupied">
-          <header class="kpi-card__header">
-            <span class="kpi-card__label">Užimtos lovos</span>
-            <span class="kpi-card__badge">Užimtumas ${formatValue(totals.totalBeds ? Math.round((totals.occupiedBeds ?? 0) / Math.max(totals.totalBeds, 1) * 100) : 0)}%</span>
-          </header>
-          <p class="kpi-card__value">${formatValue(totals.occupiedBeds)}</p>
-          <dl class="kpi-card__stats">
-            <div class="kpi-card__stat">
-              <dt class="kpi-card__stat-label">Laisvos</dt>
-              <dd class="kpi-card__stat-value">${formatValue(totals.freeBeds)}</dd>
-            </div>
-          </dl>
-        </article>
-        <article class="kpi-card" data-variant="sla">
-          <header class="kpi-card__header">
-            <span class="kpi-card__label">SLA pažeidimai</span>
-            <span class="kpi-card__badge kpi-card__badge--chip">24h</span>
-          </header>
-          <p class="kpi-card__value">${formatValue(todayMetrics?.slaBreaches ?? 0)}</p>
-          <dl class="kpi-card__stats">
-            <div class="kpi-card__stat">
-              <dt class="kpi-card__stat-label">Vid. reakcija</dt>
-              <dd class="kpi-card__stat-value">${avgText}</dd>
-            </div>
-          </dl>
-        </article>
-      `;
+      kpiContainer.innerHTML = cards
+        .map((card) => `
+          <article class="kpi-card" data-variant="${card.variant}">
+            <h3 class="kpi-card__label">${card.label}</h3>
+            <p class="kpi-card__value">${formatValue(card.value)}</p>
+          </article>
+        `)
+        .join('');
 
-      if (snapshot?.source === 'supabase' && dailyMetrics?.source === 'supabase') {
+      if (snapshot?.source === 'supabase') {
         const generatedAt = snapshot?.generatedAt ? new Date(snapshot.generatedAt).toLocaleString('lt-LT') : '';
         this.setReportingNotice(generatedAt ? `Supabase KPI atnaujinta ${generatedAt}.` : 'Supabase KPI atnaujinta.', 'success');
-      } else if (snapshot?.error || dailyMetrics?.error) {
+      } else if (snapshot?.error) {
         this.setReportingNotice('Supabase duomenys nepasiekiami – rodome vietinius KPI.', 'warning');
-      } else if (snapshot?.source !== 'supabase' || dailyMetrics?.source !== 'supabase') {
+      } else if (snapshot && snapshot?.source !== 'supabase') {
         this.setReportingNotice('Supabase nepasiekiamas – rodomi vietiniai KPI duomenys.', 'warning');
       }
     } catch (error) {

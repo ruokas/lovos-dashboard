@@ -237,15 +237,14 @@
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
-  padding: var(--space-4);
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-4);
   border-radius: var(--radius-lg);
   border: 1px solid var(--slate-200);
   background: #ffffff;
   box-shadow: var(--shadow-sm);
   transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  min-height: 9rem;
-  overflow: hidden;
+  min-height: 8rem;
 }
 
 .kpi-card::before {
@@ -259,73 +258,21 @@
   background: var(--kpi-accent, #0ea5e9);
 }
 
-.kpi-card__header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
 .kpi-card__label {
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
+  margin: 0;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 700;
   color: #1e293b;
 }
 
-.kpi-card__badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: 0.1rem 0.65rem;
-  border-radius: var(--radius-full);
-  background: #f1f5f9;
-  color: #334155;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.kpi-card__badge--chip {
-  background: rgba(15, 23, 42, 0.08);
-  color: #0f172a;
-}
-
 .kpi-card__value {
   margin: 0;
-  font-size: clamp(2rem, 4vw + 0.5rem, 2.75rem);
+  font-size: clamp(2.2rem, 4vw + 0.5rem, 2.9rem);
   font-weight: 700;
+  line-height: 1;
   color: #0f172a;
-}
-
-.kpi-card__stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: var(--space-2);
-  margin: 0;
-}
-
-.kpi-card__stat {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.kpi-card__stat-label {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #64748b;
-  margin: 0;
-}
-
-.kpi-card__stat-value {
-  font-size: 1rem;
-  font-weight: 600;
-  color: #0f172a;
-  margin: 0;
 }
 
 .kpi-card[data-variant="clean"] {
@@ -340,8 +287,8 @@
   --kpi-accent: #4338ca;
 }
 
-.kpi-card[data-variant="sla"] {
-  --kpi-accent: #b91c1c;
+.kpi-card[data-variant="check"] {
+  --kpi-accent: #be123c;
 }
 
 .kpi-card:hover {
@@ -356,18 +303,8 @@
 }
 
 .dark .kpi-card__label,
-.dark .kpi-card__value,
-.dark .kpi-card__stat-value {
-  color: #e2e8f0;
-}
-
-.dark .kpi-card__badge {
-  background: rgba(148, 163, 184, 0.2);
-  color: #e2e8f0;
-}
-
-.dark .kpi-card__stat-label {
-  color: #cbd5f5;
+.dark .kpi-card__value {
+  color: #f8fafc;
 }
 
 @media (max-width: 768px) {
