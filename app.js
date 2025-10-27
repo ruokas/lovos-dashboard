@@ -43,6 +43,7 @@ export class BedManagementApp {
     this.isBedListVisible = this.readBedListVisibility();
     this.currentSearchTerm = '';
     this.searchDebounceTimer = null;
+    this.activeView = 'dashboard';
     this.persistenceManager = new DataPersistenceManager({ document: typeof document !== 'undefined' ? document : undefined });
     this.notificationManager = new NotificationManager(this.settingsManager, { fontSizeLevel: this.fontSizeLevel });
     const sharedDocument = typeof document !== 'undefined' ? document : undefined;
@@ -508,8 +509,67 @@ export class BedManagementApp {
       });
     });
 
+    const viewButtons = document.querySelectorAll('[data-view-target]');
+    if (viewButtons.length > 0) {
+      viewButtons.forEach((button) => {
+        button.addEventListener('click', () => {
+          const targetView = button.dataset.viewTarget || 'dashboard';
+          this.switchView(targetView);
+        });
+      });
+    }
+
+    this.updateViewVisibility();
+
     // Bed click handlers for quick status updates
     this.setupBedClickHandlers();
+  }
+
+  updateViewVisibility() {
+    const views = {
+      dashboard: typeof document !== 'undefined' ? document.getElementById('viewDashboard') : null,
+      audit: typeof document !== 'undefined' ? document.getElementById('viewAudit') : null,
+    };
+
+    Object.entries(views).forEach(([key, element]) => {
+      if (!element) return;
+      const isActive = key === this.activeView;
+      element.classList.toggle('hidden', !isActive);
+      if (isActive) {
+        element.setAttribute('aria-hidden', 'false');
+      } else {
+        element.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('[data-view-target]').forEach((button) => {
+        const isActive = button.dataset.viewTarget === this.activeView;
+        button.classList.toggle('nav-tab--active', isActive);
+        button.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+        if (isActive) {
+          button.setAttribute('aria-current', 'page');
+        } else {
+          button.removeAttribute('aria-current');
+        }
+      });
+    }
+  }
+
+  switchView(view, { log = true } = {}) {
+    const allowedViews = new Set(['dashboard', 'audit']);
+    const targetView = allowedViews.has(view) ? view : 'dashboard';
+    const previousView = this.activeView;
+    this.activeView = targetView;
+    this.updateViewVisibility();
+
+    if (targetView === 'audit') {
+      void this.renderAuditTrail();
+    }
+
+    if (log && previousView !== targetView) {
+      void this.userInteractionLogger.logInteraction('primary_navigation_click', { view: targetView });
+    }
   }
 
   readViewMode() {
