@@ -245,10 +245,6 @@ export class NotificationManager {
       const cardVariant = this.getNotificationVariant(highestPriority.priority);
       const occupancyVariant = bed.occupancyStatus === 'occupied' ? 'busy' : 'free';
       const occupancyText = bed.occupancyStatus === 'occupied' ? 'Užimta' : 'Laisva';
-      const lastCheckedTime = bed.lastCheckedTime instanceof Date && !Number.isNaN(bed.lastCheckedTime)
-        ? bed.lastCheckedTime.toLocaleString('lt-LT')
-        : t(texts.ui.noData);
-      const lastCheckedBy = bed.lastCheckedBy ? bed.lastCheckedBy : t(texts.ui.unknownUser);
 
       const notifications = bed.notifications.map((notification) => {
         const issueVariant = this.getNotificationVariant(notification.priority);
@@ -259,26 +255,23 @@ export class NotificationManager {
           <li class="notification-row__issue" data-variant="${issueVariant}">
             <span class="notification-row__dot" aria-hidden="true"></span>
             <div class="notification-row__issue-content">
-              <p class="notification-row__issue-title ${applyFontSizeClasses('text-sm font-medium', level)}">${escapeHtml(issueTitle)}</p>
-              <div class="notification-row__issue-meta ${applyFontSizeClasses('text-xs', level)}">${escapeHtml(relativeTime)}</div>
+              <p class="notification-row__issue-title ${applyFontSizeClasses('text-sm font-semibold', level)}">
+                <span>${escapeHtml(issueTitle)}</span>
+                <span class="notification-row__issue-meta ${applyFontSizeClasses('text-xs font-medium', level)}">${escapeHtml(relativeTime)}</span>
+              </p>
               ${body ? `<p class="notification-row__issue-body ${applyFontSizeClasses('text-xs', level)}">${escapeHtml(body)}</p>` : ''}
             </div>
           </li>
         `;
       }).join('');
 
-      const metaText = `${t(texts.ui.lastChecked)}: ${lastCheckedTime} • ${t(texts.ui.checkedBy)}: ${lastCheckedBy}`;
-
       return `
         <article class="notification-row" data-variant="${cardVariant}" data-bed-id="${escapeHtml(bed.bedId)}">
-          <header class="notification-row__header">
-            <div class="notification-row__bed">
-              <span class="notification-row__bed-label ${applyFontSizeClasses('text-xs font-semibold', level)}">${escapeHtml(t(texts.ui.bedLabel))}</span>
-              <span class="notification-row__bed-id ${applyFontSizeClasses('text-xl font-bold', level)}">${escapeHtml(bed.bedId)}</span>
-            </div>
-            <span class="notification-row__occupancy notification-row__occupancy--${occupancyVariant} ${applyFontSizeClasses('text-xs font-semibold', level)}">${escapeHtml(occupancyText)}</span>
-          </header>
-          <div class="notification-row__meta ${applyFontSizeClasses('text-xs', level)}">${escapeHtml(metaText)}</div>
+          <div class="notification-row__bed">
+            <span class="notification-row__bed-label ${applyFontSizeClasses('text-xs font-semibold', level)}">${escapeHtml(t(texts.ui.bedLabel))}</span>
+            <span class="notification-row__bed-id ${applyFontSizeClasses('text-xl font-bold', level)}">${escapeHtml(bed.bedId)}</span>
+          </div>
+          <span class="notification-row__occupancy notification-row__occupancy--${occupancyVariant} ${applyFontSizeClasses('text-xs font-semibold', level)}">${escapeHtml(occupancyText)}</span>
           <ul class="notification-row__issues">
             ${notifications}
           </ul>
