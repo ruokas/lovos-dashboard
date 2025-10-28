@@ -6,6 +6,10 @@ vi.mock('../persistence/syncMetadataService.js', () => ({
   getLastSupabaseUpdate: vi.fn(async () => '2024-01-02T12:00:00.000Z'),
 }));
 
+vi.mock('../persistence/supabaseClient.js', () => ({
+  getSupabaseClient: vi.fn(() => null),
+}));
+
 function createLocalStorageMock() {
   let store = {};
   return {
@@ -336,6 +340,52 @@ describe('DataPersistenceManager with Supabase', () => {
     ).toBe(true);
     expect(
       warnSpy.mock.calls.some(([message]) => message.includes('occupancy_metadata') && message.includes('tęsiama be šios informacijos')),
+    ).toBe(true);
+
+    warnSpy.mockRestore();
+  });
+
+  it('prisitaiko prie schemos be occupancy_created_by stulpelio', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    supabaseMock.__mocks.aggregatedSelect
+      .mockImplementationOnce(async () => ({
+        data: null,
+        error: { message: 'column aggregated_bed_state.occupancy_created_by does not exist' },
+      }))
+      .mockImplementationOnce(async () => ({
+        data: [
+          {
+            bed_id: 'bed-uuid-1',
+            label: 'IT1',
+            status: STATUS_OPTIONS.CLEAN,
+            priority: null,
+            status_notes: null,
+            status_reported_by: 'legacy@example.com',
+            status_created_at: '2024-01-01T08:00:00.000Z',
+            occupancy_state: null,
+            patient_code: null,
+            expected_until: null,
+            occupancy_notes: null,
+            occupancy_created_by: 'legacy@example.com',
+            occupancy_created_at: null,
+          },
+        ],
+        error: null,
+      }));
+
+    const aggregated = await manager.loadAggregatedBedState();
+
+    expect(supabaseMock.__mocks.aggregatedSelect).toHaveBeenCalledTimes(2);
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[0][0]).toContain('occupancy_created_by');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[1][0]).toContain('occupancy_created_by:created_by');
+    expect(aggregated).toHaveLength(1);
+    expect(aggregated[0].occupancyCreatedBy).toBe('legacy@example.com');
+    expect(
+      warnSpy.mock.calls.some(([message]) =>
+        message.includes('aggregated_bed_state view neturi stulpelio occupancy_created_by') &&
+        message.includes('suderinamumo alias'),
+      ),
     ).toBe(true);
 
     warnSpy.mockRestore();

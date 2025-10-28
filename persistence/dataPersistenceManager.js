@@ -249,7 +249,12 @@ export class DataPersistenceManager {
       { key: 'patient_code', select: 'patient_code' },
       { key: 'expected_until', select: 'expected_until' },
       { key: 'occupancy_notes', select: 'occupancy_notes' },
-      { key: 'occupancy_created_by', select: 'occupancy_created_by' },
+      {
+        key: 'occupancy_created_by',
+        select: 'occupancy_created_by',
+        optional: true,
+        fallbacks: ['occupancy_created_by:created_by'],
+      },
       { key: 'occupancy_metadata', select: 'occupancy_metadata', optional: true },
       { key: 'occupancy_created_at', select: 'occupancy_created_at' },
     ];
