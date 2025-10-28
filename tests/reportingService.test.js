@@ -252,6 +252,7 @@ describe('ReportingService', () => {
     expect(handler).toHaveBeenCalledTimes(2);
     expect(audit.source).toBe('supabase');
     expect(audit.downgraded).toBe(true);
+    expect(audit.legacySchema).toBeFalsy();
     expect(audit.data).toHaveLength(1);
     expect(audit.data[0].interactionType).toBe('bed_status_saved');
   });
@@ -283,11 +284,29 @@ describe('ReportingService', () => {
     const service = new ReportingService({ client });
     const audit = await service.fetchInteractionAudit({ limit: 10 });
 
-    expect(handler).toHaveBeenCalledTimes(2);
+    expect(handler).toHaveBeenCalledTimes(3);
     expect(audit.source).toBe('supabase');
     expect(audit.downgraded).toBe(true);
+    expect(audit.legacySchema).toBe(true);
     expect(audit.data[0].interactionType).toBe('bed_status_saved');
     expect(audit.data[0].occurredAt).toBe('2024-08-02T12:00:00Z');
     expect(audit.data[0].payload.status).toBe(STATUS_OPTIONS.MESSY_BED);
+  });
+
+  it('grąžina vietinį atsakymą kai schema neatpažįstama', async () => {
+    const handler = vi.fn(() => ({
+      data: [],
+      error: { code: '42703', message: "column 'totally_new_column' does not exist" },
+    }));
+
+    const client = new FakeSupabaseClient({ interactions: handler });
+    const service = new ReportingService({ client });
+
+    const audit = await service.fetchInteractionAudit({ limit: 3 });
+
+    expect(handler).toHaveBeenCalledTimes(3);
+    expect(audit.source).toBe('local');
+    expect(audit.data).toHaveLength(0);
+    expect(audit.error).toBeTruthy();
   });
 });

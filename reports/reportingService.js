@@ -175,21 +175,31 @@ export class ReportingService {
       return { source: LOCAL_SOURCE, data: [], message: 'Nuotolinė paslauga nepasiekiama' };
     }
 
-    try {
-      const rows = await this.#performInteractionQuery({
-        limit,
-        select: 'id,interaction_type,bed_id,tag_code,performed_by,payload,occurred_at',
-        orderBy: 'occurred_at',
-      });
+    let schemaError = null;
 
-      return { source: SUPABASE_SOURCE, data: this.#normaliseInteractionRows(rows) };
-    } catch (error) {
-      const fallback = await this.#resolveLegacyInteractionQuery({ limit, error });
-      if (fallback) {
-        return fallback;
+    for (const attempt of this.#interactionQueryAttempts(limit)) {
+      try {
+        const rows = await this.#performInteractionQuery(attempt);
+        return {
+          source: SUPABASE_SOURCE,
+          data: this.#normaliseInteractionRows(rows),
+          downgraded: attempt.downgraded ?? false,
+          legacySchema: attempt.legacySchema ?? false,
+        };
+      } catch (error) {
+        if (this.#isSchemaMismatchError(error)) {
+          schemaError = error;
+          continue;
+        }
+        return { source: LOCAL_SOURCE, data: [], error };
       }
-      return { source: LOCAL_SOURCE, data: [], error };
     }
+
+    return {
+      source: LOCAL_SOURCE,
+      data: [],
+      error: schemaError ?? new Error('Nepavyko nuskaityti audito duomenų dėl neatpažintos schemos.'),
+    };
   }
 
   async exportReport(options = {}) {
@@ -250,53 +260,50 @@ export class ReportingService {
     return data ?? [];
   }
 
-  async #resolveLegacyInteractionQuery({ limit, error }) {
-    if (this.#isMissingColumnError(error, 'tag_code')) {
-      try {
-        const rows = await this.#performInteractionQuery({
-          limit,
-          select: 'id,interaction_type,bed_id,performed_by,payload,occurred_at',
-          orderBy: 'occurred_at',
-        });
-        return {
-          source: SUPABASE_SOURCE,
-          data: this.#normaliseInteractionRows(rows),
-          downgraded: true,
-        };
-      } catch (nextError) {
-        return this.#resolveLegacyInteractionQuery({ limit, error: nextError });
-      }
+  #interactionQueryAttempts(limit) {
+    const base = Number.isInteger(limit) && limit > 0 ? limit : null;
+    const attempts = [
+      {
+        select: 'id,interaction_type,bed_id,tag_code,performed_by,payload,occurred_at',
+        orderBy: 'occurred_at',
+      },
+      {
+        select: 'id,interaction_type,bed_id,performed_by,payload,occurred_at',
+        orderBy: 'occurred_at',
+        downgraded: true,
+      },
+      {
+        select: 'id,action,bed_id,performed_by,payload,created_at',
+        orderBy: 'created_at',
+        downgraded: true,
+        legacySchema: true,
+      },
+    ];
+
+    if (base === null) {
+      return attempts;
     }
 
-    if (this.#isMissingColumnError(error, 'interaction_type') || this.#isMissingColumnError(error, 'occurred_at')) {
-      try {
-        const rows = await this.#performInteractionQuery({
-          limit,
-          select: 'id,action,bed_id,performed_by,payload,created_at',
-          orderBy: 'created_at',
-        });
-        return {
-          source: SUPABASE_SOURCE,
-          data: this.#normaliseInteractionRows(rows),
-          downgraded: true,
-        };
-      } catch (legacyError) {
-        return null;
-      }
-    }
-
-    return null;
+    return attempts.map((attempt) => ({ ...attempt, limit: base }));
   }
 
-  #isMissingColumnError(error, columnName) {
+  #isSchemaMismatchError(error) {
     if (!error) {
       return false;
     }
+    const code = String(error.code ?? '').toUpperCase();
+    if (code === '42703' || code === 'PGRST204' || code === 'PGRST116') {
+      return true;
+    }
     const message = String(error.message ?? '').toLowerCase();
-    const needle = String(columnName ?? '').toLowerCase();
-    const code = error.code ?? '';
-    const matchesCode = code === 'PGRST204' || code === '42703';
-    return matchesCode && message.includes(needle);
+    if (!message) {
+      return false;
+    }
+    return (
+      message.includes('does not exist') ||
+      message.includes('unknown column') ||
+      message.includes('column') && message.includes('not found')
+    );
   }
 
   #normaliseInteractionRows(rows) {
