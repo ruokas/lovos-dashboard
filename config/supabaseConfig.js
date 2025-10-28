@@ -11,10 +11,29 @@ const WARNING_MESSAGE = 'Supabase anon raktas skirtas tik testavimui ir vidiniam
  */
 function readFromDocument(doc) {
   if (!doc) return {};
-  const root = doc.querySelector('[data-supabase-url][data-supabase-key]');
-  if (!root) return {};
-  const { supabaseUrl, supabaseKey } = root.dataset;
-  return { url: supabaseUrl, key: supabaseKey };
+
+  const candidates = [
+    doc.querySelector('[data-supabase-url][data-supabase-key]'),
+    doc.documentElement,
+    doc.body,
+  ].filter(Boolean);
+
+  for (const element of candidates) {
+    const dataset = element.dataset ?? {};
+    const url = dataset.supabaseUrl ?? dataset.supabaseurl ?? dataset.supabaseURL;
+    const key = dataset.supabaseKey ?? dataset.supabasekey ?? dataset.supabaseKEY;
+    if (url && key) {
+      return { url: url.trim(), key: key.trim() };
+    }
+  }
+
+  const metaUrl = doc.querySelector('meta[name="supabase-url"], meta[name="supabase_url"]');
+  const metaKey = doc.querySelector('meta[name="supabase-key"], meta[name="supabase_key"]');
+
+  return {
+    url: metaUrl?.getAttribute('content')?.trim(),
+    key: metaKey?.getAttribute('content')?.trim(),
+  };
 }
 
 /**
@@ -43,6 +62,8 @@ function readFromImportMeta() {
  * @param {Document} [doc]
  * @returns {{url: string, key: string}}
  */
+let hasWarned = false;
+
 export function getSupabaseConfig(doc = typeof document !== 'undefined' ? document : undefined) {
   const sources = [readFromDocument(doc), readFromImportMeta(), readFromEnv()];
   const url = sources.map((item) => item.url).find((value) => !!value);
@@ -52,8 +73,9 @@ export function getSupabaseConfig(doc = typeof document !== 'undefined' ? docume
     throw new Error('Supabase URL arba anon raktas nerastas. Patikrinkite `data-*` atributus ar aplinkos kintamuosius.');
   }
 
-  if (typeof console !== 'undefined') {
+  if (typeof console !== 'undefined' && !hasWarned) {
     console.warn(WARNING_MESSAGE);
+    hasWarned = true;
   }
 
   return { url, key };

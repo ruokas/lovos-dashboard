@@ -12,7 +12,10 @@ export function getSupabaseClient(doc) {
     const { url, key } = getSupabaseConfig(doc);
     client = createClient(url, key, {
       auth: {
-        persistSession: false,
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'lovos_dashboard_supabase',
       },
     });
   }

@@ -55,7 +55,12 @@ describe('Supabase config ir klientas', () => {
     expect(first).toBe(second);
     expect(createClient).toHaveBeenCalledTimes(1);
     expect(createClient).toHaveBeenCalledWith('https://test-project.supabase.co', 'anon-key', {
-      auth: { persistSession: false },
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'lovos_dashboard_supabase',
+      },
     });
   });
 
