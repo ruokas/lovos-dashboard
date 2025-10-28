@@ -280,6 +280,63 @@ describe('DataPersistenceManager with Supabase', () => {
     expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[1][0]).toContain('status_reported_by:reported_by');
     expect(aggregated).toHaveLength(1);
     expect(aggregated[0].statusReportedBy).toBe('legacy@example.com');
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('aggregated_bed_state view neturi stulpelio status_reported_by'),
+    );
+
+    warnSpy.mockRestore();
+  });
+
+  it('toliau veikia, jei senesnėje schemoje nėra metadata stulpelių', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    supabaseMock.__mocks.aggregatedSelect
+      .mockImplementationOnce(async () => ({
+        data: null,
+        error: { message: 'column aggregated_bed_state.status_metadata does not exist' },
+      }))
+      .mockImplementationOnce(async () => ({
+        data: null,
+        error: { message: 'column aggregated_bed_state.occupancy_metadata does not exist' },
+      }))
+      .mockImplementationOnce(async () => ({
+        data: [
+          {
+            bed_id: 'bed-uuid-1',
+            label: 'IT1',
+            status: STATUS_OPTIONS.CLEAN,
+            priority: null,
+            status_notes: null,
+            status_reported_by: 'legacy@example.com',
+            status_created_at: '2024-01-01T08:00:00.000Z',
+            occupancy_state: null,
+            patient_code: null,
+            expected_until: null,
+            occupancy_notes: null,
+            occupancy_created_by: null,
+            occupancy_created_at: null,
+          },
+        ],
+        error: null,
+      }));
+
+    const aggregated = await manager.loadAggregatedBedState();
+
+    expect(supabaseMock.__mocks.aggregatedSelect).toHaveBeenCalledTimes(3);
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[0][0]).toContain('status_metadata');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[1][0]).not.toContain('status_metadata');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[1][0]).toContain('occupancy_metadata');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[2][0]).not.toContain('status_metadata');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[2][0]).not.toContain('occupancy_metadata');
+    expect(aggregated).toHaveLength(1);
+    expect(aggregated[0].statusMetadata).toEqual({});
+    expect(aggregated[0].occupancyMetadata).toEqual({});
+    expect(
+      warnSpy.mock.calls.some(([message]) => message.includes('status_metadata') && message.includes('tęsiama be šios informacijos')),
+    ).toBe(true);
+    expect(
+      warnSpy.mock.calls.some(([message]) => message.includes('occupancy_metadata') && message.includes('tęsiama be šios informacijos')),
+    ).toBe(true);
 
     warnSpy.mockRestore();
   });

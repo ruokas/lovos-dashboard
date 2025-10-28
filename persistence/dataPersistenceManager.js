@@ -231,57 +231,93 @@ export class DataPersistenceManager {
     }
 
     await this.#ensureBedsLoaded();
-    const selectColumns = `
-      bed_id,
-      label,
-      status,
-      priority,
-      status_notes,
-      status_reported_by,
-      status_metadata,
-      status_created_at,
-      occupancy_state,
-      patient_code,
-      expected_until,
-      occupancy_notes,
-      occupancy_created_by,
-      occupancy_metadata,
-      occupancy_created_at
-    `;
+    const columnDefinitions = [
+      { key: 'bed_id', select: 'bed_id' },
+      { key: 'label', select: 'label' },
+      { key: 'status', select: 'status' },
+      { key: 'priority', select: 'priority' },
+      { key: 'status_notes', select: 'status_notes' },
+      {
+        key: 'status_reported_by',
+        select: 'status_reported_by',
+        optional: true,
+        fallbacks: ['status_reported_by:reported_by'],
+      },
+      { key: 'status_metadata', select: 'status_metadata', optional: true },
+      { key: 'status_created_at', select: 'status_created_at' },
+      { key: 'occupancy_state', select: 'occupancy_state' },
+      { key: 'patient_code', select: 'patient_code' },
+      { key: 'expected_until', select: 'expected_until' },
+      { key: 'occupancy_notes', select: 'occupancy_notes' },
+      { key: 'occupancy_created_by', select: 'occupancy_created_by' },
+      { key: 'occupancy_metadata', select: 'occupancy_metadata', optional: true },
+      { key: 'occupancy_created_at', select: 'occupancy_created_at' },
+    ];
 
-    let { data, error } = await this.client
-      .from('aggregated_bed_state')
-      .select(selectColumns);
+    const activeColumns = columnDefinitions.map((column) => ({
+      ...column,
+      activeSelect: column.select,
+      remainingFallbacks: Array.isArray(column.fallbacks) ? [...column.fallbacks] : [],
+    }));
 
-    if (error && /status_reported_by/.test(error.message ?? '')) {
-      console.warn(
-        'aggregated_bed_state view neturi stulpelio status_reported_by, bandomas suderinamumo režimas. Atnaujinkite Supabase migracijas.'
-      );
+    const missingColumnRegex = /column\s+aggregated_bed_state\.\"?([a-zA-Z0-9_]+)\"?\s+does\s+not\s+exist/i;
 
-      const legacyColumns = `
-        bed_id,
-        label,
-        status,
-        priority,
-        status_notes,
-        status_reported_by:reported_by,
-        status_metadata,
-        status_created_at,
-        occupancy_state,
-        patient_code,
-        expected_until,
-        occupancy_notes,
-        occupancy_created_by,
-        occupancy_metadata,
-        occupancy_created_at
-      `;
+    const resolveActualColumn = (expression) => {
+      if (!expression) {
+        return null;
+      }
+      const parts = expression.split(':');
+      return parts[parts.length - 1].trim();
+    };
 
+    const buildSelectClause = () =>
+      activeColumns
+        .map((column) => column.activeSelect)
+        .filter(Boolean)
+        .join(', ');
+
+    let data = null;
+    let error = null;
+
+    while (true) {
       ({ data, error } = await this.client
         .from('aggregated_bed_state')
-        .select(legacyColumns));
-    }
+        .select(buildSelectClause()));
 
-    if (error) {
+      if (!error) {
+        break;
+      }
+
+      const message = error.message ?? '';
+      const match = message.match(missingColumnRegex);
+      const missingColumn = match?.[1] ?? null;
+
+      if (!missingColumn) {
+        throw new Error(`Nepavyko gauti suvestinės iš Supabase: ${error.message}`);
+      }
+
+      const target = activeColumns.find((column) => resolveActualColumn(column.activeSelect) === missingColumn);
+
+      if (!target) {
+        throw new Error(`Nepavyko gauti suvestinės iš Supabase: ${error.message}`);
+      }
+
+      if (target.remainingFallbacks.length > 0) {
+        target.activeSelect = target.remainingFallbacks.shift();
+        console.warn(
+          `aggregated_bed_state view neturi stulpelio ${missingColumn}, pritaikytas suderinamumo alias. Atnaujinkite Supabase migracijas.`,
+        );
+        continue;
+      }
+
+      if (target.optional) {
+        target.activeSelect = null;
+        console.warn(
+          `aggregated_bed_state view neturi stulpelio ${missingColumn}, tęsiama be šios informacijos. Atnaujinkite Supabase migracijas.`,
+        );
+        continue;
+      }
+
       throw new Error(`Nepavyko gauti suvestinės iš Supabase: ${error.message}`);
     }
 
