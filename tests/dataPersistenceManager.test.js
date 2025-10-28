@@ -319,6 +319,7 @@ describe('DataPersistenceManager with Supabase', () => {
             occupancy_notes: null,
             occupancy_created_by: null,
             occupancy_created_at: null,
+            occupancy_metadata: { legacy: true },
           },
         ],
         error: null,
@@ -331,15 +332,15 @@ describe('DataPersistenceManager with Supabase', () => {
     expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[1][0]).not.toContain('status_metadata');
     expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[1][0]).toContain('occupancy_metadata');
     expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[2][0]).not.toContain('status_metadata');
-    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[2][0]).not.toContain('occupancy_metadata');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[2][0]).toContain('occupancy_metadata:metadata');
     expect(aggregated).toHaveLength(1);
     expect(aggregated[0].statusMetadata).toEqual({});
-    expect(aggregated[0].occupancyMetadata).toEqual({});
+    expect(aggregated[0].occupancyMetadata).toEqual({ legacy: true });
     expect(
       warnSpy.mock.calls.some(([message]) => message.includes('status_metadata') && message.includes('tęsiama be šios informacijos')),
     ).toBe(true);
     expect(
-      warnSpy.mock.calls.some(([message]) => message.includes('occupancy_metadata') && message.includes('tęsiama be šios informacijos')),
+      warnSpy.mock.calls.some(([message]) => message.includes('occupancy_metadata') && message.includes('pritaikytas suderinamumo alias')),
     ).toBe(true);
 
     warnSpy.mockRestore();

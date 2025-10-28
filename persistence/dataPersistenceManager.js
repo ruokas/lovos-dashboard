@@ -255,7 +255,12 @@ export class DataPersistenceManager {
         optional: true,
         fallbacks: ['occupancy_created_by:created_by'],
       },
-      { key: 'occupancy_metadata', select: 'occupancy_metadata', optional: true },
+      {
+        key: 'occupancy_metadata',
+        select: 'occupancy_metadata',
+        optional: true,
+        fallbacks: ['occupancy_metadata:metadata'],
+      },
       { key: 'occupancy_created_at', select: 'occupancy_created_at' },
     ];
 
