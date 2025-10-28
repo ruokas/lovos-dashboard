@@ -61,6 +61,11 @@ Palaipsniui migruojame į Supabase, todėl visas front-end veikia kaip ES moduli
 - **Web Audio API** (garso signalai)
 - **Web Notifications API** (pranešimai)
 
+### CSS generavimas
+
+- `dist/tailwind.css` yra sugeneruotas Tailwind CSS paketas.
+- Atnaujinkite jį paleisdami `npm run build:css` po klasių ar komponentų pakeitimų.
+
 ## Struktūra
 
 ```

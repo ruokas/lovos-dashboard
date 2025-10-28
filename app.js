@@ -470,6 +470,19 @@ export class BedManagementApp {
       bedListBtn.setAttribute('aria-expanded', this.isBedListVisible ? 'true' : 'false');
     }
 
+    const auditLogBtn = document.getElementById('auditLogBtn');
+    if (auditLogBtn) {
+      auditLogBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        this.openAuditLogPage();
+      });
+      auditLogBtn.setAttribute('aria-haspopup', 'false');
+      auditLogBtn.setAttribute('title', t(texts.ui.showAuditLog));
+      auditLogBtn.setAttribute('aria-label', t(texts.ui.showAuditLog));
+    } else {
+      console.log('Audit log button not found');
+    }
+
     const fontSizeUpBtn = document.getElementById('fontSizeBtn');
     if (fontSizeUpBtn) {
       fontSizeUpBtn.addEventListener('click', () => {
@@ -510,6 +523,24 @@ export class BedManagementApp {
 
     // Bed click handlers for quick status updates
     this.setupBedClickHandlers();
+  }
+
+  openAuditLogPage() {
+    if (typeof window === 'undefined') {
+      console.info('Veiksmų žurnalo puslapis pasiekiamas tik naršyklėje.');
+      return;
+    }
+
+    try {
+      const targetUrl = new URL('./audit.html', window.location.href);
+      void this.userInteractionLogger.logInteraction('audit_log_page_open', {
+        target: targetUrl.pathname,
+      });
+      window.location.href = targetUrl.toString();
+    } catch (error) {
+      console.error('Failed to open audit log page:', error);
+      this.showError('Nepavyko atidaryti veiksmų žurnalo puslapio.');
+    }
   }
 
   readViewMode() {
@@ -765,7 +796,6 @@ export class BedManagementApp {
       this.updateViewToggleButton();
       this.renderBedGrid();
       this.renderNotificationSummary();
-      await this.renderAuditTrail();
       await this.updateLastSyncDisplay();
     } catch (error) {
       console.error('Failed to render UI:', error);
@@ -900,48 +930,6 @@ export class BedManagementApp {
       this.setReportingNotice('Nepavyko įkelti KPI duomenų.', 'error');
     } finally {
       loadingIndicator?.classList.add('hidden');
-    }
-  }
-
-  async renderAuditTrail() {
-    const container = document.getElementById('auditContent');
-    if (!container) return;
-
-    try {
-      const audit = await this.reportingService.fetchInteractionAudit({ limit: 10 });
-      if (audit.source !== 'supabase') {
-        container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Supabase nepasiekiamas – audito žurnalas nerodomas.</p>';
-        return;
-      }
-
-      if (!audit.data.length) {
-        container.innerHTML = '<p class="text-sm text-slate-500 dark:text-slate-400">Kol kas nėra audito įrašų.</p>';
-        return;
-      }
-
-      container.innerHTML = audit.data.map((item) => {
-        const occurred = item.occurredAt ? new Date(item.occurredAt) : null;
-        const occurredText = occurred && !Number.isNaN(occurred.getTime())
-          ? occurred.toLocaleString('lt-LT')
-          : '–';
-        const bedLabel = item.payload?.bedLabel ?? item.payload?.bedId ?? item.bedId ?? '–';
-        const performer = item.performedBy ?? 'Nežinomas naudotojas';
-        const details = item.payload?.payload?.status ?? item.payload?.status ?? '';
-
-        return `
-          <div class="flex flex-col md:flex-row md:items-center md:justify-between border-b border-slate-200 dark:border-slate-700 py-2 last:border-b-0">
-            <div class="flex-1 pr-2">
-              <p class="text-sm font-medium text-slate-800 dark:text-slate-100">${escapeHtml(item.interactionType)}</p>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Lova: ${escapeHtml(bedLabel)}${details ? ` • ${escapeHtml(details)}` : ''}</p>
-              <p class="text-xs text-slate-500 dark:text-slate-400">Vykdytojas: ${escapeHtml(performer)}</p>
-            </div>
-            <span class="text-xs text-slate-500 dark:text-slate-400 mt-1 md:mt-0">${escapeHtml(occurredText)}</span>
-          </div>
-        `;
-      }).join('');
-    } catch (error) {
-      console.error('Failed to render audit trail:', error);
-      container.innerHTML = '<p class="text-sm text-red-600">Nepavyko įkelti audito įrašų.</p>';
     }
   }
 

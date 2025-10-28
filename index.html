@@ -4,8 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>RŠL SMPS lovų priežiūra</title>
-  <!-- Tailwind CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="dist/tailwind.css">
   <script type="importmap">
     {
       "imports": {
@@ -13,66 +12,6 @@
       }
     }
   </script>
-  <script>
-    tailwind.config = { darkMode: 'class' };
-  </script>
-  <style type="text/tailwindcss">
-    @layer utilities {
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border-width: 0;
-      }
-    }
-    
-    /* Custom scrollbar styles */
-    .custom-scrollbar {
-      scrollbar-width: thin;
-      scrollbar-color: #cbd5e1 #f1f5f9;
-    }
-    
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 8px;
-    }
-    
-    .custom-scrollbar::-webkit-scrollbar-track {
-      background: #f1f5f9;
-      border-radius: 4px;
-    }
-    
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
-    }
-    
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: #94a3b8;
-    }
-    
-    /* Dark mode scrollbar */
-    .dark .custom-scrollbar {
-      scrollbar-color: #475569 #1e293b;
-    }
-    
-    .dark .custom-scrollbar::-webkit-scrollbar-track {
-      background: #1e293b;
-    }
-    
-    .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #475569;
-    }
-    
-    .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: #64748b;
-    }
-  </style>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body
@@ -100,8 +39,11 @@
         <button id="addStatusBtn" type="button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium">
           Pranešti apie būklę
         </button>
-        <button id="bedListBtn" type="button" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium">
-          Lovų sąrašas
+        <button id="bedListBtn" type="button" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-sm font-medium" aria-controls="bedListSection">
+          Rodyti lovų sąrašą
+        </button>
+        <button id="auditLogBtn" type="button" class="px-4 py-2 bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors text-sm font-medium">
+          Veiksmų žurnalas
         </button>
         <button id="fontSizeBtn" type="button" class="px-3 py-2 bg-purple-600 text-white rounded-md hover:bg-purple-700 transition-colors font-bold text-sm" title="Padidinti mastelį">
           A+
@@ -160,7 +102,7 @@
           <h2 class="text-lg font-semibold">Lovų sąrašas</h2>
           <div class="flex flex-col sm:flex-row gap-3">
             <div class="relative">
-              <input type="text" id="bedSearch" placeholder="Ieškoti lovos..." 
+              <input type="text" id="bedSearch" placeholder="Ieškoti lovos..."
                      class="w-full sm:w-64 px-4 py-2 pl-10 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent">
               <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -180,23 +122,6 @@
         <div id="bedGrid" class="space-y-2 custom-scrollbar max-h-48 overflow-y-auto"></div>
       </div>
     </div>
-
-    <section id="auditTrail" class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100 mb-2">
-      <div class="p-4">
-        <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-2 mb-3">
-          <h2 class="text-lg font-semibold">Veiksmų žurnalas</h2>
-          <div class="flex gap-2">
-            <button type="button" class="px-3 py-2 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100" data-report-export="json">
-              JSON eksportas
-            </button>
-            <button type="button" class="px-3 py-2 text-xs font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-700 dark:text-slate-100" data-report-export="csv">
-              CSV eksportas
-            </button>
-          </div>
-        </div>
-        <div id="auditContent" class="space-y-2 text-sm" aria-live="polite"></div>
-      </div>
-    </section>
 
   </div>
 

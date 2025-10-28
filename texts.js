@@ -8,6 +8,7 @@ export const texts = {
   ui: {
     showBedList: { lt: 'Rodyti lovų sąrašą', en: '' },
     hideBedList: { lt: 'Slėpti lovų sąrašą', en: '' },
+    showAuditLog: { lt: 'Veiksmų žurnalas', en: '' },
     bedLabel: { lt: 'Lova', en: '' },
     noBedsFound: { lt: 'Nerasta lovų pagal paiešką.', en: '' },
     lastChecked: { lt: 'Paskutinį kartą tikrinta', en: '' },

@@ -124,7 +124,14 @@ export class UserInteractionLogger {
       }
       this.cachedUserEmail = data?.user?.email ?? null;
     } catch (error) {
-      console.warn('Nepavyko nustatyti prisijungusio naudotojo el. pašto Supabase kliente:', error);
+      if (this.#isMissingAuthSession(error)) {
+        console.info(
+          'Supabase naudotojo sesija nerasta. Veiksmai bus žymimi kaip vietiniai, kol neprisijungsite.',
+          error
+        );
+      } else {
+        console.warn('Nepavyko nustatyti prisijungusio naudotojo el. pašto Supabase kliente:', error);
+      }
       this.cachedUserEmail = null;
     }
     return this.cachedUserEmail;
@@ -142,6 +149,14 @@ export class UserInteractionLogger {
 
   #isRlsViolation(error) {
     return error?.code === '42501';
+  }
+
+  #isMissingAuthSession(error) {
+    if (!error) {
+      return false;
+    }
+    const message = String(error?.message ?? '').toLowerCase();
+    return error?.name === 'AuthSessionMissingError' || message.includes('auth session missing');
   }
 
   async #insertLegacySchema(action, metadata, performedBy) {
