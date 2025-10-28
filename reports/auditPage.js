@@ -291,7 +291,7 @@ async function loadAuditData() {
   try {
     const result = await reportingService.fetchInteractionAudit({ limit: 200 });
     if (result.source !== 'supabase') {
-      showStatus('Supabase duomenys nepasiekiami. Patikrinkite ryšį ir prisijungimą.', 'error');
+      showStatus('Nuotoliniai duomenys nepasiekiami. Patikrinkite ryšį ir prisijungimą.', 'error');
       toggleContent(false);
       return;
     }
@@ -367,8 +367,8 @@ function initialiseServices() {
     reportingService = new ReportingService({ client });
     logger = new UserInteractionLogger({ document, client });
   } catch (error) {
-    console.error('Supabase konfigūracija nerasta:', error);
-    showStatus('Supabase konfigūracija nerasta. Patikrinkite puslapio data-* atributus.', 'error');
+    console.error('Nuotolinės paslaugos konfigūracija nerasta:', error);
+    showStatus('Nuotolinės paslaugos konfigūracija nerasta. Patikrinkite puslapio data-* atributus.', 'error');
     toggleContent(false);
   }
 }

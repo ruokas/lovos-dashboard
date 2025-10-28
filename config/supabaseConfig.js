@@ -1,8 +1,8 @@
 /**
- * Supabase konfigūracijos nuskaitymas iš HTML atributų ar aplinkos kintamųjų.
+ * Nuotolinės paslaugos konfigūracijos nuskaitymas iš HTML atributų ar aplinkos kintamųjų.
  * ĮSPĖJIMAS: Anon raktas skirtas tik naudoti saugioje vidinėje aplinkoje – neplatinkite jo viešai.
  */
-const WARNING_MESSAGE = 'Supabase anon raktas skirtas tik testavimui ir vidiniam naudojimui. Neplatinkite viešai.';
+const WARNING_MESSAGE = 'Nuotolinės paslaugos anon raktas skirtas tik testavimui ir vidiniam naudojimui. Neplatinkite viešai.';
 
 /**
  * Suranda elementą su `data-supabase-url` ir `data-supabase-key` atributais.
@@ -58,7 +58,7 @@ function readFromImportMeta() {
 }
 
 /**
- * Grąžina galutinę Supabase konfigūraciją. Mesti aiškią klaidą, jei trūksta duomenų.
+ * Grąžina galutinę nuotolinės paslaugos konfigūraciją. Mesti aiškią klaidą, jei trūksta duomenų.
  * @param {Document} [doc]
  * @returns {{url: string, key: string}}
  */
@@ -70,7 +70,7 @@ export function getSupabaseConfig(doc = typeof document !== 'undefined' ? docume
   const key = sources.map((item) => item.key).find((value) => !!value);
 
   if (!url || !key) {
-    throw new Error('Supabase URL arba anon raktas nerastas. Patikrinkite `data-*` atributus ar aplinkos kintamuosius.');
+    throw new Error('Nuotolinės paslaugos URL arba anon raktas nerastas. Patikrinkite `data-*` atributus ar aplinkos kintamuosius.');
   }
 
   if (typeof console !== 'undefined' && !hasWarned) {

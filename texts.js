@@ -74,9 +74,9 @@ export const texts = {
     offline: { lt: "Veiksmas užfiksuotas tik vietoje (offline režimas).", en: "" },
   },
   auth: {
-    title: { lt: "Prisijunkite prie Supabase", en: "" },
+    title: { lt: "Prisijunkite prie sistemos", en: "" },
     description: {
-      lt: "Įveskite skyriui priskirtą el. paštą ir slaptažodį, kad duomenys būtų sinchronizuojami per Supabase.",
+      lt: "Įveskite skyriui priskirtą el. paštą ir slaptažodį, kad duomenys būtų sinchronizuojami su centrine sistema.",
       en: "",
     },
     emailLabel: { lt: "El. paštas", en: "" },
@@ -87,9 +87,9 @@ export const texts = {
     signInError: { lt: "Nepavyko prisijungti. Patikrinkite duomenis.", en: "" },
     signedInAs: { lt: "Prisijungęs:", en: "" },
     signOut: { lt: "Atsijungti", en: "" },
-    signOutSuccess: { lt: "Atsijungta. Prisijunkite iš naujo, kad pasiektumėte Supabase.", en: "" },
-    offline: { lt: "Supabase neprieinamas – dirbama offline režimu.", en: "" },
-    loginRequired: { lt: "Prisijunkite, kad pasiektumėte Supabase duomenis.", en: "" },
+    signOutSuccess: { lt: "Atsijungta. Prisijunkite iš naujo, kad pasiektumėte duomenis.", en: "" },
+    offline: { lt: "Nuotolinė paslauga neprieinama – dirbama offline režimu.", en: "" },
+    loginRequired: { lt: "Prisijunkite, kad pasiektumėte duomenis.", en: "" },
   },
 };
 

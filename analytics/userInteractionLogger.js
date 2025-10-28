@@ -16,7 +16,7 @@ export class UserInteractionLogger {
     try {
       return getSupabaseClient(doc);
     } catch (error) {
-      console.info('Supabase klientas nepasiekiamas, žurnalas veikia offline režimu.', error);
+      console.info('Nuotolinės paslaugos klientas nepasiekiamas, žurnalas veikia offline režimu.', error);
       return null;
     }
   }
@@ -56,7 +56,7 @@ export class UserInteractionLogger {
     if (!basePayload.performed_by) {
       console.info('[Offline log]', interactionType, basePayload);
       console.warn(
-        'Supabase naudotojo el. paštas nerastas – veiksmas išsaugotas tik vietoje. Prisijunkite prie Supabase ir bandykite dar kartą.'
+        'Nuotolinės paslaugos naudotojo el. paštas nerastas – veiksmas išsaugotas tik vietoje. Prisijunkite prie sistemos ir bandykite dar kartą.'
       );
       return { stored: false, message: t(texts.logger.offline), missingEmail: true };
     }
@@ -78,7 +78,7 @@ export class UserInteractionLogger {
           return { stored: true, downgraded: true };
         }
         if (this.#isRlsViolation(error)) {
-          console.warn('Supabase RLS atmetė naudotojo veiksmo įrašą:', error);
+          console.warn('Nuotolinės paslaugos RLS atmetė naudotojo veiksmo įrašą:', error);
           return { stored: false, error, rlsViolation: true };
         }
         throw error;
@@ -90,15 +90,15 @@ export class UserInteractionLogger {
           await this.#insertLegacySchema(interactionType, payloadMetadata, basePayload.performed_by);
           return { stored: true, downgraded: true };
         } catch (legacyError) {
-          console.error('Nepavyko įrašyti naudotojo veiksmo (legacy schema) į Supabase:', legacyError);
+          console.error('Nepavyko įrašyti naudotojo veiksmo (legacy schema) į nuotolinę paslaugą:', legacyError);
           return { stored: false, error: legacyError };
         }
       }
       if (this.#isRlsViolation(error)) {
-        console.warn('Supabase RLS atmetė naudotojo veiksmo įrašą:', error);
+        console.warn('Nuotolinės paslaugos RLS atmetė naudotojo veiksmo įrašą:', error);
         return { stored: false, error, rlsViolation: true };
       }
-      console.error('Nepavyko įrašyti naudotojo veiksmo į Supabase:', error);
+      console.error('Nepavyko įrašyti naudotojo veiksmo į nuotolinę paslaugą:', error);
       return { stored: false, error };
     }
   }
@@ -126,11 +126,11 @@ export class UserInteractionLogger {
     } catch (error) {
       if (this.#isMissingAuthSession(error)) {
         console.info(
-          'Supabase naudotojo sesija nerasta. Veiksmai bus žymimi kaip vietiniai, kol neprisijungsite.',
+          'Nuotolinės paslaugos naudotojo sesija nerasta. Veiksmai bus žymimi kaip vietiniai, kol neprisijungsite.',
           error
         );
       } else {
-        console.warn('Nepavyko nustatyti prisijungusio naudotojo el. pašto Supabase kliente:', error);
+        console.warn('Nepavyko nustatyti prisijungusio naudotojo el. pašto nuotolinės paslaugos kliente:', error);
       }
       this.cachedUserEmail = null;
     }

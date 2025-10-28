@@ -1,7 +1,7 @@
 import { t, texts } from '../texts.js';
 
 /**
- * Supabase autentikacijos valdiklis: rūpinasi prisijungimo forma ir būsenos indikatoriumi.
+ * Nuotolinės paslaugos autentikacijos valdiklis: rūpinasi prisijungimo forma ir būsenos indikatoriumi.
  */
 export class SupabaseAuthManager {
   constructor(options = {}) {
@@ -52,7 +52,7 @@ export class SupabaseAuthManager {
     try {
       const { data, error } = await this.client.auth.getSession();
       if (error) {
-        console.warn('Supabase sesijos patikrinimas nepavyko:', error);
+        console.warn('Nuotolinės paslaugos sesijos patikrinimas nepavyko:', error);
         this.updateStatus(t(texts.auth.offline), 'offline');
         return { status: 'offline', error };
       }
@@ -65,7 +65,7 @@ export class SupabaseAuthManager {
         return { status: 'authenticated', session: this.session };
       }
     } catch (error) {
-      console.warn('Supabase sesijos patikrinimas nepavyko:', error);
+      console.warn('Nuotolinės paslaugos sesijos patikrinimas nepavyko:', error);
       this.updateStatus(t(texts.auth.offline), 'offline');
       return { status: 'offline', error };
     }
@@ -304,13 +304,13 @@ export class SupabaseAuthManager {
       });
 
       if (error) {
-        console.warn('Supabase auth prenumeratos klaida:', error);
+        console.warn('Nuotolinės paslaugos auth prenumeratos klaida:', error);
         return;
       }
 
       this.authStateSubscription = data?.subscription ?? null;
     } catch (error) {
-      console.warn('Supabase auth prenumeratos išimtis:', error);
+      console.warn('Nuotolinės paslaugos auth prenumeratos išimtis:', error);
     }
   }
 
@@ -338,7 +338,7 @@ export class SupabaseAuthManager {
     try {
       this.authStateSubscription?.unsubscribe?.();
     } catch (error) {
-      console.warn('Nepavyko nutraukti Supabase auth prenumeratos:', error);
+      console.warn('Nepavyko nutraukti nuotolinės paslaugos auth prenumeratos:', error);
     }
     this.authStateSubscription = null;
   }

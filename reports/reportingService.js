@@ -134,7 +134,7 @@ export class ReportingService {
   async fetchDailyMetrics(options = {}) {
     const { limit = 7 } = options;
     if (!this.client) {
-      return { source: LOCAL_SOURCE, data: [], message: 'Supabase nepasiekiamas' };
+      return { source: LOCAL_SOURCE, data: [], message: 'Nuotolinė paslauga nepasiekiama' };
     }
 
     try {
@@ -172,7 +172,7 @@ export class ReportingService {
     const { limit = 20 } = options;
 
     if (!this.client) {
-      return { source: LOCAL_SOURCE, data: [], message: 'Supabase nepasiekiamas' };
+      return { source: LOCAL_SOURCE, data: [], message: 'Nuotolinė paslauga nepasiekiama' };
     }
 
     try {
@@ -209,7 +209,7 @@ export class ReportingService {
   async exportReport(options = {}) {
     const { format = 'json', signal } = options;
     if (!this.client) {
-      throw new Error('Supabase klientas nepasiekiamas');
+      throw new Error('Nuotolinės paslaugos klientas nepasiekiamas');
     }
 
     const normalizedFormat = format === 'csv' ? 'csv' : 'json';
@@ -219,7 +219,7 @@ export class ReportingService {
     }
     const accessToken = sessionData?.session?.access_token;
     if (!accessToken) {
-      throw new Error('Naudotojo sesija nerasta – prisijunkite prie Supabase.');
+      throw new Error('Naudotojo sesija nerasta – prisijunkite prie sistemos.');
     }
 
     const url = `${this.client.supabaseUrl}/functions/v1/report-export?format=${encodeURIComponent(normalizedFormat)}`;
@@ -234,7 +234,7 @@ export class ReportingService {
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(errorText || 'Nepavyko gauti ataskaitos iš Supabase.');
+      throw new Error(errorText || 'Nepavyko gauti ataskaitos iš nuotolinės paslaugos.');
     }
 
     if (normalizedFormat === 'csv') {
