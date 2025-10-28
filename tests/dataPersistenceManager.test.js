@@ -87,7 +87,7 @@ function createSupabaseMock() {
   }));
   const occupancyInsert = vi.fn(() => ({ select: occupancyInsertSelect }));
 
-  const aggregatedSelect = vi.fn(async () => ({
+  const aggregatedSelect = vi.fn(async (columns) => ({
     data: [
       {
         bed_id: 'bed-uuid-1',
@@ -240,6 +240,48 @@ describe('DataPersistenceManager with Supabase', () => {
       },
     ]);
     expect(manager.lastSyncCache).toBe('2024-01-01T10:00:00.000Z');
+  });
+
+  it('prisitaiko prie senesnės aggregated_bed_state schemos be status_reported_by', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    supabaseMock.__mocks.aggregatedSelect
+      .mockImplementationOnce(async () => ({
+        data: null,
+        error: { message: 'column aggregated_bed_state.status_reported_by does not exist' },
+      }))
+      .mockImplementationOnce(async () => ({
+        data: [
+          {
+            bed_id: 'bed-uuid-1',
+            label: 'IT1',
+            status: STATUS_OPTIONS.CLEAN,
+            priority: null,
+            status_notes: null,
+            status_reported_by: 'legacy@example.com',
+            status_metadata: {},
+            status_created_at: '2024-01-01T08:00:00.000Z',
+            occupancy_state: null,
+            patient_code: null,
+            expected_until: null,
+            occupancy_notes: null,
+            occupancy_created_by: null,
+            occupancy_metadata: {},
+            occupancy_created_at: null,
+          },
+        ],
+        error: null,
+      }));
+
+    const aggregated = await manager.loadAggregatedBedState();
+
+    expect(supabaseMock.__mocks.aggregatedSelect).toHaveBeenCalledTimes(2);
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[0][0]).toContain('status_reported_by');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[1][0]).toContain('status_reported_by:reported_by');
+    expect(aggregated).toHaveLength(1);
+    expect(aggregated[0].statusReportedBy).toBe('legacy@example.com');
+
+    warnSpy.mockRestore();
   });
 
   it('meta aiškią klaidą, kai Supabase grąžina klaidą įrašant', async () => {

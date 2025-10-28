@@ -231,15 +231,40 @@ export class DataPersistenceManager {
     }
 
     await this.#ensureBedsLoaded();
-    const { data, error } = await this.client
+    const selectColumns = `
+      bed_id,
+      label,
+      status,
+      priority,
+      status_notes,
+      status_reported_by,
+      status_metadata,
+      status_created_at,
+      occupancy_state,
+      patient_code,
+      expected_until,
+      occupancy_notes,
+      occupancy_created_by,
+      occupancy_metadata,
+      occupancy_created_at
+    `;
+
+    let { data, error } = await this.client
       .from('aggregated_bed_state')
-      .select(`
+      .select(selectColumns);
+
+    if (error && /status_reported_by/.test(error.message ?? '')) {
+      console.warn(
+        'aggregated_bed_state view neturi stulpelio status_reported_by, bandomas suderinamumo režimas. Atnaujinkite Supabase migracijas.'
+      );
+
+      const legacyColumns = `
         bed_id,
         label,
         status,
         priority,
         status_notes,
-        status_reported_by,
+        status_reported_by:reported_by,
         status_metadata,
         status_created_at,
         occupancy_state,
@@ -249,7 +274,12 @@ export class DataPersistenceManager {
         occupancy_created_by,
         occupancy_metadata,
         occupancy_created_at
-      `);
+      `;
+
+      ({ data, error } = await this.client
+        .from('aggregated_bed_state')
+        .select(legacyColumns));
+    }
 
     if (error) {
       throw new Error(`Nepavyko gauti suvestinės iš Supabase: ${error.message}`);
