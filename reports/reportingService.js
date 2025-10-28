@@ -176,32 +176,18 @@ export class ReportingService {
     }
 
     try {
-      const query = this.client
-        .from('user_interactions')
-        .select('id,interaction_type,bed_id,tag_code,performed_by,payload,occurred_at')
-        .order('occurred_at', { ascending: false });
+      const rows = await this.#performInteractionQuery({
+        limit,
+        select: 'id,interaction_type,bed_id,tag_code,performed_by,payload,occurred_at',
+        orderBy: 'occurred_at',
+      });
 
-      if (Number.isInteger(limit) && limit > 0) {
-        query.limit(limit);
-      }
-
-      const { data, error } = await query;
-      if (error) {
-        throw error;
-      }
-
-      const normalized = (data ?? []).map((item) => ({
-        id: item.id,
-        interactionType: item.interaction_type,
-        bedId: item.bed_id,
-        tagCode: item.tag_code ?? null,
-        performedBy: item.performed_by ?? null,
-        occurredAt: item.occurred_at,
-        payload: item.payload ?? {},
-      }));
-
-      return { source: SUPABASE_SOURCE, data: normalized };
+      return { source: SUPABASE_SOURCE, data: this.#normaliseInteractionRows(rows) };
     } catch (error) {
+      const fallback = await this.#resolveLegacyInteractionQuery({ limit, error });
+      if (fallback) {
+        return fallback;
+      }
       return { source: LOCAL_SOURCE, data: [], error };
     }
   }
@@ -244,6 +230,103 @@ export class ReportingService {
 
     const payload = await response.json();
     return { format: normalizedFormat, data: payload };
+  }
+
+  async #performInteractionQuery({ select, orderBy, limit }) {
+    const query = this.client
+      .from('user_interactions')
+      .select(select)
+      .order(orderBy, { ascending: false });
+
+    if (Number.isInteger(limit) && limit > 0) {
+      query.limit(limit);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw error;
+    }
+
+    return data ?? [];
+  }
+
+  async #resolveLegacyInteractionQuery({ limit, error }) {
+    if (this.#isMissingColumnError(error, 'tag_code')) {
+      try {
+        const rows = await this.#performInteractionQuery({
+          limit,
+          select: 'id,interaction_type,bed_id,performed_by,payload,occurred_at',
+          orderBy: 'occurred_at',
+        });
+        return {
+          source: SUPABASE_SOURCE,
+          data: this.#normaliseInteractionRows(rows),
+          downgraded: true,
+        };
+      } catch (nextError) {
+        return this.#resolveLegacyInteractionQuery({ limit, error: nextError });
+      }
+    }
+
+    if (this.#isMissingColumnError(error, 'interaction_type') || this.#isMissingColumnError(error, 'occurred_at')) {
+      try {
+        const rows = await this.#performInteractionQuery({
+          limit,
+          select: 'id,action,bed_id,performed_by,payload,created_at',
+          orderBy: 'created_at',
+        });
+        return {
+          source: SUPABASE_SOURCE,
+          data: this.#normaliseInteractionRows(rows),
+          downgraded: true,
+        };
+      } catch (legacyError) {
+        return null;
+      }
+    }
+
+    return null;
+  }
+
+  #isMissingColumnError(error, columnName) {
+    if (!error) {
+      return false;
+    }
+    const message = String(error.message ?? '').toLowerCase();
+    const needle = String(columnName ?? '').toLowerCase();
+    const code = error.code ?? '';
+    const matchesCode = code === 'PGRST204' || code === '42703';
+    return matchesCode && message.includes(needle);
+  }
+
+  #normaliseInteractionRows(rows) {
+    return (rows ?? []).map((item) => ({
+      id: item.id ?? null,
+      interactionType: item.interaction_type ?? item.action ?? null,
+      bedId: item.bed_id ?? null,
+      tagCode: item.tag_code ?? null,
+      performedBy: item.performed_by ?? null,
+      occurredAt: item.occurred_at ?? item.created_at ?? null,
+      payload: this.#normaliseInteractionPayload(item.payload),
+    }));
+  }
+
+  #normaliseInteractionPayload(value) {
+    if (value === null || value === undefined) {
+      return {};
+    }
+    if (typeof value === 'object') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return typeof parsed === 'object' && parsed !== null ? parsed : { raw: value };
+      } catch (error) {
+        return { raw: value };
+      }
+    }
+    return {};
   }
 
   #aggregateSupabaseSnapshot(rows) {
