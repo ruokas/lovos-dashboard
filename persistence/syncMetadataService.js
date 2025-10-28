@@ -1,7 +1,7 @@
 import { parseSupabaseTimestamp } from '../utils/time.js';
 
 /**
- * Paimamas naujausias `updated_at` iš `aggregated_bed_state` Supabase vaizdo.
+ * Paimamas naujausias `updated_at` iš `aggregated_bed_state` nuotolinės paslaugos vaizdo.
  * @param {import('@supabase/supabase-js').SupabaseClient} client
  * @returns {Promise<string|null>} ISO data arba null, jei nepavyko.
  */
@@ -15,7 +15,7 @@ export async function getLastSupabaseUpdate(client) {
     .limit(1);
 
   if (error) {
-    throw new Error(`Nepavyko gauti Supabase sinchronizacijos laiko: ${error.message}`);
+    throw new Error(`Nepavyko gauti nuotolinės paslaugos sinchronizacijos laiko: ${error.message}`);
   }
 
   const timestamp = data?.[0]?.updated_at ?? null;

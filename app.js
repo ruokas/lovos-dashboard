@@ -84,7 +84,7 @@ export class BedManagementApp {
     if (this.isInitialized) return;
 
     try {
-      // Read Supabase configuration from HTML data attributes
+      // Read nuotolinės paslaugos konfigūraciją iš HTML data atributų
       this.supabaseConfig = this.readSupabaseConfig();
       if (this.reportingService) {
         this.reportingService.setClient(this.persistenceManager.client);
@@ -116,7 +116,7 @@ export class BedManagementApp {
       // Initial render
       await this.render();
 
-      // Subscribe to Supabase real-time, jei pasiekiama
+      // Subscribe to nuotolinės paslaugos real-time, jei pasiekiama
       await this.subscribeToRealtimeUpdates();
 
       // Start auto-refresh
@@ -136,7 +136,7 @@ export class BedManagementApp {
   async subscribeToRealtimeUpdates() {
     const client = this.persistenceManager?.client;
     if (!client || typeof client.channel !== 'function') {
-      console.info('Supabase realaus laiko kanalas neaktyvus.');
+      console.info('Nuotolinės paslaugos realaus laiko kanalas neaktyvus.');
       return;
     }
 
@@ -307,7 +307,7 @@ export class BedManagementApp {
   }
 
   /**
-   * Read Supabase configuration from data attributes.
+   * Read nuotolinės paslaugos konfigūraciją iš data atributų.
    * @returns {{url: string, anonKey: string}}
    */
   readSupabaseConfig() {
@@ -317,7 +317,7 @@ export class BedManagementApp {
     const anonKey = (dataset.supabaseKey || '').trim();
 
     if (!url || !anonKey) {
-      console.info('Supabase konfigūracija nerasta – aplikacija veikia vietiniu režimu.');
+      console.info('Nuotolinės paslaugos konfigūracija nerasta – aplikacija veikia vietiniu režimu.');
     } else if (typeof window !== 'undefined') {
       window.__SUPABASE_CONFIG__ = { url, anonKey };
     }
@@ -342,7 +342,7 @@ export class BedManagementApp {
             this.bedDataManager.applyAggregatedState(aggregatedState);
           }
         } catch (aggregatedError) {
-          console.warn('Nepavyko gauti suvestinės iš Supabase, tęsiama su įvykių istorija.', aggregatedError);
+          console.warn('Nepavyko gauti suvestinės iš nuotolinės paslaugos, tęsiama su įvykių istorija.', aggregatedError);
         }
       }
 
@@ -918,11 +918,11 @@ export class BedManagementApp {
 
       if (snapshot?.source === 'supabase') {
         const generatedAt = snapshot?.generatedAt ? new Date(snapshot.generatedAt).toLocaleString('lt-LT') : '';
-        this.setReportingNotice(generatedAt ? `Supabase KPI atnaujinta ${generatedAt}.` : 'Supabase KPI atnaujinta.', 'success');
+        this.setReportingNotice(generatedAt ? `Atnaujinta ${generatedAt}.` : 'Atnaujinta.', 'success');
       } else if (snapshot?.error) {
-        this.setReportingNotice('Supabase duomenys nepasiekiami – rodome vietinius KPI.', 'warning');
+        this.setReportingNotice('Nuotoliniai duomenys nepasiekiami – rodome vietinius KPI.', 'warning');
       } else if (snapshot && snapshot?.source !== 'supabase') {
-        this.setReportingNotice('Supabase nepasiekiamas – rodomi vietiniai KPI duomenys.', 'warning');
+        this.setReportingNotice('Nuotolinė duomenų paslauga nepasiekiama – rodomi vietiniai KPI duomenys.', 'warning');
       }
     } catch (error) {
       console.error('Failed to render KPI korteles:', error);

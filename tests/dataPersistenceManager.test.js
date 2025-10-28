@@ -350,7 +350,7 @@ describe('DataPersistenceManager with Supabase', () => {
     expect(
       infoSpy.mock.calls.some(([message]) =>
         message.includes('occupancy_metadata') &&
-        message.includes('Tai normalu, jei Supabase vaizde nenaudojate papildomų metaduomenų'),
+        message.includes('Tai normalu, jei nuotolinės paslaugos vaizde nenaudojate papildomų metaduomenų'),
       ),
     ).toBe(true);
 
@@ -358,7 +358,7 @@ describe('DataPersistenceManager with Supabase', () => {
     infoSpy.mockRestore();
   });
 
-  it('tęsia darbą, kai Supabase vaizde nėra nei occupancy_metadata, nei metadata stulpelių', async () => {
+  it('tęsia darbą, kai nuotolinės paslaugos vaizde nėra nei occupancy_metadata, nei metadata stulpelių', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
@@ -488,7 +488,7 @@ describe('DataPersistenceManager with Supabase', () => {
         status: STATUS_OPTIONS.MESSY_BED,
         description: 'Pastaba',
       }),
-    ).rejects.toThrow('Nepavyko išsaugoti lovos būsenos Supabase: Insert failed');
+    ).rejects.toThrow('Nepavyko išsaugoti lovos būsenos nuotolinėje paslaugoje: Insert failed');
   });
 });
 

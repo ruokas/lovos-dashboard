@@ -70,7 +70,7 @@ describe('Supabase config ir klientas', () => {
     };
 
     expect(() => getSupabaseClient(mockDocument)).toThrow(
-      'Supabase URL arba anon raktas nerastas. Patikrinkite `data-*` atributus ar aplinkos kintamuosius.'
+      'Nuotolinės paslaugos URL arba anon raktas nerastas. Patikrinkite `data-*` atributus ar aplinkos kintamuosius.'
     );
     expect(createClient).not.toHaveBeenCalled();
   });

@@ -76,7 +76,7 @@ export class DataPersistenceManager {
     try {
       return getSupabaseClient(doc);
     } catch (error) {
-      console.info('Supabase klientas nepasiekiamas, naudojamas localStorage režimas.', error);
+      console.info('Nuotolinės paslaugos klientas nepasiekiamas, naudojamas localStorage režimas.', error);
       return null;
     }
   }
@@ -95,7 +95,7 @@ export class DataPersistenceManager {
       .select('id, label');
 
     if (error) {
-      throw new Error(`Nepavyko gauti lovų sąrašo iš Supabase: ${error.message}`);
+      throw new Error(`Nepavyko gauti lovų sąrašo iš nuotolinės paslaugos: ${error.message}`);
     }
 
     data.forEach(({ id, label }) => {
@@ -111,7 +111,7 @@ export class DataPersistenceManager {
     await this.#ensureBedsLoaded();
     const bedId = this.bedLabelToId.get(label);
     if (!bedId) {
-      throw new Error(`Supabase nerado lovos pagal pavadinimą: ${label}`);
+      throw new Error(`Nuotolinė paslauga nerado lovos pagal pavadinimą: ${label}`);
     }
     return bedId;
   }
@@ -171,7 +171,7 @@ export class DataPersistenceManager {
       .select('id, created_at');
 
     if (error) {
-      throw new Error(`Nepavyko išsaugoti lovos būsenos Supabase: ${error.message}`);
+      throw new Error(`Nepavyko išsaugoti lovos būsenos nuotolinėje paslaugoje: ${error.message}`);
     }
 
     const createdAt = data?.[0]?.created_at ?? formResponse.timestamp ?? new Date().toISOString();
@@ -217,7 +217,7 @@ export class DataPersistenceManager {
       .select('id, created_at');
 
     if (error) {
-      throw new Error(`Nepavyko išsaugoti lovos užimtumo Supabase: ${error.message}`);
+      throw new Error(`Nepavyko išsaugoti lovos užimtumo nuotolinėje paslaugoje: ${error.message}`);
     }
 
     const createdAt = data?.[0]?.created_at ?? occupancyData.timestamp ?? new Date().toISOString();
@@ -264,12 +264,12 @@ export class DataPersistenceManager {
           fallback: {
             level: 'info',
             message: ({ missingColumn, column }) =>
-              `aggregated_bed_state view neturi stulpelio ${missingColumn}, mėginamas suderinamumo alias (${column.activeSelect}). Tai normalu, jei Supabase vaizde nenaudojate papildomų metaduomenų.`,
+              `aggregated_bed_state view neturi stulpelio ${missingColumn}, mėginamas suderinamumo alias (${column.activeSelect}). Tai normalu, jei nuotolinės paslaugos vaizde nenaudojate papildomų metaduomenų.`,
           },
           optional: {
             level: 'info',
             message: ({ missingColumn, column }) =>
-              `aggregated_bed_state view neturi stulpelio ${missingColumn} (lauko ${column.key}), tęsiama be šios informacijos (tai normalu, jei Supabase vaizde neįjungti metaduomenys).`,
+              `aggregated_bed_state view neturi stulpelio ${missingColumn} (lauko ${column.key}), tęsiama be šios informacijos (tai normalu, jei nuotolinės paslaugos vaizde neįjungti metaduomenys).`,
           },
         },
       },
@@ -286,9 +286,9 @@ export class DataPersistenceManager {
 
     const defaultMissingMessages = {
       fallback: (columnName) =>
-        `aggregated_bed_state view neturi stulpelio ${columnName}, pritaikytas suderinamumo alias. Atnaujinkite Supabase migracijas.`,
+        `aggregated_bed_state view neturi stulpelio ${columnName}, pritaikytas suderinamumo alias. Atnaujinkite nuotolinės paslaugos migracijas.`,
       optional: (columnName) =>
-        `aggregated_bed_state view neturi stulpelio ${columnName}, tęsiama be šios informacijos. Atnaujinkite Supabase migracijas.`,
+        `aggregated_bed_state view neturi stulpelio ${columnName}, tęsiama be šios informacijos. Atnaujinkite nuotolinės paslaugos migracijas.`,
     };
 
     const logMissingColumn = (column, missingColumn, phase) => {
@@ -346,13 +346,13 @@ export class DataPersistenceManager {
       const missingColumn = match?.[1] ?? null;
 
       if (!missingColumn) {
-        throw new Error(`Nepavyko gauti suvestinės iš Supabase: ${error.message}`);
+        throw new Error(`Nepavyko gauti suvestinės iš nuotolinės paslaugos: ${error.message}`);
       }
 
       const target = activeColumns.find((column) => resolveActualColumn(column.activeSelect) === missingColumn);
 
       if (!target) {
-        throw new Error(`Nepavyko gauti suvestinės iš Supabase: ${error.message}`);
+        throw new Error(`Nepavyko gauti suvestinės iš nuotolinės paslaugos: ${error.message}`);
       }
 
       if (target.remainingFallbacks.length > 0) {
@@ -367,7 +367,7 @@ export class DataPersistenceManager {
         continue;
       }
 
-      throw new Error(`Nepavyko gauti suvestinės iš Supabase: ${error.message}`);
+      throw new Error(`Nepavyko gauti suvestinės iš nuotolinės paslaugos: ${error.message}`);
     }
 
     const aggregated = (data ?? [])
@@ -499,7 +499,7 @@ export class DataPersistenceManager {
       .order('created_at', { ascending: true });
 
     if (error) {
-      throw new Error(`Nepavyko gauti lovų būsenų Supabase: ${error.message}`);
+      throw new Error(`Nepavyko gauti lovų būsenų nuotolinėje paslaugoje: ${error.message}`);
     }
 
     const mapped = (data ?? []).map((item) => ({
@@ -533,7 +533,7 @@ export class DataPersistenceManager {
       .order('created_at', { ascending: true });
 
     if (error) {
-      throw new Error(`Nepavyko gauti lovų užimtumo Supabase: ${error.message}`);
+      throw new Error(`Nepavyko gauti lovų užimtumo nuotolinėje paslaugoje: ${error.message}`);
     }
 
     const mapped = (data ?? []).map((item) => ({
@@ -634,7 +634,7 @@ export class DataPersistenceManager {
         .insert(statusPayload);
 
       if (error) {
-        throw new Error(`Nepavyko importuoti būsenų į Supabase: ${error.message}`);
+        throw new Error(`Nepavyko importuoti būsenų į nuotolinę paslaugą: ${error.message}`);
       }
     }
 
@@ -661,7 +661,7 @@ export class DataPersistenceManager {
         .insert(occupancyPayload);
 
       if (error) {
-        throw new Error(`Nepavyko importuoti užimtumo į Supabase: ${error.message}`);
+        throw new Error(`Nepavyko importuoti užimtumo į nuotolinę paslaugą: ${error.message}`);
       }
     }
 
@@ -687,7 +687,7 @@ export class DataPersistenceManager {
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (deleteStatus.error) {
-      throw new Error(`Nepavyko išvalyti būsenų Supabase: ${deleteStatus.error.message}`);
+      throw new Error(`Nepavyko išvalyti būsenų nuotolinėje paslaugoje: ${deleteStatus.error.message}`);
     }
 
     const deleteOccupancy = await this.client
@@ -696,7 +696,7 @@ export class DataPersistenceManager {
       .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (deleteOccupancy.error) {
-      throw new Error(`Nepavyko išvalyti užimtumo Supabase: ${deleteOccupancy.error.message}`);
+      throw new Error(`Nepavyko išvalyti užimtumo nuotolinėje paslaugoje: ${deleteOccupancy.error.message}`);
     }
 
     this.lastSyncCache = null;
@@ -722,7 +722,7 @@ export class DataPersistenceManager {
       this.lastSyncCache = timestamp;
       return timestamp;
     } catch (error) {
-      console.error('Nepavyko gauti paskutinio Supabase atnaujinimo:', error);
+      console.error('Nepavyko gauti paskutinio nuotolinės paslaugos atnaujinimo:', error);
       return null;
     }
   }
