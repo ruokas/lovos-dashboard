@@ -4,8 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>RŠL SMPS lovų priežiūra</title>
-  <!-- Tailwind CDN -->
-  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="dist/tailwind.css">
   <script type="importmap">
     {
       "imports": {
@@ -13,66 +12,6 @@
       }
     }
   </script>
-  <script>
-    tailwind.config = { darkMode: 'class' };
-  </script>
-  <style type="text/tailwindcss">
-    @layer utilities {
-      .sr-only {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        padding: 0;
-        margin: -1px;
-        overflow: hidden;
-        clip: rect(0, 0, 0, 0);
-        white-space: nowrap;
-        border-width: 0;
-      }
-    }
-    
-    /* Custom scrollbar styles */
-    .custom-scrollbar {
-      scrollbar-width: thin;
-      scrollbar-color: #cbd5e1 #f1f5f9;
-    }
-    
-    .custom-scrollbar::-webkit-scrollbar {
-      width: 8px;
-    }
-    
-    .custom-scrollbar::-webkit-scrollbar-track {
-      background: #f1f5f9;
-      border-radius: 4px;
-    }
-    
-    .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #cbd5e1;
-      border-radius: 4px;
-      transition: background-color 0.2s ease;
-    }
-    
-    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: #94a3b8;
-    }
-    
-    /* Dark mode scrollbar */
-    .dark .custom-scrollbar {
-      scrollbar-color: #475569 #1e293b;
-    }
-    
-    .dark .custom-scrollbar::-webkit-scrollbar-track {
-      background: #1e293b;
-    }
-    
-    .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-      background: #475569;
-    }
-    
-    .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-      background: #64748b;
-    }
-  </style>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body
