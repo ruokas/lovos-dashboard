@@ -175,35 +175,31 @@ export class ReportingService {
       return { source: LOCAL_SOURCE, data: [], message: 'Nuotolinė paslauga nepasiekiama' };
     }
 
-    try {
-      const query = this.client
-        .from('user_interactions')
-        .select('id,interaction_type,bed_id,tag_code,performed_by,payload,occurred_at')
-        .order('occurred_at', { ascending: false });
+    let schemaError = null;
 
-      if (Number.isInteger(limit) && limit > 0) {
-        query.limit(limit);
+    for (const attempt of this.#interactionQueryAttempts(limit)) {
+      try {
+        const rows = await this.#performInteractionQuery(attempt);
+        return {
+          source: SUPABASE_SOURCE,
+          data: this.#normaliseInteractionRows(rows),
+          downgraded: attempt.downgraded ?? false,
+          legacySchema: attempt.legacySchema ?? false,
+        };
+      } catch (error) {
+        if (this.#isSchemaMismatchError(error)) {
+          schemaError = error;
+          continue;
+        }
+        return { source: LOCAL_SOURCE, data: [], error };
       }
-
-      const { data, error } = await query;
-      if (error) {
-        throw error;
-      }
-
-      const normalized = (data ?? []).map((item) => ({
-        id: item.id,
-        interactionType: item.interaction_type,
-        bedId: item.bed_id,
-        tagCode: item.tag_code ?? null,
-        performedBy: item.performed_by ?? null,
-        occurredAt: item.occurred_at,
-        payload: item.payload ?? {},
-      }));
-
-      return { source: SUPABASE_SOURCE, data: normalized };
-    } catch (error) {
-      return { source: LOCAL_SOURCE, data: [], error };
     }
+
+    return {
+      source: LOCAL_SOURCE,
+      data: [],
+      error: schemaError ?? new Error('Nepavyko nuskaityti audito duomenų dėl neatpažintos schemos.'),
+    };
   }
 
   async exportReport(options = {}) {
@@ -244,6 +240,100 @@ export class ReportingService {
 
     const payload = await response.json();
     return { format: normalizedFormat, data: payload };
+  }
+
+  async #performInteractionQuery({ select, orderBy, limit }) {
+    const query = this.client
+      .from('user_interactions')
+      .select(select)
+      .order(orderBy, { ascending: false });
+
+    if (Number.isInteger(limit) && limit > 0) {
+      query.limit(limit);
+    }
+
+    const { data, error } = await query;
+    if (error) {
+      throw error;
+    }
+
+    return data ?? [];
+  }
+
+  #interactionQueryAttempts(limit) {
+    const base = Number.isInteger(limit) && limit > 0 ? limit : null;
+    const attempts = [
+      {
+        select: 'id,interaction_type,bed_id,tag_code,performed_by,payload,occurred_at',
+        orderBy: 'occurred_at',
+      },
+      {
+        select: 'id,interaction_type,bed_id,performed_by,payload,occurred_at',
+        orderBy: 'occurred_at',
+        downgraded: true,
+      },
+      {
+        select: 'id,action,bed_id,performed_by,payload,created_at',
+        orderBy: 'created_at',
+        downgraded: true,
+        legacySchema: true,
+      },
+    ];
+
+    if (base === null) {
+      return attempts;
+    }
+
+    return attempts.map((attempt) => ({ ...attempt, limit: base }));
+  }
+
+  #isSchemaMismatchError(error) {
+    if (!error) {
+      return false;
+    }
+    const code = String(error.code ?? '').toUpperCase();
+    if (code === '42703' || code === 'PGRST204' || code === 'PGRST116') {
+      return true;
+    }
+    const message = String(error.message ?? '').toLowerCase();
+    if (!message) {
+      return false;
+    }
+    return (
+      message.includes('does not exist') ||
+      message.includes('unknown column') ||
+      message.includes('column') && message.includes('not found')
+    );
+  }
+
+  #normaliseInteractionRows(rows) {
+    return (rows ?? []).map((item) => ({
+      id: item.id ?? null,
+      interactionType: item.interaction_type ?? item.action ?? null,
+      bedId: item.bed_id ?? null,
+      tagCode: item.tag_code ?? null,
+      performedBy: item.performed_by ?? null,
+      occurredAt: item.occurred_at ?? item.created_at ?? null,
+      payload: this.#normaliseInteractionPayload(item.payload),
+    }));
+  }
+
+  #normaliseInteractionPayload(value) {
+    if (value === null || value === undefined) {
+      return {};
+    }
+    if (typeof value === 'object') {
+      return value;
+    }
+    if (typeof value === 'string') {
+      try {
+        const parsed = JSON.parse(value);
+        return typeof parsed === 'object' && parsed !== null ? parsed : { raw: value };
+      } catch (error) {
+        return { raw: value };
+      }
+    }
+    return {};
   }
 
   #aggregateSupabaseSnapshot(rows) {

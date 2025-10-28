@@ -5,30 +5,61 @@ import { STATUS_OPTIONS, DEFAULT_SETTINGS } from '../models/bedData.js';
 class FakeQuery {
   constructor(response) {
     this.response = response;
+    this.selectArgs = null;
+    this.orderArgs = null;
+    this.limitValue = null;
+    this.hasResolved = false;
+    this.cachedResponse = undefined;
   }
 
-  select() {
+  select(value) {
+    this.selectArgs = value;
     return this;
   }
 
-  order() {
+  order(column, options) {
+    this.orderArgs = { column, options };
     return this;
   }
 
-  limit() {
+  limit(value) {
+    this.limitValue = value;
     return this;
+  }
+
+  #getResponse() {
+    if (!this.hasResolved) {
+      this.cachedResponse =
+        typeof this.response === 'function'
+          ? this.response({ select: this.selectArgs ?? '', order: this.orderArgs, limit: this.limitValue })
+          : this.response;
+      this.hasResolved = true;
+    }
+    return this.cachedResponse ?? {};
   }
 
   then(resolve, reject) {
-    return Promise.resolve({ data: this.response.data ?? [], error: this.response.error ?? null }).then(resolve, reject);
+    try {
+      return Promise.resolve(this.#getResponse()).then(resolve, reject);
+    } catch (error) {
+      return Promise.reject(error).then(resolve, reject);
+    }
   }
 
   catch(reject) {
-    return Promise.resolve({ data: this.response.data ?? [], error: this.response.error ?? null }).catch(reject);
+    try {
+      return Promise.resolve(this.#getResponse()).catch(reject);
+    } catch (error) {
+      return Promise.reject(error).catch(reject);
+    }
   }
 
   finally(handler) {
-    return Promise.resolve({ data: this.response.data ?? [], error: this.response.error ?? null }).finally(handler);
+    try {
+      return Promise.resolve(this.#getResponse()).finally(handler);
+    } catch (error) {
+      return Promise.reject(error).finally(handler);
+    }
   }
 }
 
@@ -189,5 +220,93 @@ describe('ReportingService', () => {
     const audit = await service.fetchInteractionAudit();
     expect(audit.source).toBe('local');
     expect(audit.data).toHaveLength(0);
+  });
+
+  it('grąžina audito įrašus kai tag_code stulpelis neegzistuoja', async () => {
+    const handler = vi.fn(({ select }) => {
+      if (select.includes('tag_code')) {
+        return { data: [], error: { code: '42703', message: "column 'tag_code' does not exist" } };
+      }
+      return {
+        data: [
+          {
+            id: '1',
+            interaction_type: 'bed_status_saved',
+            bed_id: '1',
+            performed_by: 'nurse@example.com',
+            occurred_at: '2024-08-01T10:00:00Z',
+            payload: { status: STATUS_OPTIONS.CLEAN },
+          },
+        ],
+        error: null,
+      };
+    });
+
+    const client = new FakeSupabaseClient({
+      interactions: handler,
+    });
+
+    const service = new ReportingService({ client });
+    const audit = await service.fetchInteractionAudit({ limit: 5 });
+
+    expect(handler).toHaveBeenCalledTimes(2);
+    expect(audit.source).toBe('supabase');
+    expect(audit.downgraded).toBe(true);
+    expect(audit.legacySchema).toBeFalsy();
+    expect(audit.data).toHaveLength(1);
+    expect(audit.data[0].interactionType).toBe('bed_status_saved');
+  });
+
+  it('grąžina audito įrašus iš senos schemos', async () => {
+    const handler = vi.fn(({ select }) => {
+      if (select.includes('interaction_type')) {
+        return { data: [], error: { code: '42703', message: "column 'interaction_type' does not exist" } };
+      }
+      return {
+        data: [
+          {
+            id: '1',
+            action: 'bed_status_saved',
+            bed_id: '1',
+            performed_by: 'nurse@example.com',
+            created_at: '2024-08-02T12:00:00Z',
+            payload: JSON.stringify({ status: STATUS_OPTIONS.MESSY_BED }),
+          },
+        ],
+        error: null,
+      };
+    });
+
+    const client = new FakeSupabaseClient({
+      interactions: handler,
+    });
+
+    const service = new ReportingService({ client });
+    const audit = await service.fetchInteractionAudit({ limit: 10 });
+
+    expect(handler).toHaveBeenCalledTimes(3);
+    expect(audit.source).toBe('supabase');
+    expect(audit.downgraded).toBe(true);
+    expect(audit.legacySchema).toBe(true);
+    expect(audit.data[0].interactionType).toBe('bed_status_saved');
+    expect(audit.data[0].occurredAt).toBe('2024-08-02T12:00:00Z');
+    expect(audit.data[0].payload.status).toBe(STATUS_OPTIONS.MESSY_BED);
+  });
+
+  it('grąžina vietinį atsakymą kai schema neatpažįstama', async () => {
+    const handler = vi.fn(() => ({
+      data: [],
+      error: { code: '42703', message: "column 'totally_new_column' does not exist" },
+    }));
+
+    const client = new FakeSupabaseClient({ interactions: handler });
+    const service = new ReportingService({ client });
+
+    const audit = await service.fetchInteractionAudit({ limit: 3 });
+
+    expect(handler).toHaveBeenCalledTimes(3);
+    expect(audit.source).toBe('local');
+    expect(audit.data).toHaveLength(0);
+    expect(audit.error).toBeTruthy();
   });
 });

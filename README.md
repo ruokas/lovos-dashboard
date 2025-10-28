@@ -128,7 +128,7 @@ testuoti paraleliai.
 ### 2. RLS politikos ir autentikacija
 
 1. Supabase Authentication skiltyje įjunkite prisijungimą el. paštu arba „magic link“.
-2. Priskirkite naudotojams roles (`cleaning_staff`, `auditor`, `admin`) per `user_metadata` lauką.
+2. Priskirkite naudotojams roles (`cleaning_staff`, `auditor`, `admin`) per `user_metadata` lauką – žr. [išsamų gidą](docs/supabase-roles.md).
 3. Paleiskite RLS politikų scenarijų:
    ```bash
    supabase db push --file supabase/policies/0001_security.sql
