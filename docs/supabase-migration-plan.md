@@ -141,49 +141,52 @@ create index if not exists user_interactions_type_idx
 
 -- Vaizdas, kuris sujungia naujausią statusą ir užimtumą.
 create or replace view public.aggregated_bed_state as
-with latest_status as (
-  select distinct on (bed_id)
-    bed_id,
-    status,
-    priority,
-    notes,
-    reported_by,
-    created_at as status_created_at
-  from public.bed_status_events
-  order by bed_id, created_at desc
-),
-latest_occupancy as (
-  select distinct on (bed_id)
-    bed_id,
-    occupancy_state,
-    patient_code,
-    expected_until,
-    notes as occupancy_notes,
-    created_by,
-    created_at as occupancy_created_at
-  from public.occupancy_events
-  order by bed_id, created_at desc
-)
-select
-  b.id as bed_id,
-  b.label,
-  b.zone,
-  b.details,
-  ls.status,
-  ls.priority,
-  ls.notes as status_notes,
-  ls.reported_by,
-  ls.status_created_at,
-  lo.occupancy_state,
-  lo.patient_code,
-  lo.expected_until,
-  lo.occupancy_notes,
-  lo.created_by as occupancy_reported_by,
-  lo.occupancy_created_at,
-  greatest(coalesce(ls.status_created_at, b.updated_at), coalesce(lo.occupancy_created_at, b.updated_at)) as updated_at
-from public.beds b
-left join latest_status ls on ls.bed_id = b.id
-left join latest_occupancy lo on lo.bed_id = b.id;
+  with latest_status as (
+    select distinct on (bed_id)
+      bed_id,
+      status,
+      priority,
+      notes,
+      reported_by,
+      metadata,
+      created_at
+    from public.bed_status_events
+    order by bed_id, created_at desc
+  ),
+  latest_occupancy as (
+    select distinct on (bed_id)
+      bed_id,
+      occupancy_state,
+      patient_code,
+      expected_until,
+      notes,
+      created_by,
+      metadata,
+      created_at
+    from public.occupancy_events
+    order by bed_id, created_at desc
+  )
+  select
+    b.id as bed_id,
+    b.label,
+    b.zone,
+    b.details,
+    ls.status,
+    ls.priority,
+    ls.notes as status_notes,
+    ls.reported_by as status_reported_by,
+    ls.metadata as status_metadata,
+    ls.created_at as status_created_at,
+    lo.occupancy_state,
+    lo.patient_code,
+    lo.expected_until,
+    lo.notes as occupancy_notes,
+    lo.created_by as occupancy_created_by,
+    lo.metadata as occupancy_metadata,
+    lo.created_at as occupancy_created_at
+  from public.beds b
+  left join latest_status ls on ls.bed_id = b.id
+  left join latest_occupancy lo on lo.bed_id = b.id;
 
 -- Pasirinktinai: materializuotas vaizdas galima sukurti vėliau (žr. 8 žingsnį).
 ```
