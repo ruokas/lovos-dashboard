@@ -1,5 +1,44 @@
 label,zone,details,nfc_code
-A1,Šoko zona,"Prie monitoriaus",nfc-a1-001
-A2,Šoko zona,"Prie sienos",nfc-a2-002
-B1,Stebėjimas,"Langas į kiemą",nfc-b1-010
-B2,Stebėjimas,"Arčiau posto",nfc-b2-011
+1,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-01
+2,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-02
+3,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-03
+4,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-04
+5,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-05
+6,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-06
+7,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-07
+8,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-08
+9,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-09
+10,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-10
+11,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-11
+12,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-12
+13,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-13
+14,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-14
+15,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-15
+16,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-16
+17,Monitoruojamos,Monitoruojama lova (standartinė),nfc-monitor-17
+P1,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p01
+P2,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p02
+P3,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p03
+P4,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p04
+P5,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p05
+P6,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p06
+P7,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p07
+P8,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p08
+P9,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p09
+P10,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p10
+P11,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p11
+P12,Papildomos,Papildoma lova (mobilus variantas),nfc-papildoma-p12
+S4,Sėdimos,Sėdima vieta (kėdė),nfc-sedima-s04
+S5,Sėdimos,Sėdima vieta (kėdė),nfc-sedima-s05
+S6,Sėdimos,Sėdima vieta (kėdė),nfc-sedima-s06
+S7,Sėdimos,Sėdima vieta (kėdė),nfc-sedima-s07
+S8,Sėdimos,Sėdima vieta (kėdė),nfc-sedima-s08
+S9,Sėdimos,Sėdima vieta (kėdė),nfc-sedima-s09
+S10,Sėdimos,Sėdima vieta (kėdė),nfc-sedima-s10
+S11,Sėdimos,Sėdima vieta (kėdė),nfc-sedima-s11
+S12,Sėdimos,Sėdima vieta (kėdė),nfc-sedima-s12
+121A,Palata 121,Palata 121 lova,nfc-121a
+121B,Palata 121,Palata 121 lova,nfc-121b
+IZO,Izoliacinė,Izoliacinė palata lova,nfc-izo
+IT1,Intensyvios terapijos,Intensyvios terapijos lova,nfc-it-01
+IT2,Intensyvios terapijos,Intensyvios terapijos lova,nfc-it-02
