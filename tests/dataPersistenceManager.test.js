@@ -293,6 +293,7 @@ describe('DataPersistenceManager with Supabase', () => {
 
   it('toliau veikia, jei senesnėje schemoje nėra metadata stulpelių', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
     supabaseMock.__mocks.aggregatedSelect
       .mockImplementationOnce(async () => ({
@@ -337,13 +338,79 @@ describe('DataPersistenceManager with Supabase', () => {
     expect(aggregated[0].statusMetadata).toEqual({});
     expect(aggregated[0].occupancyMetadata).toEqual({ legacy: true });
     expect(
-      warnSpy.mock.calls.some(([message]) => message.includes('status_metadata') && message.includes('tęsiama be šios informacijos')),
+      warnSpy.mock.calls.some(([message]) =>
+        message.includes('status_metadata') && message.includes('tęsiama be šios informacijos'),
+      ),
     ).toBe(true);
     expect(
-      warnSpy.mock.calls.some(([message]) => message.includes('occupancy_metadata') && message.includes('pritaikytas suderinamumo alias')),
+      infoSpy.mock.calls.some(([message]) =>
+        message.includes('occupancy_metadata') && message.includes('mėginamas suderinamumo alias'),
+      ),
+    ).toBe(true);
+    expect(
+      infoSpy.mock.calls.some(([message]) =>
+        message.includes('occupancy_metadata') &&
+        message.includes('Tai normalu, jei Supabase vaizde nenaudojate papildomų metaduomenų'),
+      ),
     ).toBe(true);
 
     warnSpy.mockRestore();
+    infoSpy.mockRestore();
+  });
+
+  it('tęsia darbą, kai Supabase vaizde nėra nei occupancy_metadata, nei metadata stulpelių', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
+
+    supabaseMock.__mocks.aggregatedSelect
+      .mockImplementationOnce(async () => ({
+        data: null,
+        error: { message: 'column aggregated_bed_state.occupancy_metadata does not exist' },
+      }))
+      .mockImplementationOnce(async () => ({
+        data: null,
+        error: { message: 'column aggregated_bed_state.metadata does not exist' },
+      }))
+      .mockImplementationOnce(async () => ({
+        data: [
+          {
+            bed_id: 'bed-uuid-1',
+            label: 'IT1',
+            status: STATUS_OPTIONS.CLEAN,
+            priority: null,
+            status_notes: null,
+            status_reported_by: null,
+            status_created_at: null,
+            occupancy_state: null,
+            patient_code: null,
+            expected_until: null,
+            occupancy_notes: null,
+            occupancy_created_by: null,
+            occupancy_created_at: null,
+          },
+        ],
+        error: null,
+      }));
+
+    const aggregated = await manager.loadAggregatedBedState();
+
+    expect(supabaseMock.__mocks.aggregatedSelect).toHaveBeenCalledTimes(3);
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[0][0]).toContain('occupancy_metadata');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[1][0]).toContain('occupancy_metadata:metadata');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[2][0]).not.toContain('occupancy_metadata');
+
+    expect(aggregated).toHaveLength(1);
+    expect(aggregated[0].occupancyMetadata).toEqual({});
+
+    expect(
+      warnSpy.mock.calls.some(([message]) => message.includes('occupancy_metadata')),
+    ).toBe(false);
+    expect(
+      infoSpy.mock.calls.filter(([message]) => message.includes('occupancy_metadata')).length,
+    ).toBeGreaterThanOrEqual(2);
+
+    warnSpy.mockRestore();
+    infoSpy.mockRestore();
   });
 
   it('prisitaiko prie schemos be occupancy_created_by stulpelio', async () => {

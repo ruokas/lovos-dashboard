@@ -260,6 +260,18 @@ export class DataPersistenceManager {
         select: 'occupancy_metadata',
         optional: true,
         fallbacks: ['occupancy_metadata:metadata'],
+        missingNotice: {
+          fallback: {
+            level: 'info',
+            message: ({ missingColumn, column }) =>
+              `aggregated_bed_state view neturi stulpelio ${missingColumn}, mėginamas suderinamumo alias (${column.activeSelect}). Tai normalu, jei Supabase vaizde nenaudojate papildomų metaduomenų.`,
+          },
+          optional: {
+            level: 'info',
+            message: ({ missingColumn, column }) =>
+              `aggregated_bed_state view neturi stulpelio ${missingColumn} (lauko ${column.key}), tęsiama be šios informacijos (tai normalu, jei Supabase vaizde neįjungti metaduomenys).`,
+          },
+        },
       },
       { key: 'occupancy_created_at', select: 'occupancy_created_at' },
     ];
@@ -271,6 +283,37 @@ export class DataPersistenceManager {
     }));
 
     const missingColumnRegex = /column\s+aggregated_bed_state\.\"?([a-zA-Z0-9_]+)\"?\s+does\s+not\s+exist/i;
+
+    const defaultMissingMessages = {
+      fallback: (columnName) =>
+        `aggregated_bed_state view neturi stulpelio ${columnName}, pritaikytas suderinamumo alias. Atnaujinkite Supabase migracijas.`,
+      optional: (columnName) =>
+        `aggregated_bed_state view neturi stulpelio ${columnName}, tęsiama be šios informacijos. Atnaujinkite Supabase migracijas.`,
+    };
+
+    const logMissingColumn = (column, missingColumn, phase) => {
+      const config = column?.missingNotice?.[phase];
+      if (config === null) {
+        return;
+      }
+
+      const level = config?.level ?? 'warn';
+      const logger = typeof console[level] === 'function' ? console[level].bind(console) : console.warn.bind(console);
+
+      let message;
+      if (typeof config?.message === 'function') {
+        message = config.message({ missingColumn, phase, column });
+      } else if (typeof config?.message === 'string') {
+        message = config.message.includes('{{column}}')
+          ? config.message.replace('{{column}}', missingColumn)
+          : config.message;
+      }
+
+      const finalMessage = message ?? defaultMissingMessages[phase](missingColumn);
+      if (finalMessage) {
+        logger(finalMessage);
+      }
+    };
 
     const resolveActualColumn = (expression) => {
       if (!expression) {
@@ -314,17 +357,13 @@ export class DataPersistenceManager {
 
       if (target.remainingFallbacks.length > 0) {
         target.activeSelect = target.remainingFallbacks.shift();
-        console.warn(
-          `aggregated_bed_state view neturi stulpelio ${missingColumn}, pritaikytas suderinamumo alias. Atnaujinkite Supabase migracijas.`,
-        );
+        logMissingColumn(target, missingColumn, 'fallback');
         continue;
       }
 
       if (target.optional) {
+        logMissingColumn(target, missingColumn, 'optional');
         target.activeSelect = null;
-        console.warn(
-          `aggregated_bed_state view neturi stulpelio ${missingColumn}, tęsiama be šios informacijos. Atnaujinkite Supabase migracijas.`,
-        );
         continue;
       }
 
