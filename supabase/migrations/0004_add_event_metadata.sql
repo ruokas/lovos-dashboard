@@ -7,7 +7,9 @@ alter table public.bed_status_events
 alter table public.occupancy_events
   add column if not exists metadata jsonb;
 
-create or replace view public.aggregated_bed_state as
+drop view if exists public.aggregated_bed_state;
+
+create view public.aggregated_bed_state as
   with latest_status as (
     select distinct on (bed_id)
       bed_id,
@@ -54,3 +56,5 @@ create or replace view public.aggregated_bed_state as
   from public.beds b
   left join latest_status ls on ls.bed_id = b.id
   left join latest_occupancy lo on lo.bed_id = b.id;
+
+grant select on public.aggregated_bed_state to authenticated;
