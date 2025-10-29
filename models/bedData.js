@@ -90,16 +90,43 @@ export class BedData {
    * Update occupancy status
    */
   updateOccupancy(occupancyData) {
-    const timestamp = new Date(occupancyData.timestamp);
-    const newStatus = occupancyData.status.toLowerCase();
+    if (!occupancyData) return;
 
-    if (newStatus === 'occupied' && this.occupancyStatus === 'free') {
-      this.lastOccupiedTime = timestamp;
-      this.occupancyStatus = 'occupied';
-    } else if (newStatus === 'free' && this.occupancyStatus === 'occupied') {
-      this.lastFreedTime = timestamp;
-      this.occupancyStatus = 'free';
+    const timestamp = occupancyData.timestamp ? new Date(occupancyData.timestamp) : null;
+    const isValidTimestamp = timestamp instanceof Date && !Number.isNaN(timestamp);
+    const rawStatus = typeof occupancyData.status === 'string'
+      ? occupancyData.status.toLowerCase()
+      : '';
+
+    if (!rawStatus) {
+      return;
     }
+
+    if (rawStatus === 'occupied') {
+      if (isValidTimestamp) {
+        this.lastOccupiedTime = timestamp;
+      }
+      this.occupancyStatus = 'occupied';
+      return;
+    }
+
+    if (rawStatus === 'free' || rawStatus === 'available') {
+      if (isValidTimestamp) {
+        this.lastFreedTime = timestamp;
+      }
+      this.occupancyStatus = 'free';
+      return;
+    }
+
+    if (rawStatus === 'cleaning') {
+      if (isValidTimestamp) {
+        this.lastFreedTime = timestamp;
+      }
+      this.occupancyStatus = 'cleaning';
+      return;
+    }
+
+    this.occupancyStatus = rawStatus;
   }
 
   /**
