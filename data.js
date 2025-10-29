@@ -38,14 +38,74 @@ const COLUMN_HINTS = {
   },
 };
 
+function stripDiacritics(value) {
+  return (typeof value.normalize === 'function' ? value.normalize('NFD') : value)
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
 function normalizeName(value) {
   const str = (value || "").toString();
-  const normalized = typeof str.normalize === 'function' ? str.normalize("NFD") : str;
+  const normalized = stripDiacritics(str);
   return normalized
-    .replace(/[\u0300-\u036f]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+/**
+ * Normalizuoja lovos identifikatorių taip, kad atitiktų makete naudojamus ID.
+ * Pvz., "Lova 01" → "1", "lova nr. IT-2" → "IT2".
+ * @param {string} raw
+ * @returns {string}
+ */
+export function normalizeBedId(raw) {
+  if (raw === null || raw === undefined) return '';
+  const base = stripDiacritics(raw.toString()).trim();
+  if (!base) return '';
+
+  // Pašaliname žodžius „lova“, „nr.“ ir pan., paliekame tik identifikatorių simbolius.
+  let cleaned = base
+    .replace(/\b(lova|lovos|lova nr\.?|lovos nr\.?|nr\.?|no\.?|bed|post)\b/gi, ' ')
+    .replace(/[\(\)\[\]\.:]/g, ' ')
+    .replace(/[,;]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toUpperCase();
+
+  // Pašaliname tarpus ir brūkšnelius, kad gautume vientisą kodą.
+  const collapsed = cleaned.replace(/[\s-]+/g, '');
+  if (!collapsed) return '';
+
+  const specialMatch = collapsed.match(/^(IT\d{1,2}|IZO|P\d{1,2}|S\d{1,2}|121A|121B)$/);
+  if (specialMatch) {
+    return specialMatch[0];
+  }
+
+  const numericWithSuffix = collapsed.match(/^0*(\d+)([A-Z])?$/);
+  if (numericWithSuffix) {
+    const [, digits, suffix] = numericWithSuffix;
+    const normalizedDigits = String(Number(digits));
+    return suffix ? `${normalizedDigits}${suffix}` : normalizedDigits;
+  }
+
+  const fallbackDigits = cleaned.match(/\d+/);
+  if (fallbackDigits) {
+    return String(Number(fallbackDigits[0]));
+  }
+
+  return collapsed;
+}
+
+function withBedIdentifiers(row, fallbackIndex = 0) {
+  const candidateId = row?.bedId || row?.lova || '';
+  const bedId = normalizeBedId(candidateId);
+  const bedKey = bedId ? bedId.toLowerCase() : '';
+  return {
+    ...row,
+    order: typeof row?.order === 'number' ? row.order : fallbackIndex,
+    bedId,
+    bedKey,
+  };
 }
 
 function findColumnIndex(headers, hints) {
@@ -116,7 +176,7 @@ function normalizeRows(raw, fields = []) {
     if (idx.timestamp !== -1) {
       record.timestamp = timestamp || "";
     }
-    return record;
+    return withBedIdentifiers(record, i);
   });
 }
 
@@ -146,7 +206,7 @@ export async function loadData() {
     console.error('Nepavyko įkelti CSV, bandoma naudoti talpyklą', err);
     try {
       const cached = JSON.parse(localStorage.getItem('cachedRows') || 'null');
-      if (cached) return cached;
+      if (cached) return cached.map((row, index) => withBedIdentifiers(row, index));
     } catch (e) {
       console.error('Nepavyko nuskaityti talpyklos', e);
     }

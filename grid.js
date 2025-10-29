@@ -1,4 +1,4 @@
-import { loadData } from './data.js';
+import { loadData, normalizeBedId } from './data.js';
 import { bedLayout } from './layout.js';
 import { pillForOccupancy } from './utils/ui.js';
 import { texts, t } from './texts.js';
@@ -21,11 +21,14 @@ function normalizeStatus(text) {
 function latestRowsByBed(rows) {
   const map = new Map();
   for (const row of rows) {
-    const key = (row.lova || '').toString().trim().toLowerCase();
+    const candidateKey = row?.bedKey || normalizeBedId(row?.lova || row?.bedId || '');
+    const key = (candidateKey || '').toString().trim().toLowerCase();
     if (!key) continue;
     const current = map.get(key);
-    if (!current || (typeof row.order === 'number' && row.order >= (current.order ?? -Infinity))) {
-      map.set(key, row);
+    const incomingOrder = typeof row.order === 'number' ? row.order : row?.order ?? -Infinity;
+    const currentOrder = typeof current?.order === 'number' ? current.order : current?.order ?? -Infinity;
+    if (!current || incomingOrder >= currentOrder) {
+      map.set(key, { ...row, bedKey: key });
     }
   }
   return map;
@@ -67,7 +70,7 @@ function renderGrid(rows) {
   grid.style.height = `${cellHeight * maxRow + totalGapY}px`;
 
   grid.innerHTML = bedLayout.map(bed => {
-    const bedKey = (bed.id || '').toString().trim().toLowerCase();
+    const bedKey = normalizeBedId(bed.id).toLowerCase();
     const data = latest.get(bedKey) || {};
     const statusText = data.uzimt || data.galutine || data.sla || '';
     const normalized = normalizeStatus(`${data.uzimt || ''} ${data.galutine || ''}`);

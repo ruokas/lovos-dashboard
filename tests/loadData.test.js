@@ -78,6 +78,8 @@ describe('loadData', () => {
         gHoursNum: 1.5,
         pask: 'Pastaba',
         who: 'Jonas',
+        bedId: '1',
+        bedKey: '1',
       },
     ];
 
@@ -101,6 +103,8 @@ describe('loadData', () => {
         gHoursNum: 0.5,
         pask: 'Laukiame',
         who: 'Asta',
+        bedId: '2',
+        bedKey: '2',
       },
     ];
 
