@@ -2,41 +2,86 @@
 // CSV URL: adjust to your Google Sheets CSV link.
 const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSju9ACW4Z1oa-GsD2Rs4hnNicNcP1qoZ6AINebI1DbAeXAwgeVyrWKqOLHT5BMfTW9_RpIU_W3qDKk/pub?gid=603256423&single=true&output=csv";
 
-// Column name mappings so sheet column order does not matter.
-const COLS = {
-  lova: ["Lova"],
-  uzimtumas: ["Užimtumas"],
-  paskutineBusena: ["Paskutinė būsena"],
-  atlaisvintaPries: ["Atlaisvinta prieš"],
-  galutineBusena: ["Būsena"],
-  slaBusena: ["Kontrolė"],
-  kasPazymejo: ["Pažymėjo"],
+// Column name hints so sheet column order / language changes do not break the import.
+const COLUMN_HINTS = {
+  lova: {
+    exact: ["Lova"],
+    partial: ["lova", "lovos", "lova nr", "post", "bed"],
+  },
+  occupancy: {
+    exact: ["Užimtumas"],
+    partial: ["užimt", "occup", "status", "dabart", "real"],
+  },
+  lastState: {
+    exact: ["Paskutinė būsena"],
+    partial: ["paskut", "istor", "pastaba", "last"],
+  },
+  freedAgo: {
+    exact: ["Atlaisvinta prieš"],
+    partial: ["atlais", "praėjo", "minutes", "val"],
+  },
+  finalState: {
+    exact: ["Būsena", "Galutinė būsena"],
+    partial: ["galutin", "busena", "emoji", "final"],
+  },
+  slaState: {
+    exact: ["Kontrolė"],
+    partial: ["kontrol", "sla", "tvark", "kokyb"],
+  },
+  markedBy: {
+    exact: ["Pažymėjo"],
+    partial: ["pažym", "pazyme", "nurse", "user", "atsaking"],
+  },
 };
 
-// --- Normalization helpers ---
-function inferColumns(header) {
-  const map = {};
-  function find(names) {
-    for (const n of names) {
-      const idx = header.findIndex(h => h.trim().toLowerCase() === n.trim().toLowerCase());
-      if (idx !== -1) return idx;
-    }
-    return -1;
+function normalizeName(value) {
+  const str = (value || "").toString();
+  const normalized = typeof str.normalize === 'function' ? str.normalize("NFD") : str;
+  return normalized
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function findColumnIndex(headers, hints) {
+  const normalizedHeaders = headers.map(normalizeName);
+  for (const candidate of hints.exact || []) {
+    const target = normalizeName(candidate);
+    const idx = normalizedHeaders.findIndex(h => h === target);
+    if (idx !== -1) return idx;
   }
-  map.lova = find(COLS.lova);
-  map.uzimt = find(COLS.uzimtumas);
-  map.pask = find(COLS.paskutineBusena);
-  map.gHours = find(COLS.atlaisvintaPries);
-  map.final = find(COLS.galutineBusena);
-  map.sla = find(COLS.slaBusena);
-  map.who = find(COLS.kasPazymejo);
+  for (const candidate of hints.partial || []) {
+    const target = normalizeName(candidate);
+    const idx = normalizedHeaders.findIndex(h => h.includes(target));
+    if (idx !== -1) return idx;
+  }
+  return -1;
+}
+
+// --- Normalization helpers ---
+function inferColumns(headers) {
+  const map = {};
+  map.lova = findColumnIndex(headers, COLUMN_HINTS.lova);
+  map.uzimt = findColumnIndex(headers, COLUMN_HINTS.occupancy);
+  map.pask = findColumnIndex(headers, COLUMN_HINTS.lastState);
+  map.gHours = findColumnIndex(headers, COLUMN_HINTS.freedAgo);
+  map.final = findColumnIndex(headers, COLUMN_HINTS.finalState);
+  map.sla = findColumnIndex(headers, COLUMN_HINTS.slaState);
+  map.who = findColumnIndex(headers, COLUMN_HINTS.markedBy);
   return map;
 }
 
-function normalizeRows(raw) {
+function normalizeRows(raw, fields = []) {
   if (!raw.length) return [];
-  const header = Object.keys(raw[0]);
+  const header = fields.length ? fields : Object.keys(raw[0]);
   const idx = inferColumns(header);
+  const missing = Object.entries(idx)
+    .filter(([, value]) => value === -1)
+    .map(([key]) => key);
+  if (missing.length) {
+    console.warn("CSV stulpeliai nerasti, naudojamos tuščios reikšmės:", missing.join(", "));
+  }
   const get = (row, i) => (i >= 0 ? row[header[i]] : "");
   return raw.map((row, i) => {
     const lova = get(row, idx.lova);
@@ -64,11 +109,12 @@ function normalizeRows(raw) {
 async function loadCSV() {
   const res = await fetch(CSV_URL, { cache: "no-store" });
   const csv = await res.text();
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     Papa.parse(csv, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => resolve(results.data),
+      complete: (results) => resolve(results),
+      error: (err) => reject(err),
     });
   });
 }
@@ -76,8 +122,8 @@ async function loadCSV() {
 // Public API
 export async function loadData() {
   try {
-    const raw = await loadCSV();
-    const rows = normalizeRows(raw);
+    const { data, meta } = await loadCSV();
+    const rows = normalizeRows(data, meta?.fields || []);
     // Cache rezultatus lokalioje saugykloje, kad veiktų offline.
     localStorage.setItem('cachedRows', JSON.stringify(rows));
     return rows;

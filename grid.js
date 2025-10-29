@@ -10,6 +10,14 @@ const container = grid?.parentElement?.parentElement;
 // 1 reikštų kvadratą; 0.75 – žemesnę kortelę.
 const HEIGHT_RATIO = 0.75;
 
+function normalizeStatus(text) {
+  const raw = (text || "").toString();
+  const normalized = typeof raw.normalize === 'function' ? raw.normalize("NFD") : raw;
+  return normalized
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
 function renderGrid(rows) {
   lastRows = rows;
   if (!grid) return;
@@ -45,14 +53,24 @@ function renderGrid(rows) {
 
   grid.innerHTML = bedLayout.map(bed => {
     const data = rows.find(r => (r.lova || '').toLowerCase() === bed.id.toLowerCase()) || {};
-    const isOccupied = (data.uzimt || '').toLowerCase().includes('užim');
-    const isClean = (data.galutine || '').startsWith('🟩');
+    const statusText = data.uzimt || data.galutine || data.sla || '';
+    const normalized = normalizeStatus(`${data.uzimt || ''} ${data.galutine || ''}`);
+    const isOccupied = normalized.includes('uzim') || normalized.includes('occupied') || normalized.includes('pacient');
+    const isClean = normalized.includes('🟩') || normalized.includes('sutvark') || normalized.includes('clean');
     const statusClass = isOccupied ? 'occupied' : (isClean ? 'clean' : 'dirty');
+    const meta = [
+      data.galutine && data.galutine !== statusText ? `<span class="text-xs sm:text-sm text-slate-600 dark:text-slate-300">${data.galutine}</span>` : '',
+      data.sla && data.sla !== statusText ? `<span class="text-xs sm:text-sm text-amber-600 dark:text-amber-400">${data.sla}</span>` : '',
+      data.pask ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Paskutinė: ${data.pask}</span>` : '',
+      data.gHours ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Atlaisvinta prieš: ${data.gHours}</span>` : '',
+      data.who ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Pažymėjo: ${data.who}</span>` : '',
+    ].filter(Boolean).join('');
 
     return `<div class="bed-cell ${statusClass}" style="grid-row:${bed.row};grid-column:${bed.col}">
         <div class="bed-id">${bed.id}</div>
         <div class="bed-info">
-          ${pillForOccupancy(data.uzimt)}
+          ${pillForOccupancy(statusText)}
+          ${meta}
         </div>
       </div>`;
   }).join('');
