@@ -38,6 +38,50 @@ const COLUMN_HINTS = {
   },
 };
 
+function normalizeStatusText(value) {
+  const raw = removeBom((value ?? '').toString()).trim();
+  const normalized = stripDiacritics(raw).toLowerCase();
+  return { raw, normalized };
+}
+
+export function interpretOccupancyState(value) {
+  const { normalized } = normalizeStatusText(value);
+  if (!normalized) return 'unknown';
+
+  if (
+    normalized.includes('🟥') ||
+    normalized.includes('uzim') ||
+    normalized.includes('occupied') ||
+    normalized.includes('pacient') ||
+    normalized.includes('patient')
+  ) {
+    return 'occupied';
+  }
+
+  if (
+    normalized.includes('🟩') ||
+    normalized.includes('laisv') ||
+    normalized.includes('free') ||
+    normalized.includes('neuzim') ||
+    normalized.includes('sutvark') ||
+    normalized.includes('clean')
+  ) {
+    return 'free';
+  }
+
+  if (
+    normalized.includes('🟨') ||
+    normalized.includes('valom') ||
+    normalized.includes('ruos') ||
+    normalized.includes('dezinf') ||
+    normalized.includes('cleaning')
+  ) {
+    return 'cleaning';
+  }
+
+  return 'unknown';
+}
+
 function stripDiacritics(value) {
   return (typeof value.normalize === 'function' ? value.normalize('NFD') : value)
     .replace(/[\u0300-\u036f]/g, '');
@@ -144,6 +188,81 @@ function withBedIdentifiers(row, fallbackIndex = 0) {
   };
 }
 
+function timestampRank(row) {
+  if (!row) return null;
+  if (Number.isFinite(row.timestampMs)) return row.timestampMs;
+  const parsed = parseTimestampToMillis(row?.timestamp ?? '');
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+export function latestRowsByBed(rows = []) {
+  const map = new Map();
+  for (const row of rows) {
+    const candidateKey = row?.bedKey || normalizeBedId(row?.lova || row?.bedId || '');
+    const key = (candidateKey || '').toString().trim().toLowerCase();
+    if (!key) continue;
+
+    const current = map.get(key);
+    const incomingRank = timestampRank(row);
+    const currentRank = timestampRank(current);
+    const incomingOrderNumber = Number(row?.order);
+    const incomingOrder = Number.isFinite(row?.order)
+      ? row.order
+      : (Number.isFinite(incomingOrderNumber) ? incomingOrderNumber : -Infinity);
+    const currentOrderNumber = Number(current?.order);
+    const currentOrder = Number.isFinite(current?.order)
+      ? current.order
+      : (Number.isFinite(currentOrderNumber) ? currentOrderNumber : -Infinity);
+
+    const shouldReplace = (() => {
+      if (!current) return true;
+      if (incomingRank !== null && currentRank !== null) return incomingRank >= currentRank;
+      if (incomingRank !== null) return true;
+      if (currentRank !== null) return false;
+      return incomingOrder >= currentOrder;
+    })();
+
+    if (shouldReplace) {
+      map.set(key, { ...row, bedKey: key, timestampMs: incomingRank ?? currentRank ?? null });
+    }
+  }
+  return map;
+}
+
+export function rowsToOccupancyEvents(rows = []) {
+  const latest = latestRowsByBed(rows);
+  const events = [];
+
+  for (const [key, row] of latest.entries()) {
+    const bedId = row?.bedId || normalizeBedId(row?.lova || '');
+    if (!bedId) continue;
+
+    const statusText = row?.uzimt || row?.galutine || row?.sla || '';
+    const state = interpretOccupancyState(statusText);
+    if (state === 'unknown') continue;
+
+    const fallbackOrder = Number(row?.order);
+    const timestampMs = Number.isFinite(row?.timestampMs)
+      ? row.timestampMs
+      : (Number.isFinite(fallbackOrder) ? fallbackOrder : Date.now());
+    const iso = new Date(timestampMs).toISOString();
+
+    events.push({
+      id: `csv-${key}`,
+      timestamp: iso,
+      bedId,
+      status: state === 'cleaning' ? 'free' : state,
+      metadata: {
+        source: 'csv',
+        csvTimestamp: row?.timestamp ?? null,
+        csvStatus: statusText || null,
+      },
+    });
+  }
+
+  return events;
+}
+
 function findColumnIndex(headers, hints) {
   const normalizedHeaders = headers.map(normalizeName);
   for (const candidate of hints.exact || []) {
@@ -220,12 +339,32 @@ function normalizeRows(raw, fields = []) {
 // --- CSV loading ---
 async function loadCSV() {
   const res = await fetch(CSV_URL, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(`CSV šaltinis grąžino klaidą: ${res.status}`);
+  }
+
+  const contentType = res.headers?.get?.('content-type') || '';
+  if (contentType.includes('text/html')) {
+    throw new Error('CSV šaltinis grąžino HTML turinį, patikrinkite prieigos nuostatas.');
+  }
+
   const csv = await res.text();
   return new Promise((resolve, reject) => {
     Papa.parse(csv, {
       header: true,
       skipEmptyLines: true,
-      complete: (results) => resolve(results),
+      complete: (results) => {
+        if (Array.isArray(results?.data) && results.data.length) {
+          resolve(results);
+          return;
+        }
+        if (Array.isArray(results?.errors) && results.errors.length) {
+          const message = results.errors[0]?.message || 'CSV parse klaida';
+          reject(new Error(message));
+          return;
+        }
+        reject(new Error('CSV šaltinis grąžino tuščius duomenis.'));
+      },
       error: (err) => reject(err),
     });
   });

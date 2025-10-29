@@ -1,4 +1,4 @@
-import { loadData, normalizeBedId, parseTimestampToMillis } from './data.js';
+import { loadData, normalizeBedId, latestRowsByBed, interpretOccupancyState } from './data.js';
 import { bedLayout } from './layout.js';
 import { pillForOccupancy } from './utils/ui.js';
 import { texts, t } from './texts.js';
@@ -9,52 +9,6 @@ const container = grid?.parentElement?.parentElement;
 // Proporcija tarp pločio ir aukščio (mažina kortelės aukštį).
 // 1 reikštų kvadratą; 0.75 – žemesnę kortelę.
 const HEIGHT_RATIO = 0.75;
-
-function normalizeStatus(text) {
-  const raw = (text || "").toString();
-  const normalized = typeof raw.normalize === 'function' ? raw.normalize("NFD") : raw;
-  return normalized
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase();
-}
-
-function timestampRank(row) {
-  if (!row) return null;
-  if (Number.isFinite(row.timestampMs)) return row.timestampMs;
-  const parsed = parseTimestampToMillis(row.timestamp ?? '');
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
-function latestRowsByBed(rows) {
-  const map = new Map();
-  for (const row of rows) {
-    const candidateKey = row?.bedKey || normalizeBedId(row?.lova || row?.bedId || '');
-    const key = (candidateKey || '').toString().trim().toLowerCase();
-    if (!key) continue;
-    const current = map.get(key);
-    const incomingRank = timestampRank(row);
-    const currentRank = timestampRank(current);
-    const incomingOrder = Number.isFinite(row?.order)
-      ? row.order
-      : (Number.isFinite(Number(row?.order)) ? Number(row?.order) : -Infinity);
-    const currentOrder = Number.isFinite(current?.order)
-      ? current.order
-      : (Number.isFinite(Number(current?.order)) ? Number(current?.order) : -Infinity);
-
-    const shouldReplace = (() => {
-      if (!current) return true;
-      if (incomingRank !== null && currentRank !== null) return incomingRank >= currentRank;
-      if (incomingRank !== null) return true;
-      if (currentRank !== null) return false;
-      return incomingOrder >= currentOrder;
-    })();
-
-    if (shouldReplace) {
-      map.set(key, { ...row, bedKey: key, timestampMs: incomingRank ?? currentRank ?? null });
-    }
-  }
-  return map;
-}
 
 function renderGrid(rows) {
   lastRows = rows;
@@ -95,10 +49,10 @@ function renderGrid(rows) {
     const bedKey = normalizeBedId(bed.id).toLowerCase();
     const data = latest.get(bedKey) || {};
     const statusText = data.uzimt || data.galutine || data.sla || '';
-    const normalized = normalizeStatus(`${data.uzimt || ''} ${data.galutine || ''}`);
-    const isOccupied = normalized.includes('uzim') || normalized.includes('occupied') || normalized.includes('pacient');
-    const isClean = normalized.includes('🟩') || normalized.includes('sutvark') || normalized.includes('clean');
-    const statusClass = isOccupied ? 'occupied' : (isClean ? 'clean' : 'dirty');
+    const occupancyState = interpretOccupancyState(`${data.uzimt || ''} ${data.galutine || ''}`);
+    const statusClass = occupancyState === 'occupied'
+      ? 'occupied'
+      : (occupancyState === 'free' ? 'clean' : (occupancyState === 'cleaning' ? 'dirty' : 'dirty'));
     const meta = [
       data.galutine && data.galutine !== statusText ? `<span class="text-xs sm:text-sm text-slate-600 dark:text-slate-300">${data.galutine}</span>` : '',
       data.sla && data.sla !== statusText ? `<span class="text-xs sm:text-sm text-amber-600 dark:text-amber-400">${data.sla}</span>` : '',
