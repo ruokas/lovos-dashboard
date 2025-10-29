@@ -88,25 +88,30 @@ function normalizeRows(raw, fields = []) {
     console.warn("CSV stulpeliai nerasti, naudojamos tuščios reikšmės:", missing.join(", "));
   }
   const get = (row, i) => (i >= 0 ? row[header[i]] : "");
+  const toTrimmedString = (value) => {
+    if (value === null || value === undefined) return '';
+    return value.toString().trim();
+  };
+
   return raw.map((row, i) => {
-    const lova = get(row, idx.lova);
-    const final = get(row, idx.final);
-    const sla = get(row, idx.sla);
-    const uzimt = get(row, idx.uzimt);
-    const gHours = get(row, idx.gHours);
-    const pask = get(row, idx.pask);
-    const who = get(row, idx.who);
-    const timestamp = get(row, idx.timestamp);
+    const lova = toTrimmedString(get(row, idx.lova));
+    const final = toTrimmedString(get(row, idx.final));
+    const sla = toTrimmedString(get(row, idx.sla));
+    const uzimt = toTrimmedString(get(row, idx.uzimt));
+    const gHours = toTrimmedString(get(row, idx.gHours));
+    const pask = toTrimmedString(get(row, idx.pask));
+    const who = toTrimmedString(get(row, idx.who));
+    const timestamp = toTrimmedString(get(row, idx.timestamp));
     const record = {
       order: i,
-      lova: lova || "",
-      galutine: final || "",
-      sla: sla || "",
-      uzimt: uzimt || "",
-      gHours: gHours || "",
+      lova,
+      galutine: final,
+      sla,
+      uzimt,
+      gHours,
       gHoursNum: Number(gHours?.toString().replace(",", ".")),
-      pask: pask || "",
-      who: who || "",
+      pask,
+      who,
     };
     if (idx.timestamp !== -1) {
       record.timestamp = timestamp || "";

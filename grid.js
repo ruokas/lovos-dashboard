@@ -18,9 +18,24 @@ function normalizeStatus(text) {
     .toLowerCase();
 }
 
+function latestRowsByBed(rows) {
+  const map = new Map();
+  for (const row of rows) {
+    const key = (row.lova || '').toString().trim().toLowerCase();
+    if (!key) continue;
+    const current = map.get(key);
+    if (!current || (typeof row.order === 'number' && row.order >= (current.order ?? -Infinity))) {
+      map.set(key, row);
+    }
+  }
+  return map;
+}
+
 function renderGrid(rows) {
   lastRows = rows;
   if (!grid) return;
+
+  const latest = latestRowsByBed(rows);
 
   const maxCol = Math.max(...bedLayout.map(b => b.col));
   const maxRow = Math.max(...bedLayout.map(b => b.row));
@@ -52,7 +67,8 @@ function renderGrid(rows) {
   grid.style.height = `${cellHeight * maxRow + totalGapY}px`;
 
   grid.innerHTML = bedLayout.map(bed => {
-    const data = rows.find(r => (r.lova || '').toLowerCase() === bed.id.toLowerCase()) || {};
+    const bedKey = (bed.id || '').toString().trim().toLowerCase();
+    const data = latest.get(bedKey) || {};
     const statusText = data.uzimt || data.galutine || data.sla || '';
     const normalized = normalizeStatus(`${data.uzimt || ''} ${data.galutine || ''}`);
     const isOccupied = normalized.includes('uzim') || normalized.includes('occupied') || normalized.includes('pacient');
