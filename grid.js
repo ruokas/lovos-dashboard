@@ -64,6 +64,7 @@ function renderGrid(rows) {
       data.pask ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Paskutinė: ${data.pask}</span>` : '',
       data.gHours ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Atlaisvinta prieš: ${data.gHours}</span>` : '',
       data.who ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Pažymėjo: ${data.who}</span>` : '',
+      data.timestamp ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Atnaujinta: ${data.timestamp}</span>` : '',
     ].filter(Boolean).join('');
 
     return `<div class="bed-cell ${statusClass}" style="grid-row:${bed.row};grid-column:${bed.col}">

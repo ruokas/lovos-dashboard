@@ -9,8 +9,8 @@ const COLUMN_HINTS = {
     partial: ["lova", "lovos", "lova nr", "post", "bed"],
   },
   occupancy: {
-    exact: ["Užimtumas"],
-    partial: ["užimt", "occup", "status", "dabart", "real"],
+    exact: ["Užimtumas", "Statusas"],
+    partial: ["užimt", "occup", "status", "statusas", "dabart", "real"],
   },
   lastState: {
     exact: ["Paskutinė būsena"],
@@ -21,8 +21,8 @@ const COLUMN_HINTS = {
     partial: ["atlais", "praėjo", "minutes", "val"],
   },
   finalState: {
-    exact: ["Būsena", "Galutinė būsena"],
-    partial: ["galutin", "busena", "emoji", "final"],
+    exact: ["Būsena", "Galutinė būsena", "Statusas"],
+    partial: ["galutin", "busena", "emoji", "final", "status"],
   },
   slaState: {
     exact: ["Kontrolė"],
@@ -31,6 +31,10 @@ const COLUMN_HINTS = {
   markedBy: {
     exact: ["Pažymėjo"],
     partial: ["pažym", "pazyme", "nurse", "user", "atsaking"],
+  },
+  timestamp: {
+    exact: ["Timestamp"],
+    partial: ["time", "laik"],
   },
 };
 
@@ -69,6 +73,7 @@ function inferColumns(headers) {
   map.final = findColumnIndex(headers, COLUMN_HINTS.finalState);
   map.sla = findColumnIndex(headers, COLUMN_HINTS.slaState);
   map.who = findColumnIndex(headers, COLUMN_HINTS.markedBy);
+  map.timestamp = findColumnIndex(headers, COLUMN_HINTS.timestamp);
   return map;
 }
 
@@ -91,7 +96,8 @@ function normalizeRows(raw, fields = []) {
     const gHours = get(row, idx.gHours);
     const pask = get(row, idx.pask);
     const who = get(row, idx.who);
-    return {
+    const timestamp = get(row, idx.timestamp);
+    const record = {
       order: i,
       lova: lova || "",
       galutine: final || "",
@@ -102,6 +108,10 @@ function normalizeRows(raw, fields = []) {
       pask: pask || "",
       who: who || "",
     };
+    if (idx.timestamp !== -1) {
+      record.timestamp = timestamp || "";
+    }
+    return record;
   });
 }
 
