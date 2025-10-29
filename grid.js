@@ -1,4 +1,4 @@
-import { loadData, normalizeBedId } from './data.js';
+import { loadData, normalizeBedId, parseTimestampToMillis } from './data.js';
 import { bedLayout } from './layout.js';
 import { pillForOccupancy } from './utils/ui.js';
 import { texts, t } from './texts.js';
@@ -18,6 +18,13 @@ function normalizeStatus(text) {
     .toLowerCase();
 }
 
+function timestampRank(row) {
+  if (!row) return null;
+  if (Number.isFinite(row.timestampMs)) return row.timestampMs;
+  const parsed = parseTimestampToMillis(row.timestamp ?? '');
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 function latestRowsByBed(rows) {
   const map = new Map();
   for (const row of rows) {
@@ -25,10 +32,25 @@ function latestRowsByBed(rows) {
     const key = (candidateKey || '').toString().trim().toLowerCase();
     if (!key) continue;
     const current = map.get(key);
-    const incomingOrder = typeof row.order === 'number' ? row.order : row?.order ?? -Infinity;
-    const currentOrder = typeof current?.order === 'number' ? current.order : current?.order ?? -Infinity;
-    if (!current || incomingOrder >= currentOrder) {
-      map.set(key, { ...row, bedKey: key });
+    const incomingRank = timestampRank(row);
+    const currentRank = timestampRank(current);
+    const incomingOrder = Number.isFinite(row?.order)
+      ? row.order
+      : (Number.isFinite(Number(row?.order)) ? Number(row?.order) : -Infinity);
+    const currentOrder = Number.isFinite(current?.order)
+      ? current.order
+      : (Number.isFinite(Number(current?.order)) ? Number(current?.order) : -Infinity);
+
+    const shouldReplace = (() => {
+      if (!current) return true;
+      if (incomingRank !== null && currentRank !== null) return incomingRank >= currentRank;
+      if (incomingRank !== null) return true;
+      if (currentRank !== null) return false;
+      return incomingOrder >= currentOrder;
+    })();
+
+    if (shouldReplace) {
+      map.set(key, { ...row, bedKey: key, timestampMs: incomingRank ?? currentRank ?? null });
     }
   }
   return map;

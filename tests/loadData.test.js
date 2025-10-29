@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { loadData } from '../data.js';
+import { loadData, parseTimestampToMillis } from '../data.js';
 
 const createLocalStorageMock = () => {
   const store = new Map();
@@ -49,8 +49,10 @@ describe('loadData', () => {
     const response = { text: vi.fn().mockResolvedValue(csvText) };
     fetchMock.mockResolvedValue(response);
 
+    const timestamp = '2024-10-10 15:30:00';
     const rawRows = [
       {
+        'Timestamp': timestamp,
         'Lova': 'A1',
         'Būsena': '🧹 Tvarkyti',
         'Kontrolė': '⛔ Viršyta',
@@ -78,6 +80,8 @@ describe('loadData', () => {
         gHoursNum: 1.5,
         pask: 'Pastaba',
         who: 'Jonas',
+        timestamp,
+        timestampMs: parseTimestampToMillis(timestamp),
         bedId: '1',
         bedKey: '1',
       },
@@ -92,6 +96,7 @@ describe('loadData', () => {
   });
 
   it('grąžina talpyklos duomenis kai fetch meta klaidą', async () => {
+    const cachedTimestamp = '2024-10-11 08:00:00';
     const cachedRows = [
       {
         order: 3,
@@ -103,6 +108,8 @@ describe('loadData', () => {
         gHoursNum: 0.5,
         pask: 'Laukiame',
         who: 'Asta',
+        timestamp: cachedTimestamp,
+        timestampMs: parseTimestampToMillis(cachedTimestamp),
         bedId: '2',
         bedKey: '2',
       },

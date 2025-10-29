@@ -43,13 +43,45 @@ function stripDiacritics(value) {
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+function removeBom(value) {
+  return value.replace(/^\ufeff/, '');
+}
+
 function normalizeName(value) {
-  const str = (value || "").toString();
+  const str = removeBom((value || "").toString());
   const normalized = stripDiacritics(str);
   return normalized
     .replace(/\s+/g, " ")
     .trim()
     .toLowerCase();
+}
+
+export function parseTimestampToMillis(input) {
+  if (input === null || input === undefined) return null;
+  const raw = removeBom(input.toString()).trim();
+  if (!raw) return null;
+
+  const sanitized = raw
+    .replace(/\u00A0/g, ' ')
+    .replace(/\//g, '-')
+    .replace(/\s+/g, ' ');
+
+  const candidateBase = sanitized.includes('T') ? sanitized : sanitized.replace(' ', 'T');
+  const candidates = [
+    candidateBase,
+    candidateBase.replace(/\./g, '-'),
+    `${candidateBase}Z`,
+    sanitized,
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = Date.parse(candidate);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -100,11 +132,15 @@ function withBedIdentifiers(row, fallbackIndex = 0) {
   const candidateId = row?.bedId || row?.lova || '';
   const bedId = normalizeBedId(candidateId);
   const bedKey = bedId ? bedId.toLowerCase() : '';
+  const timestampMs = Number.isFinite(row?.timestampMs)
+    ? row.timestampMs
+    : parseTimestampToMillis(row?.timestamp ?? '');
   return {
     ...row,
     order: typeof row?.order === 'number' ? row.order : fallbackIndex,
     bedId,
     bedKey,
+    timestampMs: Number.isFinite(timestampMs) ? timestampMs : null,
   };
 }
 
@@ -162,6 +198,8 @@ function normalizeRows(raw, fields = []) {
     const pask = toTrimmedString(get(row, idx.pask));
     const who = toTrimmedString(get(row, idx.who));
     const timestamp = toTrimmedString(get(row, idx.timestamp));
+    const timestampMs = parseTimestampToMillis(timestamp);
+
     const record = {
       order: i,
       lova,
@@ -172,10 +210,9 @@ function normalizeRows(raw, fields = []) {
       gHoursNum: Number(gHours?.toString().replace(",", ".")),
       pask,
       who,
+      timestamp: idx.timestamp !== -1 ? (timestamp || "") : undefined,
+      timestampMs: Number.isFinite(timestampMs) ? timestampMs : null,
     };
-    if (idx.timestamp !== -1) {
-      record.timestamp = timestamp || "";
-    }
     return withBedIdentifiers(record, i);
   });
 }
