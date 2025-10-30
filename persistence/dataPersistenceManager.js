@@ -722,7 +722,7 @@ export class DataPersistenceManager {
     await this.#ensureBedsLoaded();
     const { data, error } = await this.client
       .from('ed_board')
-      .select('id, vieta, busena, pacientas, komentaras, updated_at, slaugytojas, padejejas, gydytojas, kat')
+      .select('vieta, busena, pacientas, komentaras, updated_at, slaugytojas, padejejas, gydytojas, kat')
       .order('updated_at', { ascending: true });
 
     if (error) {
