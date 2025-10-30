@@ -39,11 +39,90 @@ export const DEFAULT_SETTINGS = {
   notificationsEnabled: true
 };
 
-function normalizeText(value) {
-  if (typeof value !== 'string') {
+function normalizeStatusString(value) {
+  if (value === null || value === undefined) {
     return '';
   }
-  return value.trim().toLowerCase();
+
+  return value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '');
+}
+
+const BOARD_STATUS_ALIASES = new Map([
+  [
+    'free',
+    [
+      'laisva',
+      'laisvas',
+      'laisvi',
+      'laisvos',
+      'laisv',
+      'neuzimta',
+      'neuzimtas',
+      'neuzimt',
+      'available',
+      'free',
+      'false',
+      '0',
+      'f',
+      'no',
+    ],
+  ],
+  [
+    'occupied',
+    [
+      'uzimta',
+      'uzimtas',
+      'uzimtu',
+      'uzim',
+      'occupied',
+      'pacio',
+      'pacient',
+      'true',
+      '1',
+      't',
+      'yes',
+    ],
+  ],
+  [
+    'cleaning',
+    [
+      'tvarkoma',
+      'tvarkomas',
+      'tvarko',
+      'valoma',
+      'valomas',
+      'valo',
+      'dezinfekuojama',
+      'dezinfek',
+      'cleaning',
+      'plaunama',
+      'plauna',
+    ],
+  ],
+  [
+    'reserved',
+    ['rezervuota', 'rezervuotas', 'rezerv', 'reserved'],
+  ],
+]);
+
+function normalizeBoardStatus(value) {
+  const normalized = normalizeStatusString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  for (const [target, aliases] of BOARD_STATUS_ALIASES.entries()) {
+    if (aliases.some((alias) => normalized.includes(alias))) {
+      return target;
+    }
+  }
+
+  return null;
 }
 
 function normalizeOccupancyFlag(value) {
@@ -60,16 +139,33 @@ function normalizeOccupancyFlag(value) {
     return value !== 0;
   }
 
-  const normalized = normalizeText(value);
+  const normalized = normalizeStatusString(value);
   if (!normalized) {
     return null;
   }
 
-  if (['1', 't', 'true', 'y', 'yes', 'occupied', 'uzimta', 'užimta', 'uzimtas', 'užimtas'].includes(normalized)) {
+  if (['1', 't', 'true', 'y', 'yes', 'occupied', 'uzimta', 'uzimtas'].includes(normalized)) {
     return true;
   }
 
-  if (['0', 'f', 'false', 'n', 'no', 'free', 'laisva', 'laisvas', 'laisvi', 'laisvos', 'available'].includes(normalized)) {
+  if (
+    [
+      '0',
+      'f',
+      'false',
+      'n',
+      'no',
+      'free',
+      'laisva',
+      'laisvas',
+      'laisvi',
+      'laisvos',
+      'available',
+      'neuzimta',
+      'neuzimtas',
+      'neuzimt',
+    ].includes(normalized)
+  ) {
     return false;
   }
 
@@ -136,7 +232,7 @@ export class BedData {
     const rawStatusText = typeof occupancyData.status === 'string'
       ? occupancyData.status.trim()
       : '';
-    const rawStatus = rawStatusText.toLowerCase();
+    const normalizedBoardStatus = normalizeBoardStatus(rawStatusText);
     const occupancyFlag = normalizeOccupancyFlag(
       occupancyData.occupancy
         ?? occupancyData.metadata?.occupancy
@@ -155,17 +251,28 @@ export class BedData {
         : hasPatient
           ? 'occupied'
           : 'free';
-    const occupiedAliases = [
-      'occupied', 'užimta', 'uzimta', 'užimtas', 'uzimtas', 'true', '1', 't', 'yes',
-    ];
-    const freeAliases = [
-      'free', 'laisva', 'laisvas', 'laisvi', 'laisvos', 'available', 'false', '0', 'f', 'no',
-    ];
-    const overrideStatuses = [...occupiedAliases, ...freeAliases];
-    const shouldOverrideWithDerived = occupancyFlag !== null
-      ? (!rawStatusText || overrideStatuses.includes(rawStatus))
-      : !rawStatusText;
-    const normalizedStatus = shouldOverrideWithDerived ? derivedStatus : rawStatus;
+    const specialBoardStatus = normalizedBoardStatus === 'cleaning' || normalizedBoardStatus === 'reserved';
+
+    let normalizedStatus = null;
+
+    if (specialBoardStatus) {
+      normalizedStatus = normalizedBoardStatus;
+    } else if (occupancyFlag === true) {
+      normalizedStatus = 'occupied';
+    } else if (occupancyFlag === false) {
+      normalizedStatus = 'free';
+    } else if (normalizedBoardStatus) {
+      normalizedStatus = normalizedBoardStatus;
+    } else if (rawStatusText) {
+      const fallbackNormalized = normalizeBoardStatus(rawStatusText);
+      normalizedStatus = fallbackNormalized ?? rawStatusText.trim();
+    } else {
+      normalizedStatus = derivedStatus;
+    }
+
+    if (!normalizedStatus) {
+      normalizedStatus = derivedStatus;
+    }
 
     this.currentPatientCode = hasPatient ? occupancyData.patientCode : null;
 
@@ -184,9 +291,9 @@ export class BedData {
       return;
     }
 
-    const statusValue = normalizedStatus.toLowerCase();
+    const statusValue = normalizeBoardStatus(normalizedStatus) ?? normalizedStatus.toString().trim().toLowerCase();
 
-    if (occupiedAliases.includes(statusValue)) {
+    if (statusValue === 'occupied') {
       if (isValidTimestamp) {
         this.lastOccupiedTime = timestamp;
       }
@@ -194,7 +301,7 @@ export class BedData {
       return;
     }
 
-    if (freeAliases.includes(statusValue)) {
+    if (statusValue === 'free') {
       if (isValidTimestamp) {
         this.lastFreedTime = timestamp;
       }
@@ -202,7 +309,7 @@ export class BedData {
       return;
     }
 
-    if (['cleaning', 'tvarkoma', 'tvarkomas', 'valoma', 'dezinfekuojama'].includes(statusValue)) {
+    if (statusValue === 'cleaning') {
       if (isValidTimestamp) {
         this.lastFreedTime = timestamp;
       }
@@ -210,7 +317,12 @@ export class BedData {
       return;
     }
 
-    this.occupancyStatus = statusValue;
+    if (statusValue === 'reserved') {
+      this.occupancyStatus = 'reserved';
+      return;
+    }
+
+    this.occupancyStatus = normalizedStatus;
   }
 
   /**

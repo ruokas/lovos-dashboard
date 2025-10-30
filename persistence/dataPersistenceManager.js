@@ -27,8 +27,12 @@ const BOARD_STATUS_ALIASES = new Map([
       'laisvas',
       'laisvi',
       'laivas',
+      'laisvos',
+      'laisv',
       'neuzimta',
       'neužimta',
+      'neuzimtas',
+      'neuzimt',
       'available',
       'free',
       'false',
@@ -44,9 +48,12 @@ const BOARD_STATUS_ALIASES = new Map([
       'užimta',
       'uzimtas',
       'užimtas',
+      'uzimtu',
+      'užimtu',
       'occupied',
       'pacio',
       'pacientas',
+      'pacient',
       'užim',
       'true',
       '1',
@@ -54,8 +61,23 @@ const BOARD_STATUS_ALIASES = new Map([
       'yes',
     ],
   ],
-  ['cleaning', ['tvarkoma', 'tvarkomas', 'valoma', 'dezinfekuojama', 'cleaning']],
-  ['reserved', ['rezervuota', 'rezervuotas', 'reserved']],
+  [
+    'cleaning',
+    [
+      'tvarkoma',
+      'tvarkomas',
+      'tvarko',
+      'valoma',
+      'valomas',
+      'valo',
+      'dezinfekuojama',
+      'dezinfek',
+      'cleaning',
+      'plaunama',
+      'plauna',
+    ],
+  ],
+  ['reserved', ['rezervuota', 'rezervuotas', 'rezerv', 'reserved']],
 ]);
 
 const BOARD_STATUS_DEFAULTS = {
@@ -109,11 +131,28 @@ function normalizeOccupancyFlag(value) {
     return null;
   }
 
-  if (['1', 't', 'true', 'y', 'yes', 'occupied', 'uzimta', 'užimta', 'uzimtas', 'užimtas'].includes(normalized)) {
+  if (['1', 't', 'true', 'y', 'yes', 'occupied', 'uzimta', 'uzimtas'].includes(normalized)) {
     return true;
   }
 
-  if (['0', 'f', 'false', 'n', 'no', 'free', 'laisva', 'laisvas', 'laisvi', 'laisvos', 'available'].includes(normalized)) {
+  if (
+    [
+      '0',
+      'f',
+      'false',
+      'n',
+      'no',
+      'free',
+      'laisva',
+      'laisvas',
+      'laisvi',
+      'laisvos',
+      'available',
+      'neuzimta',
+      'neuzimtas',
+      'neuzimt',
+    ].includes(normalized)
+  ) {
     return false;
   }
 

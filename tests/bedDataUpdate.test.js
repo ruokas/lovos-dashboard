@@ -65,4 +65,32 @@ describe('BedData.updateOccupancy', () => {
     expect(bed.occupancyStatus).toBe('cleaning');
     expect(bed.lastFreedTime?.toISOString()).toBe(timestamp);
   });
+
+  it('occupancy reikšmė true perrašo neapibrėžtą tekstinį statusą', () => {
+    const bed = new BedData('6');
+    const timestamp = '2024-01-03T10:00:00.000Z';
+
+    bed.updateOccupancy({
+      status: 'Lova tikrinama',
+      occupancy: true,
+      timestamp,
+    });
+
+    expect(bed.occupancyStatus).toBe('occupied');
+    expect(bed.lastOccupiedTime?.toISOString()).toBe(timestamp);
+  });
+
+  it('palieka cleaning būseną, jei lenta taip pažymi, nepaisant occupancy flag', () => {
+    const bed = new BedData('7');
+    const timestamp = '2024-01-03T11:00:00.000Z';
+
+    bed.updateOccupancy({
+      status: 'Lovą valo',
+      occupancy: true,
+      timestamp,
+    });
+
+    expect(bed.occupancyStatus).toBe('cleaning');
+    expect(bed.lastFreedTime?.toISOString()).toBe(timestamp);
+  });
 });
