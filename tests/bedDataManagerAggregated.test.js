@@ -115,4 +115,30 @@ describe('BedDataManager.applyAggregatedState', () => {
     expect(bed.occupancyAssignedNurse).toBe('nurse.two@example.com');
     expect(bed.currentPatientCode).toBeNull();
   });
+
+  it('interpretuoja TRUE/FALSE reikšmes kaip užimtumo būsenas', () => {
+    const manager = new BedDataManager();
+
+    manager.applyAggregatedState([
+      {
+        bedId: '4',
+        occupancyState: 'TRUE',
+        occupancyCreatedAt: '2024-02-05T11:00:00.000Z',
+        occupancy: 'true',
+        occupancyCreatedBy: 'nurse.gamma@example.com',
+      },
+      {
+        bedId: '4',
+        occupancyState: 'FALSE',
+        occupancyCreatedAt: '2024-02-05T13:00:00.000Z',
+        occupancy: 'false',
+        occupancyCreatedBy: 'nurse.gamma@example.com',
+      },
+    ]);
+
+    const bed = manager.beds.get('4');
+    expect(bed.occupancyStatus).toBe('free');
+    expect(bed.lastOccupiedTime?.toISOString()).toBe('2024-02-05T11:00:00.000Z');
+    expect(bed.lastFreedTime?.toISOString()).toBe('2024-02-05T13:00:00.000Z');
+  });
 });

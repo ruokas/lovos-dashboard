@@ -324,6 +324,75 @@ describe('DataPersistenceManager with Supabase', () => {
     ]);
   });
 
+  it('interpretuoja TRUE/FALSE reikšmes kaip užimtumo būsenas', async () => {
+    supabaseMock.__mocks.occupancySelectOrder.mockResolvedValueOnce({
+      data: [
+        {
+          vieta: 'IT1',
+          busena: 'TRUE',
+          pacientas: '',
+          komentaras: null,
+          slaugytojas: null,
+          padejejas: null,
+          gydytojas: null,
+          kat: null,
+          occupancy: 'true',
+          updated_at: '2024-01-02T10:00:00.000Z',
+        },
+        {
+          vieta: 'IT1',
+          busena: 'FALSE',
+          pacientas: '',
+          komentaras: null,
+          slaugytojas: null,
+          padejejas: null,
+          gydytojas: null,
+          kat: null,
+          occupancy: 'false',
+          updated_at: '2024-01-02T12:00:00.000Z',
+        },
+      ],
+      error: null,
+    });
+
+    const occupancy = await manager.loadOccupancyData();
+
+    expect(occupancy).toEqual([
+      {
+        id: 'IT1-2024-01-02T10:00:00.000Z',
+        timestamp: '2024-01-02T10:00:00.000Z',
+        bedId: 'IT1',
+        status: 'occupied',
+        patientCode: '',
+        occupancy: true,
+        expectedUntil: null,
+        notes: null,
+        createdBy: null,
+        metadata: {
+          source: 'ed_board',
+          occupancy: true,
+          rawStatus: 'TRUE',
+        },
+      },
+      {
+        id: 'IT1-2024-01-02T12:00:00.000Z',
+        timestamp: '2024-01-02T12:00:00.000Z',
+        bedId: 'IT1',
+        status: 'free',
+        patientCode: '',
+        occupancy: false,
+        expectedUntil: null,
+        notes: null,
+        createdBy: null,
+        metadata: {
+          source: 'ed_board',
+          occupancy: false,
+          rawStatus: 'FALSE',
+        },
+      },
+    ]);
+  });
+
   it('nuskaito suvestinius duomenis iš Supabase', async () => {
     const aggregated = await manager.loadAggregatedBedState();
 

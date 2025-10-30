@@ -155,10 +155,13 @@ export class BedData {
         : hasPatient
           ? 'occupied'
           : 'free';
-    const overrideStatuses = [
-      'occupied', 'užimta', 'uzimta', 'užimtas', 'uzimtas',
-      'free', 'laisva', 'laisvas', 'laisvi', 'laisvos', 'available',
+    const occupiedAliases = [
+      'occupied', 'užimta', 'uzimta', 'užimtas', 'uzimtas', 'true', '1', 't', 'yes',
     ];
+    const freeAliases = [
+      'free', 'laisva', 'laisvas', 'laisvi', 'laisvos', 'available', 'false', '0', 'f', 'no',
+    ];
+    const overrideStatuses = [...occupiedAliases, ...freeAliases];
     const shouldOverrideWithDerived = occupancyFlag !== null
       ? (!rawStatusText || overrideStatuses.includes(rawStatus))
       : !rawStatusText;
@@ -183,7 +186,7 @@ export class BedData {
 
     const statusValue = normalizedStatus.toLowerCase();
 
-    if (['occupied', 'užimta', 'uzimta', 'užimtas', 'uzimtas'].includes(statusValue)) {
+    if (occupiedAliases.includes(statusValue)) {
       if (isValidTimestamp) {
         this.lastOccupiedTime = timestamp;
       }
@@ -191,7 +194,7 @@ export class BedData {
       return;
     }
 
-    if (['free', 'available', 'laisva', 'laisvas', 'laisvi', 'laisvos'].includes(statusValue)) {
+    if (freeAliases.includes(statusValue)) {
       if (isValidTimestamp) {
         this.lastFreedTime = timestamp;
       }

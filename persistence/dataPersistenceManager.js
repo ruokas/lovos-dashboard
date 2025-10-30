@@ -20,8 +20,40 @@ const STATUS_PRIORITY_MAP = new Map([
 ]);
 
 const BOARD_STATUS_ALIASES = new Map([
-  ['free', ['laisva', 'laisvas', 'laisvi', 'laivas', 'neuzimta', 'neužimta', 'available', 'free']],
-  ['occupied', ['uzimta', 'užimta', 'uzimtas', 'užimtas', 'occupied', 'pacio', 'pacientas', 'užim']],
+  [
+    'free',
+    [
+      'laisva',
+      'laisvas',
+      'laisvi',
+      'laivas',
+      'neuzimta',
+      'neužimta',
+      'available',
+      'free',
+      'false',
+      '0',
+      'f',
+      'no',
+    ],
+  ],
+  [
+    'occupied',
+    [
+      'uzimta',
+      'užimta',
+      'uzimtas',
+      'užimtas',
+      'occupied',
+      'pacio',
+      'pacientas',
+      'užim',
+      'true',
+      '1',
+      't',
+      'yes',
+    ],
+  ],
   ['cleaning', ['tvarkoma', 'tvarkomas', 'valoma', 'dezinfekuojama', 'cleaning']],
   ['reserved', ['rezervuota', 'rezervuotas', 'reserved']],
 ]);
