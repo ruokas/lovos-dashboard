@@ -321,8 +321,8 @@
   box-shadow: none;
 }
 
-.dark .kpi-card__label,
-.dark .kpi-card__value {
+.dark #kpis .kpi-card__label,
+.dark #kpis .kpi-card__value {
   color: #f8fafc;
 }
 
@@ -528,32 +528,32 @@
   gap: var(--space-3);
 }
 
-.dark .notification-row {
+.dark #notificationSummary .notification-row {
   background: rgba(15, 23, 42, 0.75);
   border-color: rgba(148, 163, 184, 0.25);
 }
 
-.dark .notification-row__bed-label,
-.dark .notification-row__issue-meta,
-.dark .notification-row__issue-body {
+.dark #notificationSummary .notification-row__bed-label,
+.dark #notificationSummary .notification-row__issue-meta,
+.dark #notificationSummary .notification-row__issue-body {
   color: #cbd5f5;
 }
 
-.dark .notification-row__meta-separator {
+.dark #notificationSummary .notification-row__meta-separator {
   color: #94a3b8;
 }
 
-.dark .notification-row__bed-id,
-.dark .notification-row__issue-title {
+.dark #notificationSummary .notification-row__bed-id,
+.dark #notificationSummary .notification-row__issue-title {
   color: #f8fafc;
 }
 
-.dark .notification-row__occupancy--busy {
+.dark #notificationSummary .notification-row__occupancy--busy {
   background: rgba(220, 38, 38, 0.2);
   color: #fecaca;
 }
 
-.dark .notification-row__occupancy--free {
+.dark #notificationSummary .notification-row__occupancy--free {
   background: rgba(34, 197, 94, 0.2);
   color: #bbf7d0;
 }
