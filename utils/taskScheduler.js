@@ -10,8 +10,8 @@ export const DEFAULT_RECURRING_TEMPLATES = [
     seriesId: 'lab-transport',
     title: 'Laboratoriniai mėginiai → Centrinė laboratorija',
     description: 'Paruošti ir perduoti mėginius į centrinę laboratoriją pagal grafiką.',
-    channel: 'laboratory',
-    channelLabel: 'Laboratorija',
+    zone: 'laboratory',
+    zoneLabel: 'Laboratorija',
     responsible: 'Laboratorijos kurjeris',
     priority: TASK_PRIORITIES.CRITICAL,
     startTimes: ['07:30', '10:30', '13:30', '16:30', '19:30', '22:30'],
@@ -63,8 +63,10 @@ export function generateOccurrences(template = {}, referenceDate = new Date()) {
     seriesId: baseSeriesId,
     title: template.title ?? template.summary ?? 'Periodinė užduotis',
     description: template.description ?? '',
-    channel: template.channel ?? 'laboratory',
-    channelLabel: template.channelLabel ?? template.channel ?? 'Laboratorija',
+    zone: template.zone ?? template.channel ?? 'laboratory',
+    zoneLabel: template.zoneLabel ?? template.channelLabel ?? template.zone ?? template.channel ?? 'Laboratorija',
+    channel: template.zone ?? template.channel ?? 'laboratory',
+    channelLabel: template.zoneLabel ?? template.channelLabel ?? template.zone ?? template.channel ?? 'Laboratorija',
     responsible: template.responsible ?? '',
     priority: template.priority ?? TASK_PRIORITIES.HIGH,
     dueAt: dueAt.toISOString(),
@@ -175,11 +177,13 @@ export function materializeRecurringTasks(options = {}) {
   const createdTasks = [];
 
   for (const occurrence of occurrences) {
-    if (typeof taskManager.hasTask === 'function' && taskManager.hasTask(occurrence.id)) {
+      if (typeof taskManager.hasTask === 'function' && taskManager.hasTask(occurrence.id)) {
       taskManager.updateTask?.(occurrence.id, {
         priority: occurrence.priority,
         dueAt: occurrence.dueAt,
         responsible: occurrence.responsible,
+        zone: occurrence.zone,
+        zoneLabel: occurrence.zoneLabel,
         channel: occurrence.channel,
         channelLabel: occurrence.channelLabel,
       });

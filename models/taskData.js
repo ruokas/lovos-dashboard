@@ -22,13 +22,6 @@ export const TASK_PRIORITIES = {
   LOW: 4,
 };
 
-export const TASK_TYPE_OPTIONS = [
-  { value: 'patientCare', labelKey: 'patientCare' },
-  { value: 'logistics', labelKey: 'logistics' },
-  { value: 'communication', labelKey: 'communication' },
-  { value: 'training', labelKey: 'training' },
-];
-
 export const TASK_RECURRENCE_OPTIONS = [
   { value: 'none', labelKey: 'none' },
   { value: 'perShift', labelKey: 'perShift' },
@@ -36,7 +29,7 @@ export const TASK_RECURRENCE_OPTIONS = [
   { value: 'weekly', labelKey: 'weekly' },
 ];
 
-export const TASK_CHANNEL_OPTIONS = [
+export const TASK_ZONE_OPTIONS = [
   { value: 'laboratory', labelKey: 'laboratory' },
   { value: 'ambulatory', labelKey: 'ambulatory' },
   { value: 'wards', labelKey: 'wards' },
@@ -425,13 +418,14 @@ export class TaskManager {
   filterTasks(filters = {}) {
     const searchTerm = (filters.search ?? '').toLowerCase().trim();
     const statusFilter = filters.status ?? 'all';
-    const channelFilter = filters.channel ?? 'all';
+    const zoneFilter = filters.zone ?? filters.channel ?? 'all';
 
     const filtered = this.getTasks().filter((task) => {
       if (statusFilter !== 'all' && task.status !== statusFilter) {
         return false;
       }
-      if (channelFilter !== 'all' && task.channel !== channelFilter) {
+      const zoneValue = task.zone ?? task.channel;
+      if (zoneFilter !== 'all' && zoneValue !== zoneFilter) {
         return false;
       }
       if (!searchTerm) {
@@ -439,12 +433,12 @@ export class TaskManager {
       }
 
       const haystack = [
-        task.type,
-        task.typeLabel,
         task.description,
         task.responsible,
-        task.channel,
-        task.channelLabel,
+        zoneValue,
+        task.zoneLabel ?? task.channelLabel,
+        task.metadata?.patient?.surname,
+        task.metadata?.patient?.chartNumber,
         task.dueAt,
         task.seriesId,
       ]
@@ -619,11 +613,25 @@ export class TaskManager {
     const createdAt = safeIsoString(task.createdAt) ?? new Date().toISOString();
     const updatedAt = safeIsoString(task.updatedAt) ?? createdAt;
     const dueAt = task.dueAt !== undefined ? safeIsoString(task.dueAt) : safeIsoString(task.deadline);
+    const zoneValueCandidate = typeof task.zone === 'string' && task.zone.trim() ? task.zone.trim() : null;
+    const channelValueCandidate = typeof task.channel === 'string' && task.channel.trim() ? task.channel.trim() : null;
+    const zoneValue = zoneValueCandidate ?? channelValueCandidate ?? 'general';
+    const zoneLabelCandidate = typeof task.zoneLabel === 'string' && task.zoneLabel.trim()
+      ? task.zoneLabel.trim()
+      : null;
+    const channelLabelCandidate = typeof task.channelLabel === 'string' && task.channelLabel.trim()
+      ? task.channelLabel.trim()
+      : null;
+    const zoneLabel = zoneLabelCandidate ?? channelLabelCandidate ?? zoneValue;
+    const normalizedMetadata = normaliseMetadata(task.metadata);
 
     return {
       id: typeof task.id === 'string' ? task.id : this.#generateId(),
       type: typeof task.type === 'string' ? task.type : 'general',
-      typeLabel: typeof task.typeLabel === 'string' ? task.typeLabel : (task.type ?? 'general'),
+      typeLabel:
+        typeof task.typeLabel === 'string' && task.typeLabel.trim()
+          ? task.typeLabel.trim()
+          : (task.type ?? 'Užduotis'),
       title: typeof task.title === 'string' ? task.title : null,
       description: typeof task.description === 'string' ? task.description : '',
       recurrence: typeof task.recurrence === 'string' ? task.recurrence : 'none',
@@ -631,13 +639,15 @@ export class TaskManager {
       responsible: typeof task.responsible === 'string' ? task.responsible : '',
       deadline: safeIsoString(task.deadline),
       dueAt,
-      channel: typeof task.channel === 'string' ? task.channel : 'general',
-      channelLabel: typeof task.channelLabel === 'string' ? task.channelLabel : (task.channel ?? 'general'),
+      zone: zoneValue,
+      zoneLabel,
+      channel: zoneValue,
+      channelLabel: zoneLabel,
       priority: ensurePriority(task.priority),
       status: ensureStatus(task.status),
       seriesId: typeof task.seriesId === 'string' ? task.seriesId : null,
       source: typeof task.source === 'string' ? task.source : (task.source === null ? null : 'local'),
-      metadata: normaliseMetadata(task.metadata),
+      metadata: normalizedMetadata,
       createdAt,
       updatedAt,
     };
@@ -671,6 +681,17 @@ export class TaskManager {
       recurringSourceTaskId: source.id ?? providedMetadata.recurringSourceTaskId ?? null,
     });
 
+    const zoneValueCandidate = typeof source.zone === 'string' && source.zone.trim() ? source.zone.trim() : null;
+    const channelValueCandidate = typeof source.channel === 'string' && source.channel.trim() ? source.channel.trim() : null;
+    const zoneValue = zoneValueCandidate ?? channelValueCandidate ?? 'general';
+    const zoneLabelCandidate = typeof source.zoneLabel === 'string' && source.zoneLabel.trim()
+      ? source.zoneLabel.trim()
+      : null;
+    const channelLabelCandidate = typeof source.channelLabel === 'string' && source.channelLabel.trim()
+      ? source.channelLabel.trim()
+      : null;
+    const zoneLabel = zoneLabelCandidate ?? channelLabelCandidate ?? zoneValue;
+
     const lookaheadDays = Number.isFinite(options.lookaheadDays)
       ? options.lookaheadDays
       : this.#resolveLookaheadDays(recurrenceValue);
@@ -679,8 +700,10 @@ export class TaskManager {
       seriesId: baseSeriesId,
       title: typeof source.title === 'string' && source.title.trim() ? source.title : (source.typeLabel ?? 'Pasikartojanti užduotis'),
       description: typeof source.description === 'string' ? source.description : '',
-      channel: typeof source.channel === 'string' ? source.channel : 'general',
-      channelLabel: typeof source.channelLabel === 'string' ? source.channelLabel : (source.channel ?? 'general'),
+      zone: zoneValue,
+      zoneLabel,
+      channel: zoneValue,
+      channelLabel: zoneLabel,
       responsible: typeof source.responsible === 'string' ? source.responsible : '',
       priority: ensurePriority(source.priority),
       recurrence: recurrenceValue,

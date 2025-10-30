@@ -53,15 +53,15 @@ Palaipsniui migruojame į Supabase, todėl visas front-end veikia kaip ES moduli
 
 ### Nauja užduotis skyriui
 1. Spustelėkite "Nauja užduotis" (arba paspauskite **Ctrl+Shift+T**)
-2. Pasirinkite užduoties tipą ir kanalą (pvz., laboratorija, ambulatorija)
-3. Įveskite aprašymą, atsakingą asmenį/komandą ir, jei reikia, terminą
+2. Įveskite paciento pavardę ir kortelės numerį
+3. Aprašykite veiksmą, pasirinkite zoną (pvz., laboratorija, ambulatorija) ir, jei reikia, terminą
 4. Nurodykite pasikartojimo intervalą ("Nepasikartojanti" palikite, jei užduotis vienkartinė)
 5. Spustelėkite "Sukurti" – užduotis iškart atsiras sąraše su būsenos ženkleliu
 
 ### Užduočių paieška ir filtravimas
-- Paieškos laukelyje įveskite raktažodį (tipas, atsakingas ar kanalas)
+- Paieškos laukelyje įveskite raktažodį (zona, paciento pavardė ar kortelės Nr.)
 - Filtras „Būsena“ leidžia atsijoti planuojamas, vykdomas, užbaigtas ar sustabdytas užduotis
-- Filtras „Kanalas“ leidžia fokusuotis tik į laboratoriją, ambulatoriją ar stacionarą
+- Filtras „Zona“ leidžia fokusuotis tik į laboratoriją, ambulatoriją ar stacionarą
 - Tuščias sąrašas rodo pranešimą, kad pagal pasirinktus filtrus nėra įrašų
 
 ### Greitasis lovos atnaujinimas

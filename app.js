@@ -13,7 +13,7 @@ import { NfcHandler } from './nfc/nfcHandler.js';
 import { ReportingService } from './reports/reportingService.js';
 import { SupabaseAuthManager } from './auth/supabaseAuth.js';
 import { t, texts } from './texts.js';
-import { TaskManager, TASK_STATUSES, TASK_CHANNEL_OPTIONS, TASK_PRIORITIES } from './models/taskData.js';
+import { TaskManager, TASK_STATUSES, TASK_ZONE_OPTIONS, TASK_PRIORITIES } from './models/taskData.js';
 import { loadData as loadCsvData, rowsToOccupancyEvents } from './data.js';
 import { clampFontSizeLevel, readStoredFontSizeLevel, storeFontSizeLevel, applyFontSizeLevelToDocument } from './utils/fontSize.js';
 import { materializeRecurringTasks, DEFAULT_RECURRING_TEMPLATES } from './utils/taskScheduler.js';
@@ -63,7 +63,7 @@ export class BedManagementApp {
     });
     this.userInteractionLogger = new UserInteractionLogger({ document: sharedDocument, client: this.persistenceManager.client });
 
-    this.taskFilters = { search: '', status: 'all', channel: 'all' };
+    this.taskFilters = { search: '', status: 'all', zone: 'all' };
     this.taskSearchDebounceTimer = null;
     this.boundTaskShortcutHandler = (event) => this.handleTaskShortcut(event);
 
@@ -393,6 +393,9 @@ export class BedManagementApp {
         return;
       }
 
+      const zoneValue = record.zone ?? record.channel ?? 'laboratory';
+      const zoneLabel = record.zone_label ?? record.zone ?? record.channel_label ?? record.channel ?? 'laboratorija';
+
       const taskPayload = {
         id: taskId ?? undefined,
         title: record.title ?? record.name ?? record.summary ?? undefined,
@@ -400,8 +403,10 @@ export class BedManagementApp {
         typeLabel: record.type_label ?? record.type ?? record.title ?? 'Logistika',
         description: record.description ?? record.notes ?? '',
         responsible: record.responsible ?? record.assignee ?? record.owner ?? '',
-        channel: record.channel ?? 'laboratory',
-        channelLabel: record.channel_label ?? record.channel ?? 'laboratorija',
+        zone: zoneValue,
+        zoneLabel,
+        channel: zoneValue,
+        channelLabel: zoneLabel,
         priority: record.priority ?? TASK_PRIORITIES.MEDIUM,
         dueAt: record.due_at ?? record.dueAt ?? record.deadline ?? null,
         status: record.status ?? TASK_STATUSES.PLANNED,
@@ -457,9 +462,13 @@ export class BedManagementApp {
       if (record.responsible ?? record.assignee) {
         updates.responsible = record.responsible ?? record.assignee;
       }
-      if (record.channel ?? record.channel_label) {
-        updates.channel = record.channel ?? undefined;
-        updates.channelLabel = record.channel_label ?? record.channel ?? undefined;
+      const zoneUpdateValue = record.zone ?? record.channel ?? undefined;
+      const zoneUpdateLabel = record.zone_label ?? record.channel_label ?? record.zone ?? record.channel ?? undefined;
+      if (zoneUpdateValue ?? zoneUpdateLabel) {
+        updates.zone = zoneUpdateValue;
+        updates.zoneLabel = zoneUpdateLabel;
+        updates.channel = zoneUpdateValue;
+        updates.channelLabel = zoneUpdateLabel;
       }
       if (record.description ?? record.notes) {
         updates.description = record.description ?? record.notes;
@@ -788,9 +797,9 @@ export class BedManagementApp {
       taskStatusLabel.textContent = t(texts.tasks.statusFilterLabel);
     }
 
-    const taskChannelLabel = document.querySelector('label[for="taskChannelFilter"]');
-    if (taskChannelLabel) {
-      taskChannelLabel.textContent = t(texts.tasks.channelFilterLabel);
+    const taskZoneLabel = document.querySelector('label[for="taskZoneFilter"]');
+    if (taskZoneLabel) {
+      taskZoneLabel.textContent = t(texts.tasks.zoneFilterLabel);
     }
 
     const taskStatusFilter = document.getElementById('taskStatusFilter');
@@ -802,12 +811,12 @@ export class BedManagementApp {
       });
     }
 
-    const taskChannelFilter = document.getElementById('taskChannelFilter');
-    if (taskChannelFilter) {
-      this.populateTaskChannelFilter(taskChannelFilter);
-      taskChannelFilter.value = this.taskFilters.channel;
-      taskChannelFilter.addEventListener('change', (event) => {
-        this.handleTaskFilterChange('channel', event.target.value ?? 'all');
+    const taskZoneFilter = document.getElementById('taskZoneFilter');
+    if (taskZoneFilter) {
+      this.populateTaskZoneFilter(taskZoneFilter);
+      taskZoneFilter.value = this.taskFilters.zone;
+      taskZoneFilter.addEventListener('change', (event) => {
+        this.handleTaskFilterChange('zone', event.target.value ?? 'all');
       });
     }
 
@@ -969,16 +978,16 @@ export class BedManagementApp {
       .join('');
   }
 
-  populateTaskChannelFilter(selectElement) {
+  populateTaskZoneFilter(selectElement) {
     if (!selectElement) {
       return;
     }
 
     const options = [
-      { value: 'all', label: t(texts.tasks.channelAll) },
-      ...TASK_CHANNEL_OPTIONS.map((option) => ({
+      { value: 'all', label: t(texts.tasks.zoneAll) },
+      ...TASK_ZONE_OPTIONS.map((option) => ({
         value: option.value,
-        label: t(texts.tasks.channels?.[option.labelKey]) || option.value,
+        label: t(texts.tasks.zones?.[option.labelKey]) || option.value,
       })),
     ];
 
@@ -988,7 +997,7 @@ export class BedManagementApp {
   }
 
   handleTaskFilterChange(key, value) {
-    if (!['status', 'channel'].includes(key)) {
+    if (!['status', 'zone'].includes(key)) {
       return;
     }
     this.taskFilters[key] = value;
@@ -1121,9 +1130,11 @@ export class BedManagementApp {
       this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
         fontSizeLevel: this.fontSizeLevel,
       });
+      const zoneForLog = logTarget.zone ?? logTarget.channel;
       void this.userInteractionLogger.logInteraction('task_created', {
         taskId: logTarget.id,
-        channel: logTarget.channel,
+        zone: zoneForLog,
+        channel: zoneForLog,
         status: logTarget.status,
       });
       return savedTask;
@@ -1562,9 +1573,9 @@ export class BedManagementApp {
       taskStatusLabel.textContent = t(texts.tasks.statusFilterLabel);
     }
 
-    const taskChannelLabel = document.querySelector('label[for="taskChannelFilter"]');
-    if (taskChannelLabel) {
-      taskChannelLabel.textContent = t(texts.tasks.channelFilterLabel);
+    const taskZoneLabel = document.querySelector('label[for="taskZoneFilter"]');
+    if (taskZoneLabel) {
+      taskZoneLabel.textContent = t(texts.tasks.zoneFilterLabel);
     }
 
     const searchInput = document.getElementById('taskSearch');
@@ -1584,10 +1595,10 @@ export class BedManagementApp {
       statusFilter.value = this.taskFilters.status;
     }
 
-    const channelFilter = document.getElementById('taskChannelFilter');
-    if (channelFilter) {
-      this.populateTaskChannelFilter(channelFilter);
-      channelFilter.value = this.taskFilters.channel;
+    const zoneFilter = document.getElementById('taskZoneFilter');
+    if (zoneFilter) {
+      this.populateTaskZoneFilter(zoneFilter);
+      zoneFilter.value = this.taskFilters.zone;
     }
 
     const tasks = this.taskManager.filterTasks(this.taskFilters);
@@ -1602,7 +1613,12 @@ export class BedManagementApp {
       const deadlineText = this.formatTaskDate(task.dueAt ?? task.deadline);
       const createdText = this.formatTaskDate(task.createdAt);
       const recurrenceText = task.recurrenceLabel || t(texts.tasks.recurrence?.none);
-      const responsible = task.responsible || t(texts.ui.unknownUser);
+      const responsible = task.responsible?.trim() || '';
+      const zoneLabel = task.zoneLabel || task.channelLabel || t(texts.tasks.labels.zoneFallback);
+      const patientSurname = task.metadata?.patient?.surname?.trim() ?? '';
+      const patientChart = task.metadata?.patient?.chartNumber?.trim() ?? '';
+      const patientDisplaySurname = patientSurname || t(texts.tasks.labels.patientUnknown);
+      const patientDisplayChart = patientChart || t(texts.tasks.labels.chartUnknown);
       const isOverdue = this.isTaskOverdue(task);
       const deadlineClass = isOverdue
         ? 'text-red-600 dark:text-red-300'
@@ -1610,24 +1626,34 @@ export class BedManagementApp {
       const overdueBadge = isOverdue
         ? `<span class="px-2 py-0.5 text-[11px] font-semibold text-red-700 bg-red-100 dark:bg-red-900/40 dark:text-red-200 rounded-md">${escapeHtml(t(texts.tasks.badges.overdue))}</span>`
         : '';
+      const responsibleLine = responsible
+        ? `<div>${escapeHtml(t(texts.tasks.labels.responsible))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(responsible)}</span></div>`
+        : '';
 
       return `
         <article class="border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/40 p-3 space-y-3" data-task-id="${escapeHtml(task.id)}" role="listitem">
           <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div class="space-y-2 md:flex-1 md:pr-4">
               <div class="flex flex-wrap items-center gap-2">
-                <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">${escapeHtml(task.typeLabel)}</span>
+                <span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200 uppercase tracking-wide">${escapeHtml(zoneLabel)}</span>
                 <span class="px-2 py-0.5 rounded-md text-xs font-medium ${statusMeta.classes}">${statusMeta.icon} ${escapeHtml(statusMeta.label)}</span>
                 <span class="px-2 py-0.5 rounded-md text-xs font-medium ${priorityMeta.classes}" title="${escapeHtml(t(texts.tasks.labels?.priority))}">${priorityMeta.icon} ${escapeHtml(priorityMeta.label)}</span>
                 ${overdueBadge}
               </div>
+              <div class="text-xs text-slate-600 dark:text-slate-300">
+                <span class="font-medium text-slate-800 dark:text-slate-100">${escapeHtml(t(texts.tasks.labels.patient))}:</span>
+                <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(patientDisplaySurname)}</span>
+                <span class="mx-1 text-slate-400">•</span>
+                <span class="uppercase tracking-wide">${escapeHtml(t(texts.tasks.labels.chart))}:</span>
+                <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(patientDisplayChart)}</span>
+              </div>
               <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">${escapeHtml(task.description)}</p>
             </div>
             <div class="text-xs text-slate-500 dark:text-slate-300 space-y-1 md:text-right md:w-52">
-              <div>${escapeHtml(t(texts.tasks.labels.responsible))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(responsible)}</span></div>
+              ${responsibleLine}
               <div>${escapeHtml(t(texts.tasks.labels.due))}: <span class="font-medium ${deadlineClass}">${escapeHtml(deadlineText)}</span></div>
               <div>${escapeHtml(t(texts.tasks.labels.recurrence))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(recurrenceText)}</span></div>
-              <div>${escapeHtml(t(texts.tasks.labels.channel))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(task.channelLabel)}</span></div>
+              <div>${escapeHtml(t(texts.tasks.labels.zone))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(zoneLabel)}</span></div>
               <div>${escapeHtml(t(texts.tasks.labels.created))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(createdText)}</span></div>
             </div>
           </div>
@@ -1836,7 +1862,7 @@ export class BedManagementApp {
 
     this.bedDataManager = new BedDataManager();
     this.taskManager.clearAllTasks();
-    this.taskFilters = { search: '', status: 'all', channel: 'all' };
+    this.taskFilters = { search: '', status: 'all', zone: 'all' };
     this.currentSearchTerm = '';
 
     if (this.searchDebounceTimer) {

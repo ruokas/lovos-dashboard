@@ -59,9 +59,12 @@ describe('NotificationManager su bendromis užduotimis', () => {
       priority: 1,
       dueAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       status: 'planned',
+      zone: 'laboratory',
+      zoneLabel: 'Laboratorija',
       channel: 'laboratory',
       channelLabel: 'Laboratorija',
       responsible: 'Kurjeris',
+      metadata: { patient: { surname: 'Petraitis', chartNumber: 'A123' } },
     };
 
     notificationManager.updateNotifications([], [criticalTask]);
@@ -85,6 +88,7 @@ describe('NotificationManager su bendromis užduotimis', () => {
         priority: 1,
         dueAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
         status: 'inProgress',
+        zone: 'laboratory',
         channel: 'laboratory',
       },
       {
@@ -93,6 +97,7 @@ describe('NotificationManager su bendromis užduotimis', () => {
         priority: 3,
         dueAt: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
         status: 'planned',
+        zone: 'communication',
         channel: 'communication',
       },
     ];

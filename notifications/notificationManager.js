@@ -329,7 +329,7 @@ export class NotificationManager {
       ?? task.type
       ?? t(texts.tasks?.title) ?? 'Užduotis';
     const description = typeof task.description === 'string' ? task.description : '';
-    const channel = task.channelLabel ?? task.channel ?? '';
+    const zone = task.zoneLabel ?? task.channelLabel ?? task.zone ?? task.channel ?? '';
     const responsible = task.responsible ?? '';
     const priority = Number.isFinite(task.priority) ? task.priority : TASK_PRIORITIES.MEDIUM;
     const priorityBucket = this.getTaskPriorityBucket(priority);
@@ -348,7 +348,7 @@ export class NotificationManager {
       id,
       title,
       description,
-      channel,
+      zone,
       responsible,
       priority,
       priorityBucket,
@@ -360,6 +360,7 @@ export class NotificationManager {
       status: task.status ?? TASK_STATUSES.PLANNED,
       source: task.source ?? 'local',
       recurrenceLabel,
+      metadata: task.metadata ? { ...task.metadata } : {},
     };
   }
 
@@ -424,8 +425,13 @@ export class NotificationManager {
             : '';
 
         const metaParts = [];
-        if (task.channel) {
-          metaParts.push(`<span class="notification-task__channel ${applyFontSizeClasses('text-[11px] font-medium uppercase tracking-wide', level)}">${escapeHtml(task.channel)}</span>`);
+        if (task.zone) {
+          metaParts.push(`<span class="notification-task__zone ${applyFontSizeClasses('text-[11px] font-medium uppercase tracking-wide', level)}">${escapeHtml(task.zone)}</span>`);
+        }
+        if (task.metadata?.patient?.surname || task.metadata?.patient?.chartNumber) {
+          const patientSurname = task.metadata?.patient?.surname || t(texts.tasks.labels.patientUnknown);
+          const patientChart = task.metadata?.patient?.chartNumber || t(texts.tasks.labels.chartUnknown);
+          metaParts.push(`<span>${escapeHtml(patientSurname)} (${escapeHtml(patientChart)})</span>`);
         }
         if (task.recurrenceLabel) {
           metaParts.push(`<span class="notification-task__recurrence ${applyFontSizeClasses('text-[11px] font-medium text-slate-600 dark:text-slate-300', level)}">${escapeHtml(task.recurrenceLabel)}</span>`);

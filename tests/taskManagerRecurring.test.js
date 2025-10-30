@@ -36,6 +36,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
         source: 'scheduler',
         title: 'Laboratoriniai mėginiai',
         description: 'Išsiųsti laboratorijos mėginius.',
+        zone: 'laboratory',
+        zoneLabel: 'Laboratorija',
         channel: 'laboratory',
         channelLabel: 'Laboratorija',
         responsible: 'Kurjeris',
@@ -54,6 +56,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
         source: 'scheduler',
         title: 'Laboratoriniai mėginiai',
         description: 'Išsiųsti laboratorijos mėginius.',
+        zone: 'laboratory',
+        zoneLabel: 'Laboratorija',
         channel: 'laboratory',
         channelLabel: 'Laboratorija',
         responsible: 'Kurjeris',
@@ -89,6 +93,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
         source: 'scheduler',
         title: 'Laboratoriniai mėginiai',
         description: 'Išsiųsti laboratorijos mėginius.',
+        zone: 'laboratory',
+        zoneLabel: 'Laboratorija',
         channel: 'laboratory',
         channelLabel: 'Laboratorija',
         responsible: 'Kurjeris',
@@ -107,6 +113,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
         source: 'scheduler',
         title: 'Laboratoriniai mėginiai',
         description: 'Išsiųsti laboratorijos mėginius.',
+        zone: 'laboratory',
+        zoneLabel: 'Laboratorija',
         channel: 'laboratory',
         channelLabel: 'Laboratorija',
         responsible: 'Kurjeris',
@@ -125,6 +133,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
         source: 'local',
         title: 'Patikra',
         description: 'Patikrinti įrangą.',
+        zone: 'wards',
+        zoneLabel: 'Skyrius',
         channel: 'wards',
         channelLabel: 'Skyrius',
         responsible: 'Slaugytoja',
@@ -139,7 +149,7 @@ describe('Pasikartojančių užduočių sujungimas', () => {
       },
     ];
 
-    const result = manager.filterTasks({ search: '', status: 'all', channel: 'all' });
+    const result = manager.filterTasks({ search: '', status: 'all', zone: 'all' });
     expect(result.some((task) => task.id === 'lab-1' || task.id === 'lab-2')).toBe(false);
     const mergedEntry = result.find((task) => task.id === 'lab-transport');
     expect(mergedEntry).toBeTruthy();
@@ -158,6 +168,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
       recurrence: 'daily',
       recurrenceLabel: 'Kasdien',
       responsible: 'Kurjeris',
+      zone: 'laboratory',
+      zoneLabel: 'Laboratorija',
       channel: 'laboratory',
       channelLabel: 'Laboratorija',
       deadline: new Date(reference.getTime() + 60 * 60 * 1000).toISOString(),

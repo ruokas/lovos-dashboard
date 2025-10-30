@@ -4,10 +4,9 @@
  */
 
 import {
-  TASK_CHANNEL_OPTIONS,
   TASK_RECURRENCE_OPTIONS,
   TASK_STATUSES,
-  TASK_TYPE_OPTIONS,
+  TASK_ZONE_OPTIONS,
 } from '../models/taskData.js';
 import { t, texts } from '../texts.js';
 
@@ -39,14 +38,11 @@ function resolveOptionLabel(optionGroup, value, fallback) {
     return fallback ?? value ?? '';
   }
 
-  if (optionGroup === TASK_TYPE_OPTIONS) {
-    return t(texts.tasks?.types?.[option.labelKey]) || fallback || value;
-  }
   if (optionGroup === TASK_RECURRENCE_OPTIONS) {
     return t(texts.tasks?.recurrence?.[option.labelKey]) || fallback || value;
   }
-  if (optionGroup === TASK_CHANNEL_OPTIONS) {
-    return t(texts.tasks?.channels?.[option.labelKey]) || fallback || value;
+  if (optionGroup === TASK_ZONE_OPTIONS) {
+    return t(texts.tasks?.zones?.[option.labelKey]) || fallback || value;
   }
 
   return fallback ?? value ?? '';
@@ -76,6 +72,7 @@ export class TaskForm {
     this.isOpen = true;
     this.createModal();
     document.body.appendChild(this.modal);
+    document.body.classList.add('overflow-hidden');
 
     document.addEventListener('keydown', this.boundHandleEscape);
 
@@ -101,6 +98,7 @@ export class TaskForm {
 
     this.isOpen = false;
     document.removeEventListener('keydown', this.boundHandleEscape);
+    document.body.classList.remove('overflow-hidden');
 
     if (this.modal?.parentNode) {
       this.modal.parentNode.removeChild(this.modal);
@@ -113,7 +111,7 @@ export class TaskForm {
 
   createModal() {
     this.modal = document.createElement('div');
-    this.modal.className = 'fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4';
+    this.modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
     this.modal.setAttribute('role', 'dialog');
     this.modal.setAttribute('aria-modal', 'true');
     this.modal.innerHTML = `
@@ -140,22 +138,38 @@ export class TaskForm {
           <form id="taskForm" class="space-y-4">
             <div class="grid gap-4 md:grid-cols-2">
               <div>
-                <label for="taskType" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  ${escapeHtml(t(texts.forms.task?.typeLabel))}
+                <label for="taskPatientSurname" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  ${escapeHtml(t(texts.forms.task?.patientSurnameLabel))}
                 </label>
-                <select
-                  id="taskType"
-                  name="taskType"
+                <input
+                  type="text"
+                  id="taskPatientSurname"
+                  name="taskPatientSurname"
                   required
+                  autocomplete="family-name"
+                  placeholder="${escapeHtml(t(texts.forms.task?.patientSurnamePlaceholder))}"
                   class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">${escapeHtml(t(texts.forms.task?.typePlaceholder))}</option>
-                  ${TASK_TYPE_OPTIONS.map((option) => `
-                    <option value="${escapeHtml(option.value)}">${escapeHtml(t(texts.tasks.types?.[option.labelKey]))}</option>
-                  `).join('')}
-                </select>
               </div>
 
+              <div>
+                <label for="taskPatientChart" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  ${escapeHtml(t(texts.forms.task?.patientChartLabel))}
+                </label>
+                <input
+                  type="text"
+                  id="taskPatientChart"
+                  name="taskPatientChart"
+                  required
+                  inputmode="text"
+                  autocomplete="off"
+                  placeholder="${escapeHtml(t(texts.forms.task?.patientChartPlaceholder))}"
+                  class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+              </div>
+            </div>
+
+            <div class="grid gap-4 md:grid-cols-2">
               <div>
                 <label for="taskRecurrence" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   ${escapeHtml(t(texts.forms.task?.recurrenceLabel))}
@@ -207,20 +221,6 @@ export class TaskForm {
 
             <div class="grid gap-4 md:grid-cols-2">
               <div>
-                <label for="taskOwner" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  ${escapeHtml(t(texts.forms.task?.ownerLabel))}
-                </label>
-                <input
-                  type="text"
-                  id="taskOwner"
-                  name="taskOwner"
-                  required
-                  placeholder="${escapeHtml(t(texts.forms.task?.ownerPlaceholder))}"
-                  class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-              </div>
-
-              <div>
                 <label for="taskDeadline" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   ${escapeHtml(t(texts.forms.task?.deadlineLabel))}
                 </label>
@@ -231,23 +231,23 @@ export class TaskForm {
                   class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
               </div>
-            </div>
 
-            <div>
-              <label for="taskChannel" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                ${escapeHtml(t(texts.forms.task?.channelLabel))}
-              </label>
-              <select
-                id="taskChannel"
-                name="taskChannel"
-                required
-                class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">${escapeHtml(t(texts.forms.task?.channelPlaceholder))}</option>
-                ${TASK_CHANNEL_OPTIONS.map((option) => `
-                  <option value="${escapeHtml(option.value)}">${escapeHtml(t(texts.tasks.channels?.[option.labelKey]))}</option>
-                `).join('')}
-              </select>
+              <div>
+                <label for="taskZone" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  ${escapeHtml(t(texts.forms.task?.zoneLabel))}
+                </label>
+                <select
+                  id="taskZone"
+                  name="taskZone"
+                  required
+                  class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">${escapeHtml(t(texts.forms.task?.zonePlaceholder))}</option>
+                  ${TASK_ZONE_OPTIONS.map((option) => `
+                    <option value="${escapeHtml(option.value)}">${escapeHtml(t(texts.tasks.zones?.[option.labelKey]))}</option>
+                  `).join('')}
+                </select>
+              </div>
             </div>
 
             <div class="flex justify-end space-x-3 pt-2">
@@ -342,11 +342,11 @@ export class TaskForm {
 
     const formData = new FormData(form);
     const description = formData.get('taskDescription')?.trim();
-    const responsible = formData.get('taskOwner')?.trim();
-    const type = formData.get('taskType');
-    const channel = formData.get('taskChannel');
+    const surname = formData.get('taskPatientSurname')?.trim();
+    const chartNumber = formData.get('taskPatientChart')?.trim();
+    const zone = formData.get('taskZone');
 
-    if (!description || !responsible || !type || !channel) {
+    if (!description || !surname || !chartNumber || !zone) {
       this.setFeedback(t(texts.forms.validationError), 'error');
       return;
     }
@@ -365,8 +365,7 @@ export class TaskForm {
 
       if (this.logger?.logInteraction) {
         void this.logger.logInteraction('task_form_submitted', {
-          taskType: payload.type,
-          channel: payload.channel,
+          zone: payload.zone,
           recurrence: payload.recurrence,
         });
       }
@@ -382,11 +381,12 @@ export class TaskForm {
   }
 
   buildPayload(formData) {
-    const typeValue = formData.get('taskType');
     const recurrenceValue = formData.get('taskRecurrence') || 'none';
-    const channelValue = formData.get('taskChannel');
+    const zoneValue = formData.get('taskZone');
     const deadlineValue = formData.get('taskDeadline');
     const frequencyValue = formData.get('taskFrequencyMinutes');
+    const surnameValue = formData.get('taskPatientSurname')?.trim() ?? '';
+    const chartValue = formData.get('taskPatientChart')?.trim() ?? '';
 
     let normalizedDeadline = null;
     if (deadlineValue) {
@@ -401,21 +401,25 @@ export class TaskForm {
       frequencyMinutes = RECURRENCE_DEFAULT_MINUTES[recurrenceValue] ?? null;
     }
 
-    const metadata = {};
+    const metadata = {
+      patient: {
+        surname: surnameValue,
+        chartNumber: chartValue,
+      },
+    };
     if (Number.isFinite(frequencyMinutes) && frequencyMinutes > 0 && recurrenceValue !== 'none') {
       metadata.recurringFrequencyMinutes = frequencyMinutes;
     }
 
     return {
-      type: typeValue,
-      typeLabel: resolveOptionLabel(TASK_TYPE_OPTIONS, typeValue, typeValue),
       description: formData.get('taskDescription')?.trim() ?? '',
       recurrence: recurrenceValue,
       recurrenceLabel: resolveOptionLabel(TASK_RECURRENCE_OPTIONS, recurrenceValue, recurrenceValue),
-      responsible: formData.get('taskOwner')?.trim() ?? '',
       deadline: normalizedDeadline,
-      channel: channelValue,
-      channelLabel: resolveOptionLabel(TASK_CHANNEL_OPTIONS, channelValue, channelValue),
+      zone: zoneValue,
+      zoneLabel: resolveOptionLabel(TASK_ZONE_OPTIONS, zoneValue, zoneValue),
+      channel: zoneValue,
+      channelLabel: resolveOptionLabel(TASK_ZONE_OPTIONS, zoneValue, zoneValue),
       status: TASK_STATUSES.PLANNED,
       metadata,
     };
