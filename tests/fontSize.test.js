@@ -25,7 +25,7 @@ describe('Font size utilities', () => {
   it('clamps font size levels within allowed bounds', () => {
     expect(clampFontSizeLevel(-5)).toBe(MIN_FONT_SIZE_LEVEL);
     expect(clampFontSizeLevel(2.6)).toBe(3);
-    expect(clampFontSizeLevel(50)).toBe(MAX_FONT_SIZE_LEVEL);
+    expect(clampFontSizeLevel(MAX_FONT_SIZE_LEVEL + 50)).toBe(MAX_FONT_SIZE_LEVEL);
   });
 
   it('applies font size classes proportionally', () => {
@@ -35,7 +35,7 @@ describe('Font size utilities', () => {
   });
 
   it('stores and reads font size level from storage', () => {
-    const storedLevel = storeFontSizeLevel(4, storage);
+    const storedLevel = storeFontSizeLevel(MAX_FONT_SIZE_LEVEL + 2, storage);
     expect(storedLevel).toBe(MAX_FONT_SIZE_LEVEL);
     expect(storage.getItem(FONT_SIZE_STORAGE_KEY)).toBe(String(MAX_FONT_SIZE_LEVEL));
 

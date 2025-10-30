@@ -1,9 +1,10 @@
 const FONT_SIZE_CLASSES = ['text-xs', 'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl', 'text-3xl', 'text-4xl'];
-const FONT_SCALE_FACTORS = [1, 1.125, 1.25, 1.375];
+const FONT_SCALE_FACTORS = [1, 1.125, 1.25, 1.375, 1.5, 1.75];
+const FONT_SCALE_TARGET_SELECTORS = ['#kpis', '#notificationSummary', '#alerts'];
 
 export const FONT_SIZE_STORAGE_KEY = 'notificationFontSize';
 export const MIN_FONT_SIZE_LEVEL = 0;
-export const MAX_FONT_SIZE_LEVEL = 3;
+export const MAX_FONT_SIZE_LEVEL = FONT_SCALE_FACTORS.length - 1;
 
 function getDefaultStorage() {
   if (typeof window !== 'undefined' && window.localStorage) {
@@ -30,7 +31,7 @@ export function getFontScale(level) {
   return FONT_SCALE_FACTORS[clamped] ?? FONT_SCALE_FACTORS[0] ?? 1;
 }
 
-export function applyFontSizeLevelToDocument(level, doc = getDefaultDocument()) {
+export function applyFontSizeLevelToDocument(level, doc = getDefaultDocument(), options = {}) {
   const clamped = clampFontSizeLevel(level);
   const scale = getFontScale(clamped);
   const targetDocument = doc;
@@ -38,7 +39,19 @@ export function applyFontSizeLevelToDocument(level, doc = getDefaultDocument()) 
     return clamped;
   }
   targetDocument.documentElement.setAttribute('data-font-size-level', String(clamped));
-  targetDocument.documentElement.style.setProperty('--app-font-scale', String(scale));
+
+  const selectors = Array.isArray(options.targetSelectors)
+    ? options.targetSelectors
+    : FONT_SCALE_TARGET_SELECTORS;
+
+  selectors.forEach((selector) => {
+    const elements = targetDocument.querySelectorAll?.(selector);
+    elements?.forEach?.((element) => {
+      element.setAttribute('data-font-size-level', String(clamped));
+      element.style.setProperty('--app-font-scale', String(scale));
+    });
+  });
+
   return clamped;
 }
 
