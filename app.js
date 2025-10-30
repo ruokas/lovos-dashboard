@@ -820,6 +820,52 @@ export class BedManagementApp {
       });
     }
 
+    const taskListContainer = document.getElementById('taskList');
+    if (taskListContainer) {
+      taskListContainer.addEventListener('click', (event) => {
+        const rawTarget = event.target;
+        const elementTarget =
+          rawTarget && typeof rawTarget === 'object'
+            ? (typeof rawTarget.closest === 'function'
+                ? rawTarget
+                : rawTarget.parentElement ?? null)
+            : null;
+        const actionButton = typeof elementTarget?.closest === 'function'
+          ? elementTarget.closest('button[data-action="complete-task"]')
+          : null;
+        if (!actionButton) {
+          return;
+        }
+
+        const taskElement = actionButton.closest('[data-task-id]');
+        const taskId = taskElement?.dataset.taskId;
+        if (!taskId) {
+          return;
+        }
+
+        const currentTask = this.taskManager.getTasks().find((item) => item.id === taskId);
+        const metadata = { ...(currentTask?.metadata ?? {}), completedAt: new Date().toISOString() };
+        const updatedTask = this.taskManager.updateTask(taskId, {
+          status: TASK_STATUSES.COMPLETED,
+          metadata,
+        });
+
+        if (!updatedTask) {
+          console.warn('Nepavyko rasti užduoties pažymėti kaip užbaigtos:', taskId);
+          return;
+        }
+
+        void this.userInteractionLogger.logInteraction('task_mark_completed', { taskId });
+
+        this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
+          fontSizeLevel: this.fontSizeLevel,
+        });
+
+        this.renderTaskList();
+        this.renderNotificationSummary();
+      });
+    }
+
     document.addEventListener('keydown', this.boundTaskShortcutHandler);
 
     document.querySelectorAll('[data-report-export]').forEach((button) => {
@@ -1641,6 +1687,16 @@ export class BedManagementApp {
       const responsibleLine = responsible
         ? `<div>${escapeHtml(t(texts.tasks.labels.responsible))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(responsible)}</span></div>`
         : '';
+      const completionControls = task.status === TASK_STATUSES.COMPLETED
+        ? `<div class="flex items-center justify-end gap-2 text-xs font-medium text-emerald-700 dark:text-emerald-200" role="status">
+            <span aria-hidden="true">✅</span>
+            <span>${escapeHtml(t(texts.tasks.completedLabel) || 'Užduotis atlikta')}</span>
+          </div>`
+        : `<div class="flex justify-end">
+            <button type="button" class="task-complete-btn px-3 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900 rounded-md transition-colors" data-action="complete-task">
+              ${escapeHtml(t(texts.tasks.completeAction) || 'Pažymėti kaip atliktą')}
+            </button>
+          </div>`;
 
       return `
         <article class="border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/40 p-3 space-y-3" data-task-id="${escapeHtml(task.id)}" role="listitem">
@@ -1666,6 +1722,7 @@ export class BedManagementApp {
               <div>${escapeHtml(t(texts.tasks.labels.created))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(createdText)}</span></div>
             </div>
           </div>
+          ${completionControls}
         </article>
       `;
     }).join('');
