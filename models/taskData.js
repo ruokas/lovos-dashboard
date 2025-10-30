@@ -8,6 +8,13 @@ export const TASK_STATUSES = {
   BLOCKED: 'blocked',
 };
 
+export const TASK_PRIORITIES = {
+  CRITICAL: 1,
+  HIGH: 2,
+  MEDIUM: 3,
+  LOW: 4,
+};
+
 export const TASK_TYPE_OPTIONS = [
   { value: 'patientCare', labelKey: 'patientCare' },
   { value: 'logistics', labelKey: 'logistics' },
@@ -62,6 +69,35 @@ function ensureStatus(value) {
   return allowed.has(value) ? value : TASK_STATUSES.PLANNED;
 }
 
+function ensurePriority(value) {
+  if (value === null || value === undefined) {
+    return TASK_PRIORITIES.MEDIUM;
+  }
+
+  if (typeof value === 'string' && value.trim() === '') {
+    return TASK_PRIORITIES.MEDIUM;
+  }
+
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric)) {
+    return TASK_PRIORITIES.MEDIUM;
+  }
+
+  return Math.min(Math.max(numeric, TASK_PRIORITIES.CRITICAL), TASK_PRIORITIES.LOW);
+}
+
+function normaliseMetadata(value) {
+  if (!value || typeof value !== 'object') {
+    return {};
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (error) {
+    console.warn('Nepavyko normalizuoti užduoties metadata reikšmės:', error);
+    return {};
+  }
+}
+
 export class TaskManager {
   constructor(options = {}) {
     this.storageKey = options.storageKey ?? TASK_STORAGE_KEY;
@@ -95,19 +131,23 @@ export class TaskManager {
 
   getTasks() {
     return [...this.tasks].sort((a, b) => {
-      const aDeadline = a.deadline ? new Date(a.deadline) : null;
-      const bDeadline = b.deadline ? new Date(b.deadline) : null;
+      if (a.priority !== b.priority) {
+        return a.priority - b.priority;
+      }
 
-      const aHasDeadline = aDeadline instanceof Date && !Number.isNaN(aDeadline);
-      const bHasDeadline = bDeadline instanceof Date && !Number.isNaN(bDeadline);
+      const aDue = a.dueAt ? new Date(a.dueAt) : (a.deadline ? new Date(a.deadline) : null);
+      const bDue = b.dueAt ? new Date(b.dueAt) : (b.deadline ? new Date(b.deadline) : null);
 
-      if (aHasDeadline && bHasDeadline) {
-        if (aDeadline.getTime() !== bDeadline.getTime()) {
-          return aDeadline - bDeadline;
+      const aHasDue = aDue instanceof Date && !Number.isNaN(aDue);
+      const bHasDue = bDue instanceof Date && !Number.isNaN(bDue);
+
+      if (aHasDue && bHasDue) {
+        if (aDue.getTime() !== bDue.getTime()) {
+          return aDue - bDue;
         }
-      } else if (aHasDeadline) {
+      } else if (aHasDue) {
         return -1;
-      } else if (bHasDeadline) {
+      } else if (bHasDue) {
         return 1;
       }
 
@@ -140,6 +180,8 @@ export class TaskManager {
         task.responsible,
         task.channel,
         task.channelLabel,
+        task.dueAt,
+        task.seriesId,
       ]
         .filter(Boolean)
         .join(' ')
@@ -151,25 +193,22 @@ export class TaskManager {
 
   addTask(payload) {
     const timestamp = new Date().toISOString();
-    const newTask = {
+    const newTask = this.#normalizeTask({
+      ...payload,
       id: payload.id ?? this.#generateId(),
-      type: payload.type ?? 'general',
-      typeLabel: payload.typeLabel ?? payload.type ?? 'general',
-      description: payload.description?.trim() ?? '',
-      recurrence: payload.recurrence ?? 'none',
-      recurrenceLabel: payload.recurrenceLabel ?? payload.recurrence ?? 'none',
-      responsible: payload.responsible?.trim() ?? '',
-      deadline: safeIsoString(payload.deadline),
-      channel: payload.channel ?? 'general',
-      channelLabel: payload.channelLabel ?? payload.channel ?? 'general',
-      status: ensureStatus(payload.status),
-      createdAt: payload.createdAt ? safeIsoString(payload.createdAt) ?? timestamp : timestamp,
+      createdAt: payload.createdAt ?? timestamp,
       updatedAt: timestamp,
-    };
+    });
 
-    this.tasks.push(newTask);
+    const exists = this.tasks.find((item) => item.id === newTask.id);
+    if (exists) {
+      Object.assign(exists, newTask, { createdAt: exists.createdAt ?? newTask.createdAt });
+    } else {
+      this.tasks.push(newTask);
+    }
+
     this.saveToStorage();
-    return newTask;
+    return exists ?? newTask;
   }
 
   updateTask(id, updates = {}) {
@@ -178,13 +217,16 @@ export class TaskManager {
       return null;
     }
 
-    const updated = {
+    const updated = this.#normalizeTask({
       ...task,
       ...updates,
-      deadline: updates.deadline !== undefined ? safeIsoString(updates.deadline) : task.deadline,
+      id,
+      deadline: updates.deadline !== undefined ? updates.deadline : task.deadline,
+      dueAt: updates.dueAt !== undefined ? updates.dueAt : task.dueAt,
       status: updates.status ? ensureStatus(updates.status) : task.status,
+      createdAt: task.createdAt,
       updatedAt: new Date().toISOString(),
-    };
+    });
 
     Object.assign(task, updated);
     this.saveToStorage();
@@ -193,6 +235,41 @@ export class TaskManager {
 
   setStatus(id, status) {
     return this.updateTask(id, { status });
+  }
+
+  upsertTask(payload = {}) {
+    if (!payload || typeof payload !== 'object') {
+      return null;
+    }
+
+    const timestamp = new Date().toISOString();
+    const candidate = this.#normalizeTask({
+      ...payload,
+      id: payload.id ?? this.#generateId(),
+      createdAt: payload.createdAt ?? timestamp,
+      updatedAt: payload.updatedAt ?? timestamp,
+    });
+
+    const existingIndex = this.tasks.findIndex((task) => task.id === candidate.id);
+    if (existingIndex === -1) {
+      this.tasks.push(candidate);
+    } else {
+      const existing = this.tasks[existingIndex];
+      this.tasks[existingIndex] = {
+        ...existing,
+        ...candidate,
+        createdAt: existing.createdAt ?? candidate.createdAt,
+        updatedAt: candidate.updatedAt ?? timestamp,
+      };
+    }
+
+    this.saveToStorage();
+    return candidate;
+  }
+
+  hasTask(id) {
+    if (!id) return false;
+    return this.tasks.some((task) => task.id === id);
   }
 
   removeTask(id) {
@@ -221,20 +298,30 @@ export class TaskManager {
       return null;
     }
 
+    const createdAt = safeIsoString(task.createdAt) ?? new Date().toISOString();
+    const updatedAt = safeIsoString(task.updatedAt) ?? createdAt;
+    const dueAt = task.dueAt !== undefined ? safeIsoString(task.dueAt) : safeIsoString(task.deadline);
+
     return {
       id: typeof task.id === 'string' ? task.id : this.#generateId(),
       type: typeof task.type === 'string' ? task.type : 'general',
       typeLabel: typeof task.typeLabel === 'string' ? task.typeLabel : (task.type ?? 'general'),
+      title: typeof task.title === 'string' ? task.title : null,
       description: typeof task.description === 'string' ? task.description : '',
       recurrence: typeof task.recurrence === 'string' ? task.recurrence : 'none',
       recurrenceLabel: typeof task.recurrenceLabel === 'string' ? task.recurrenceLabel : (task.recurrence ?? 'none'),
       responsible: typeof task.responsible === 'string' ? task.responsible : '',
       deadline: safeIsoString(task.deadline),
+      dueAt,
       channel: typeof task.channel === 'string' ? task.channel : 'general',
       channelLabel: typeof task.channelLabel === 'string' ? task.channelLabel : (task.channel ?? 'general'),
+      priority: ensurePriority(task.priority),
       status: ensureStatus(task.status),
-      createdAt: safeIsoString(task.createdAt) ?? new Date().toISOString(),
-      updatedAt: safeIsoString(task.updatedAt) ?? new Date().toISOString(),
+      seriesId: typeof task.seriesId === 'string' ? task.seriesId : null,
+      source: typeof task.source === 'string' ? task.source : (task.source === null ? null : 'local'),
+      metadata: normaliseMetadata(task.metadata),
+      createdAt,
+      updatedAt,
     };
   }
 

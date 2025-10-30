@@ -58,3 +58,12 @@ Po kiekvieno rolių keitimo atlikite greitą patikrą:
 ## 6. Tolimesni žingsniai
 - Jei reikia daugiau rolių (pvz., `nurse_manager`), papildykite RLS politikų failus ir Edge funkcijų vaidmenų sąrašus.
 - Naudokite `auth.admin.listUsers()` per Supabase Admin API, kad automatizuotai auditavote rolių paskirstymą.
+
+## 7. RLS politikos bendroms užduotims
+- Į `supabase/policies/` pridėkite politikų failą, kuris leidžia `tasks` ir `task_events` lentelėms skaitymą `cleaning_staff`, `auditor`, `admin` rolėms.
+- `tasks` lentelėje:
+  - `cleaning_staff` gali skaityti ir kurti tik savo padalinių (`channel`) įrašus.
+  - `auditor` turi tik skaitymo teises.
+  - `admin` gali atlikti visas operacijas.
+- `task_events` lentelėje užtikrinkite, kad įrašai būtų kuriami tik per Edge funkciją arba `admin` rolę, o skaityti galėtų visos minėtos rolės.
+- Nepamirškite atnaujinti Edge funkcijų (jei naudojamos), kad jos naujoms lentelėms nustatytų `service_role` raktą bei validuotų naudotojo rolę.

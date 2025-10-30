@@ -189,6 +189,39 @@ describe('ReportingService', () => {
     expect(result.data).toHaveLength(0);
   });
 
+  it('prideda bendrų užduočių suvestinę į vietinę ataskaitą', async () => {
+    const taskManager = {
+      getTasks: () => ([
+        {
+          id: 'task-1',
+          title: 'Laboratoriniai mėginiai',
+          description: 'Transportuoti mėginius į centrinę laboratoriją',
+          priority: 1,
+          dueAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+          status: 'planned',
+          channel: 'laboratory',
+          channelLabel: 'Laboratorija',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          responsible: 'Kurjeris',
+        },
+      ]),
+    };
+
+    const service = new ReportingService({
+      bedDataManager: {
+        getStatistics: () => ({ totalBeds: 0 }),
+        getAllBeds: () => [],
+      },
+      taskManager,
+    });
+
+    const snapshot = service.getLocalSnapshot();
+    expect(snapshot.taskMetrics.total).toBe(1);
+    expect(snapshot.sharedTasks[0].title).toContain('Laboratoriniai');
+    expect(snapshot.taskEvents.length).toBeGreaterThan(0);
+  });
+
   it('gauna audito įrašus', async () => {
     const client = new FakeSupabaseClient({
       interactions: {

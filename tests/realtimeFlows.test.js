@@ -117,7 +117,7 @@ describe('Realaus laiko srautai', () => {
       status: 'free',
     });
 
-    notificationManager.updateNotifications(bedDataManager.getAllBeds(), { suppressAlerts: true });
+    notificationManager.updateNotifications(bedDataManager.getAllBeds(), [], { suppressAlerts: true });
     const stats = notificationManager.getNotificationStats(bedDataManager.getAllBeds());
 
     expect(stats.total).toBeGreaterThan(0);
