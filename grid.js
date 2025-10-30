@@ -1,4 +1,4 @@
-import { loadData } from './data.js';
+import { loadData, normalizeBedId, latestRowsByBed, interpretOccupancyState } from './data.js';
 import { bedLayout } from './layout.js';
 import { pillForOccupancy } from './utils/ui.js';
 import { texts, t } from './texts.js';
@@ -13,6 +13,8 @@ const HEIGHT_RATIO = 0.75;
 function renderGrid(rows) {
   lastRows = rows;
   if (!grid) return;
+
+  const latest = latestRowsByBed(rows);
 
   const maxCol = Math.max(...bedLayout.map(b => b.col));
   const maxRow = Math.max(...bedLayout.map(b => b.row));
@@ -44,15 +46,27 @@ function renderGrid(rows) {
   grid.style.height = `${cellHeight * maxRow + totalGapY}px`;
 
   grid.innerHTML = bedLayout.map(bed => {
-    const data = rows.find(r => (r.lova || '').toLowerCase() === bed.id.toLowerCase()) || {};
-    const isOccupied = (data.uzimt || '').toLowerCase().includes('užim');
-    const isClean = (data.galutine || '').startsWith('🟩');
-    const statusClass = isOccupied ? 'occupied' : (isClean ? 'clean' : 'dirty');
+    const bedKey = normalizeBedId(bed.id).toLowerCase();
+    const data = latest.get(bedKey) || {};
+    const statusText = data.uzimt || data.galutine || data.sla || '';
+    const occupancyState = interpretOccupancyState(`${data.uzimt || ''} ${data.galutine || ''}`);
+    const statusClass = occupancyState === 'occupied'
+      ? 'occupied'
+      : (occupancyState === 'free' ? 'clean' : (occupancyState === 'cleaning' ? 'dirty' : 'dirty'));
+    const meta = [
+      data.galutine && data.galutine !== statusText ? `<span class="text-xs sm:text-sm text-slate-600 dark:text-slate-300">${data.galutine}</span>` : '',
+      data.sla && data.sla !== statusText ? `<span class="text-xs sm:text-sm text-amber-600 dark:text-amber-400">${data.sla}</span>` : '',
+      data.pask ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Paskutinė: ${data.pask}</span>` : '',
+      data.gHours ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Atlaisvinta prieš: ${data.gHours}</span>` : '',
+      data.who ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Pažymėjo: ${data.who}</span>` : '',
+      data.timestamp ? `<span class="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Atnaujinta: ${data.timestamp}</span>` : '',
+    ].filter(Boolean).join('');
 
     return `<div class="bed-cell ${statusClass}" style="grid-row:${bed.row};grid-column:${bed.col}">
         <div class="bed-id">${bed.id}</div>
         <div class="bed-info">
-          ${pillForOccupancy(data.uzimt)}
+          ${pillForOccupancy(statusText)}
+          ${meta}
         </div>
       </div>`;
   }).join('');

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { loadData } from '../data.js';
+import { loadData, parseTimestampToMillis, interpretOccupancyState, rowsToOccupancyEvents, latestRowsByBed } from '../data.js';
 
 const createLocalStorageMock = () => {
   const store = new Map();
@@ -46,11 +46,17 @@ describe('loadData', () => {
 
   it('grąžina normalizuotas eilutes kai CSV sėkmingai įkeltas', async () => {
     const csvText = 'mock csv';
-    const response = { text: vi.fn().mockResolvedValue(csvText) };
+    const response = {
+      ok: true,
+      headers: { get: vi.fn().mockReturnValue('text/csv') },
+      text: vi.fn().mockResolvedValue(csvText),
+    };
     fetchMock.mockResolvedValue(response);
 
+    const timestamp = '2024-10-10 15:30:00';
     const rawRows = [
       {
+        'Timestamp': timestamp,
         'Lova': 'A1',
         'Būsena': '🧹 Tvarkyti',
         'Kontrolė': '⛔ Viršyta',
@@ -78,6 +84,10 @@ describe('loadData', () => {
         gHoursNum: 1.5,
         pask: 'Pastaba',
         who: 'Jonas',
+        timestamp,
+        timestampMs: parseTimestampToMillis(timestamp),
+        bedId: '1',
+        bedKey: '1',
       },
     ];
 
@@ -90,6 +100,7 @@ describe('loadData', () => {
   });
 
   it('grąžina talpyklos duomenis kai fetch meta klaidą', async () => {
+    const cachedTimestamp = '2024-10-11 08:00:00';
     const cachedRows = [
       {
         order: 3,
@@ -101,6 +112,10 @@ describe('loadData', () => {
         gHoursNum: 0.5,
         pask: 'Laukiame',
         who: 'Asta',
+        timestamp: cachedTimestamp,
+        timestampMs: parseTimestampToMillis(cachedTimestamp),
+        bedId: '2',
+        bedKey: '2',
       },
     ];
 
@@ -114,5 +129,56 @@ describe('loadData', () => {
     expect(rows).toEqual(cachedRows);
     expect(localStorageMock.setItem).not.toHaveBeenCalled();
     expect(consoleErrorSpy).toHaveBeenCalled();
+  });
+});
+
+describe('CSV helper utilities', () => {
+  it('interpretOccupancyState klasifikuoja būsenas', () => {
+    expect(interpretOccupancyState('Užimta')).toBe('occupied');
+    expect(interpretOccupancyState('laisva')).toBe('free');
+    expect(interpretOccupancyState('Valoma')).toBe('cleaning');
+    expect(interpretOccupancyState('nežinoma')).toBe('unknown');
+  });
+
+  it('latestRowsByBed parenka naujausią įrašą pagal timestamp', () => {
+    const rows = [
+      { bedId: '1', bedKey: '1', timestamp: '2024-10-10 10:00:00', timestampMs: parseTimestampToMillis('2024-10-10 10:00:00'), order: 0 },
+      { bedId: '1', bedKey: '1', timestamp: '2024-10-10 12:00:00', timestampMs: parseTimestampToMillis('2024-10-10 12:00:00'), order: 1 },
+      { bedId: '2', bedKey: '2', timestamp: '', timestampMs: null, order: 0 },
+      { bedId: '2', bedKey: '2', timestamp: '', timestampMs: null, order: 5 },
+    ];
+
+    const latest = latestRowsByBed(rows);
+    expect(latest.get('1').timestamp).toBe('2024-10-10 12:00:00');
+    expect(latest.get('2').order).toBe(5);
+  });
+
+  it('rowsToOccupancyEvents konvertuoja CSV įvykius į occupancy įrašus', () => {
+    const rows = [
+      {
+        bedId: '1',
+        bedKey: '1',
+        uzimt: 'Užimta',
+        timestamp: '2024-10-10 12:00:00',
+        timestampMs: parseTimestampToMillis('2024-10-10 12:00:00'),
+        order: 0,
+      },
+      {
+        bedId: '2',
+        bedKey: '2',
+        uzimt: 'Valoma',
+        timestamp: '2024-10-10 11:00:00',
+        timestampMs: parseTimestampToMillis('2024-10-10 11:00:00'),
+        order: 1,
+      },
+    ];
+
+    const events = rowsToOccupancyEvents(rows);
+    expect(events).toHaveLength(2);
+    const occupied = events.find(e => e.bedId === '1');
+    const cleaning = events.find(e => e.bedId === '2');
+    expect(occupied.status).toBe('occupied');
+    expect(cleaning.status).toBe('free');
+    expect(cleaning.metadata?.csvStatus).toBe('Valoma');
   });
 });

@@ -12,6 +12,7 @@ import { NfcHandler } from './nfc/nfcHandler.js';
 import { ReportingService } from './reports/reportingService.js';
 import { SupabaseAuthManager } from './auth/supabaseAuth.js';
 import { t, texts } from './texts.js';
+import { loadData as loadCsvData, rowsToOccupancyEvents } from './data.js';
 import { clampFontSizeLevel, readStoredFontSizeLevel, storeFontSizeLevel, applyFontSizeClasses } from './utils/fontSize.js';
 
 const HTML_ESCAPE_MAP = {
@@ -75,6 +76,8 @@ export class BedManagementApp {
     this.isInitialized = false;
     this.nfcHandler = null;
     this.realtimeChannel = null;
+    this.usingCsvOccupancy = false;
+    this.isSyncingCsvOccupancy = false;
   }
 
   /**
@@ -357,10 +360,51 @@ export class BedManagementApp {
       occupancyData.forEach(data => {
         this.bedDataManager.addOccupancyData(data);
       });
-      
+
+      if (!occupancyData.length) {
+        await this.applyCsvOccupancyFallback();
+        this.usingCsvOccupancy = true;
+      } else {
+        this.usingCsvOccupancy = false;
+      }
+
       console.log(`Loaded ${formResponses.length} form responses and ${occupancyData.length} occupancy records`);
     } catch (error) {
       console.error('Failed to load saved data:', error);
+    }
+  }
+
+  async applyCsvOccupancyFallback() {
+    if (this.isSyncingCsvOccupancy) {
+      return 0;
+    }
+
+    this.isSyncingCsvOccupancy = true;
+    try {
+      const rows = await loadCsvData();
+      if (!Array.isArray(rows) || !rows.length) {
+        return 0;
+      }
+
+      const events = rowsToOccupancyEvents(rows);
+      let applied = 0;
+      for (const event of events) {
+        const result = this.bedDataManager.addOccupancyData(event, { allowUpdate: true });
+        if (result) {
+          applied += 1;
+        }
+      }
+
+      if (applied > 0) {
+        console.info(`CSV užimtumo sinchronizacija: atnaujintos ${applied} lovos.`);
+      }
+
+      return events.length;
+    } catch (error) {
+      console.error('Nepavyko įkelti užimtumo iš CSV', error);
+      return 0;
+    } finally {
+      this.isSyncingCsvOccupancy = false;
     }
   }
 
@@ -429,7 +473,7 @@ export class BedManagementApp {
     const refreshBtn = document.getElementById('refreshBtn');
     if (refreshBtn) {
       console.log('Found refresh button');
-      refreshBtn.addEventListener('click', () => this.refresh());
+      refreshBtn.addEventListener('click', () => { void this.refresh(); });
     } else {
       console.log('Refresh button not found');
     }
@@ -816,7 +860,6 @@ export class BedManagementApp {
     try {
       const snapshot = await this.reportingService.fetchKpiSnapshot();
 
-      const totals = snapshot?.totals ?? {};
       const formatValue = (value) => {
         if (value === null || value === undefined) return '0';
         const numeric = Number(value);
@@ -826,6 +869,28 @@ export class BedManagementApp {
         const numeric = Number(value);
         return Number.isFinite(numeric) ? numeric : 0;
       };
+
+      let totals = { ...(snapshot?.totals ?? {}) };
+      let usedLocalOverlay = false;
+
+      if (typeof this.bedDataManager?.getStatistics === 'function') {
+        const localStats = this.bedDataManager.getStatistics();
+        const shouldOverlay = this.usingCsvOccupancy
+          || (toFiniteNumber(totals.totalBeds) === 0 && toFiniteNumber(localStats?.totalBeds) > 0)
+          || (toFiniteNumber(totals.occupiedBeds) === 0 && toFiniteNumber(localStats?.occupiedBeds) > 0);
+
+        if (shouldOverlay && localStats) {
+          totals = {
+            ...totals,
+            totalBeds: localStats.totalBeds ?? totals.totalBeds ?? 0,
+            occupiedBeds: localStats.occupiedBeds ?? totals.occupiedBeds ?? 0,
+            freeBeds: localStats.freeBeds ?? totals.freeBeds ?? 0,
+            bedsNeedingCheck: localStats.bedsNeedingCheck ?? totals.bedsNeedingCheck ?? 0,
+            recentlyFreedBeds: localStats.recentlyFreedBeds ?? totals.recentlyFreedBeds ?? 0,
+          };
+          usedLocalOverlay = true;
+        }
+      }
 
       const totalsForAttention = (totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0);
       const totalBeds = toFiniteNumber(totals.totalBeds);
@@ -916,7 +981,9 @@ export class BedManagementApp {
         })
         .join('');
 
-      if (snapshot?.source === 'supabase') {
+      if (snapshot?.source === 'supabase' && usedLocalOverlay) {
+        this.setReportingNotice('Supabase KPI duomenys nepilni – rodome CSV pagrįstą suvestinę.', 'warning');
+      } else if (snapshot?.source === 'supabase') {
         const generatedAt = snapshot?.generatedAt ? new Date(snapshot.generatedAt).toLocaleString('lt-LT') : '';
         this.setReportingNotice(generatedAt ? `Atnaujinta ${generatedAt}.` : 'Atnaujinta.', 'success');
       } else if (snapshot?.error) {
@@ -1130,16 +1197,20 @@ export class BedManagementApp {
     const intervalMs = settings.autoRefreshInterval * 1000;
     
     this.refreshInterval = setInterval(() => {
-      this.refresh();
+      void this.refresh();
     }, intervalMs);
   }
 
   /**
    * Refresh data and UI
    */
-  refresh() {
+  async refresh() {
     try {
-      void this.render();
+      if (this.usingCsvOccupancy) {
+        await this.applyCsvOccupancyFallback();
+      }
+
+      await this.render();
       this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), {
         fontSizeLevel: this.fontSizeLevel,
       });
