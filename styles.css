@@ -623,6 +623,11 @@
   color: #475569;
 }
 
+.notification-row[data-type="task"] .notification-task__meta--highlight {
+  color: #0f172a;
+  font-weight: 600;
+}
+
 .notification-row[data-type="task"] .notification-task__due-separator,
 .notification-row[data-type="task"] .notification-row__meta-separator {
   color: #94a3b8;
@@ -636,6 +641,10 @@
 .dark .notification-row[data-type="task"] .notification-row__issue-body,
 .dark .notification-row[data-type="task"] .notification-task__meta {
   color: #cbd5f5;
+}
+
+.dark .notification-row[data-type="task"] .notification-task__meta--highlight {
+  color: #f8fafc;
 }
 
 .dark .notification-row[data-type="task"] .notification-task__due-separator,

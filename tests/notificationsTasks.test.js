@@ -86,6 +86,40 @@ describe('NotificationManager su bendromis užduotimis', () => {
     expect(alerts.textContent).toContain('Kritinės užduotys');
   });
 
+  it('nerodo pasikartojimo žymės ir paryškina pacientą bei zoną', () => {
+    const recurringTask = {
+      id: 'task-recur',
+      title: 'Patikrink monitorių',
+      priority: 2,
+      dueAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      status: 'inProgress',
+      zone: 'monitoring',
+      zoneLabel: 'Stebėjimo zona',
+      channel: 'monitoring',
+      channelLabel: 'Stebėjimo zona',
+      type: 'general',
+      typeLabel: 'Bendra užduotis',
+      recurrence: 'hourly',
+      recurrenceLabel: 'Kas valandą',
+      responsible: 'Slaugytoja',
+      metadata: {
+        general: true,
+        patient: { reference: 'Jankauskas / B456' },
+      },
+    };
+
+    notificationManager.updateNotifications([], [recurringTask], { suppressAlerts: true });
+
+    const taskCard = document.querySelector('.notification-row[data-type="task"]');
+    expect(taskCard).not.toBeNull();
+    expect(taskCard.textContent).not.toContain('Kas valandą');
+
+    const highlight = taskCard.querySelector('.notification-task__meta--highlight');
+    expect(highlight).not.toBeNull();
+    expect(highlight.textContent).toContain('Jankauskas / B456');
+    expect(highlight.textContent).toContain('Stebėjimo zona');
+  });
+
   it('grupuoja užduotis pagal prioritetą ir SLA', () => {
     const tasks = [
       {

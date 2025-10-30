@@ -660,7 +660,9 @@ export class NotificationManager {
       : (t(texts.notifications?.taskSummaryTitle) || 'Bendra užduotis');
 
     const patientReference = this.buildPatientReference(task.metadata?.patient);
-    const zoneLabel = typeof task.zone === 'string' ? task.zone : '';
+    const zoneLabel = typeof task.zoneLabel === 'string' && task.zoneLabel.trim()
+      ? task.zoneLabel.trim()
+      : (typeof task.zone === 'string' ? task.zone : '');
     const defaultHeaderId = typeof taskTitle === 'string' ? taskTitle : (t(texts.common?.dash) || '—');
     const headerId = patientReference
       || (zoneLabel && zoneLabel.toLowerCase() !== 'general' ? zoneLabel : defaultHeaderId);
@@ -681,18 +683,20 @@ export class NotificationManager {
       ? `<span class="notification-row__issue-body ${applyFontSizeClasses('text-sm', level)}">${escapeHtml(task.description)}</span>`
       : '';
 
-    const metaParts = [];
+    const highlightParts = [];
     if (patientReference) {
-      metaParts.push(`<span>${escapeHtml(patientReference)}</span>`);
+      highlightParts.push(`<span>${escapeHtml(patientReference)}</span>`);
     }
     if (zoneLabel && zoneLabel.toLowerCase() !== 'general') {
-      metaParts.push(`<span>${escapeHtml(zoneLabel)}</span>`);
+      highlightParts.push(`<span>${escapeHtml(zoneLabel)}</span>`);
     }
+    const highlightMarkup = highlightParts.length
+      ? `<span class="notification-task__meta notification-task__meta--highlight ${applyFontSizeClasses('text-sm font-semibold', level)}">${highlightParts.join('<span class=\"notification-task__due-separator\" aria-hidden=\"true\">•</span>')}</span>`
+      : '';
+
+    const metaParts = [];
     if (task.responsible) {
       metaParts.push(`<span>${escapeHtml(task.responsible)}</span>`);
-    }
-    if (task.recurrenceLabel && task.recurrenceLabel !== 'none') {
-      metaParts.push(`<span>${escapeHtml(task.recurrenceLabel)}</span>`);
     }
     const metaMarkup = metaParts.length
       ? `<span class="notification-task__meta ${applyFontSizeClasses('text-[11px]', level)}">${metaParts.join('<span class=\"notification-task__due-separator\" aria-hidden=\"true\">•</span>')}</span>`
@@ -713,6 +717,7 @@ export class NotificationManager {
                 <span>${escapeHtml(taskTitle)}</span>
                 ${dueMarkup}
               </span>
+              ${highlightMarkup}
               ${descriptionMarkup}
               ${metaMarkup}
             </div>
