@@ -37,6 +37,9 @@
       </div>
       
       <div class="flex flex-wrap items-center gap-2">
+        <button id="addTaskBtn" type="button" class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors text-sm font-medium">
+          Nauja užduotis
+        </button>
         <button id="addStatusBtn" type="button" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm font-medium">
           Pranešti apie būklę
         </button>
@@ -95,6 +98,42 @@
         <div id="notificationSummary" class="space-y-2"></div>
       </div>
     </div>
+
+    <section id="taskListSection" class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100 mb-2">
+      <div class="p-4 space-y-4">
+        <div class="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-4">
+          <div class="space-y-1">
+            <h2 class="text-lg font-semibold" id="taskListHeading">Skyrių užduotys</h2>
+            <p id="taskShortcutHint" class="text-xs text-slate-500 dark:text-slate-300">Spartusis klavišas: Ctrl+Shift+T</p>
+          </div>
+          <div class="flex flex-col md:flex-row gap-3 w-full xl:w-auto">
+            <div class="relative md:flex-1 min-w-[200px]">
+              <label for="taskSearch" class="sr-only">Paieška</label>
+              <input type="search" id="taskSearch" placeholder="" aria-label="Užduočių paieška"
+                     class="w-full px-4 py-2 pl-10 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent" />
+              <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <svg class="h-5 w-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="flex flex-col sm:flex-row gap-3 md:w-auto">
+              <div class="flex flex-col">
+                <label for="taskStatusFilter" class="text-xs font-medium text-slate-500 dark:text-slate-300">Būsena</label>
+                <select id="taskStatusFilter"
+                        class="min-w-[140px] px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"></select>
+              </div>
+              <div class="flex flex-col">
+                <label for="taskChannelFilter" class="text-xs font-medium text-slate-500 dark:text-slate-300">Kanalas</label>
+                <select id="taskChannelFilter"
+                        class="min-w-[140px] px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"></select>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div id="taskList" class="custom-scrollbar max-h-64 overflow-y-auto space-y-3" role="list" aria-labelledby="taskListHeading"></div>
+      </div>
+    </section>
 
     <!-- Bed list -->
     <div id="bedListSection" class="card bg-white overflow-hidden dark:bg-slate-800 dark:text-slate-100 mb-2" style="display: none;">
