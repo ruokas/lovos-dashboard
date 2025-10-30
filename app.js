@@ -838,12 +838,16 @@ export class BedManagementApp {
         }
 
         const taskElement = actionButton.closest('[data-task-id]');
-        const taskId = taskElement?.dataset.taskId;
+        const taskId = actionButton.dataset.taskId || taskElement?.dataset.taskId;
+        const seriesId = taskElement?.dataset.seriesId;
         if (!taskId) {
           return;
         }
 
-        const currentTask = this.taskManager.getTasks().find((item) => item.id === taskId);
+        const currentTask =
+          this.taskManager
+            .getTasks()
+            .find((item) => item.id === taskId || (seriesId && item.metadata?.recurringSourceTaskIds?.includes(taskId)));
         const metadata = { ...(currentTask?.metadata ?? {}), completedAt: new Date().toISOString() };
         const updatedTask = this.taskManager.updateTask(taskId, {
           status: TASK_STATUSES.COMPLETED,
@@ -855,7 +859,7 @@ export class BedManagementApp {
           return;
         }
 
-        void this.userInteractionLogger.logInteraction('task_mark_completed', { taskId });
+        void this.userInteractionLogger.logInteraction('task_mark_completed', { taskId, seriesId });
 
         this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
           fontSizeLevel: this.fontSizeLevel,
@@ -1662,6 +1666,11 @@ export class BedManagementApp {
       const responsible = task.responsible?.trim() || '';
       const zoneLabel = task.zoneLabel || task.channelLabel || t(texts.tasks.labels.zoneFallback);
       const patientMeta = task.metadata?.patient ?? {};
+      const recurringSourceIds = Array.isArray(task.metadata?.recurringSourceTaskIds)
+        ? task.metadata.recurringSourceTaskIds.filter((value) => typeof value === 'string' && value.trim())
+        : [];
+      const completionTargetId = recurringSourceIds[0] ?? task.id;
+      const seriesAttribute = recurringSourceIds.length ? ` data-series-id="${escapeHtml(task.id)}"` : '';
       const patientReference = [
         typeof patientMeta.reference === 'string' ? patientMeta.reference.trim() : '',
         typeof patientMeta.surname === 'string' ? patientMeta.surname.trim() : '',
@@ -1693,13 +1702,13 @@ export class BedManagementApp {
             <span>${escapeHtml(t(texts.tasks.completedLabel) || 'Užduotis atlikta')}</span>
           </div>`
         : `<div class="flex justify-end">
-            <button type="button" class="task-complete-btn px-3 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900 rounded-md transition-colors" data-action="complete-task">
+            <button type="button" class="task-complete-btn px-3 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900 rounded-md transition-colors" data-action="complete-task" data-task-id="${escapeHtml(completionTargetId)}">
               ${escapeHtml(t(texts.tasks.completeAction) || 'Pažymėti kaip atliktą')}
             </button>
           </div>`;
 
       return `
-        <article class="border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/40 p-3 space-y-3" data-task-id="${escapeHtml(task.id)}" role="listitem">
+        <article class="border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/40 p-3 space-y-3" data-task-id="${escapeHtml(completionTargetId)}"${seriesAttribute} role="listitem">
           <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
             <div class="space-y-2 md:flex-1 md:pr-4">
               <div class="flex flex-wrap items-center gap-2">
