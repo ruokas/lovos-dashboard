@@ -84,6 +84,8 @@ create view public.aggregated_bed_state as
     ls.created_at as status_created_at,
     lb.busena as occupancy_state,
     lb.occupancy as occupancy,
+    lb.occupancy as occupancy_flag,
+    lb.occupancy as is_occupied,
     lb.pacientas as patient_code,
     null::timestamptz as expected_until,
     lb.komentaras as occupancy_notes,

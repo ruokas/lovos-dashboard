@@ -408,6 +408,108 @@ describe('DataPersistenceManager with Supabase', () => {
     ]);
   });
 
+  it('naudoja occupancy_flag alias, jei pagrindinis occupancy stulpelis dar nesukurtas', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    supabaseMock.__mocks.aggregatedSelect
+      .mockImplementationOnce(async () => ({
+        data: null,
+        error: { message: 'column aggregated_bed_state.occupancy does not exist' },
+      }))
+      .mockImplementationOnce(async () => ({
+        data: [
+          {
+            bed_id: 'bed-uuid-1',
+            label: 'IT1',
+            status: null,
+            priority: null,
+            status_notes: null,
+            status_reported_by: null,
+            status_metadata: {},
+            status_created_at: null,
+            occupancy_state: null,
+            patient_code: 'P555',
+            expected_until: null,
+            occupancy_notes: null,
+            occupancy_created_by: null,
+            occupancy_metadata: null,
+            occupancy_flag: true,
+            occupancy_created_at: '2024-01-01T14:00:00.000Z',
+          },
+        ],
+        error: null,
+      }));
+
+    const aggregated = await manager.loadAggregatedBedState();
+
+    expect(supabaseMock.__mocks.aggregatedSelect).toHaveBeenCalledTimes(2);
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[0][0]).toContain('occupancy');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[1][0]).toContain('occupancy_flag');
+    expect(aggregated).toEqual([
+      expect.objectContaining({
+        bedId: 'IT1',
+        occupancy: true,
+        occupancyMetadata: expect.objectContaining({
+          occupancy: true,
+        }),
+      }),
+    ]);
+
+    warnSpy.mockRestore();
+  });
+
+  it('prisitaiko prie is_occupied alias, jei abu occupancy stulpeliai nepasiekiami', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    supabaseMock.__mocks.aggregatedSelect
+      .mockImplementationOnce(async () => ({
+        data: null,
+        error: { message: 'column aggregated_bed_state.occupancy does not exist' },
+      }))
+      .mockImplementationOnce(async () => ({
+        data: null,
+        error: { message: 'column aggregated_bed_state.occupancy_flag does not exist' },
+      }))
+      .mockImplementationOnce(async () => ({
+        data: [
+          {
+            bed_id: 'bed-uuid-1',
+            label: 'IT1',
+            status: null,
+            priority: null,
+            status_notes: null,
+            status_reported_by: null,
+            status_metadata: {},
+            status_created_at: null,
+            occupancy_state: null,
+            patient_code: null,
+            expected_until: null,
+            occupancy_notes: null,
+            occupancy_created_by: null,
+            occupancy_metadata: null,
+            is_occupied: false,
+            occupancy_created_at: '2024-01-01T14:00:00.000Z',
+          },
+        ],
+        error: null,
+      }));
+
+    const aggregated = await manager.loadAggregatedBedState();
+
+    expect(supabaseMock.__mocks.aggregatedSelect).toHaveBeenCalledTimes(3);
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[1][0]).toContain('occupancy_flag');
+    expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[2][0]).toContain('is_occupied');
+    expect(aggregated).toEqual([
+      expect.objectContaining({
+        bedId: 'IT1',
+        occupancy: false,
+        occupancyState: 'free',
+      }),
+    ]);
+
+    warnSpy.mockRestore();
+  });
+
   it('prisitaiko prie senesnės aggregated_bed_state schemos be status_reported_by', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 

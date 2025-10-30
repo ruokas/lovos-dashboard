@@ -53,6 +53,7 @@
 > 📌 **Pastaba (2024-03).** Lovų užimtumo duomenys dabar ateina iš „Google Apps Script“ į lentelę `ed_board`. Ankstesnė lentelė `occupancy_events` liko tik istorijoje ir pašalinama migracijos failu `0005_use_ed_board.sql`. Jei diegiate nuo nulio, paleiskite visas migracijas iš eilės – `0005` automatiškai sukurs `ed_board` ir atnaujins vaizdus.
 >
 > `ed_board` lentelėje pridėtas `occupancy boolean` stulpelis – jei reikšmė `true`, lova laikoma užimta, `false` – laisva. Jei Apps Script neperduoda reikšmės, sistema vis dar bandys spręsti pagal paciento lauką.
+> Suderinamumui `aggregated_bed_state` vaizde papildomai pateikiami alias stulpeliai `occupancy_flag` ir `is_occupied`, todėl senesni įrankiai, kurie tikisi senų pavadinimų, ir toliau veiks be klaidų.
 
 **Kas daroma Supabase.**
 - Supabase SQL editoriuje paleiskite migracijos scenarijų (žemiau), kuris sukuria lenteles `beds`, `bed_status_events`, `occupancy_events`, `user_interactions`, `nfc_tags`, pagalbines funkcijas ir vaizdą `aggregated_bed_state`.
