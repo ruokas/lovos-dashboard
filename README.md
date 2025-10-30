@@ -39,8 +39,8 @@ Palaipsniui migruojame į Supabase, todėl visas front-end veikia kaip ES moduli
    - ✅ Viskas tvarkinga
    - 🛏️ Netvarkinga lova
    - 🧰 Trūksta priemonių
-   - Other: (aprašykite problemą)
-4. Įveskite el. paštą
+   - Kita: (aprašykite problemą)
+4. Įveskite vardą
 5. Spustelėkite "Pranešti"
 
 ### Atnaujinti užimtumą

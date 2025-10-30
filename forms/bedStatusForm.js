@@ -81,17 +81,17 @@ export class BedStatusForm {
           <div id="formFeedback" class="hidden text-sm mb-4"></div>
 
           <form id="bedStatusForm" class="space-y-4">
-            <!-- Email -->
+            <!-- Reporter Name -->
             <div>
               <label for="email" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                El. paštas *
+                Vardas *
               </label>
-              <input 
-                type="email" 
-                id="email" 
+              <input
+                type="text"
+                id="email"
                 name="email"
                 required
-                placeholder="vardas@example.com"
+                placeholder="J. Medikas"
                 class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
             </div>

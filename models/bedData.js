@@ -17,7 +17,7 @@ export const STATUS_OPTIONS = {
   CLEAN: '✅ Viskas tvarkinga',
   MESSY_BED: '🛏️ Netvarkinga lova',
   MISSING_EQUIPMENT: '🧰 Trūksta priemonių',
-  OTHER: 'Other'
+  OTHER: 'Kita'
 };
 
 // Priority levels for notifications (lower number = higher priority)
