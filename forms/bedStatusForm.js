@@ -2,7 +2,39 @@
  * Form interface for bed status reporting
  */
 
-import { STATUS_OPTIONS, BED_LAYOUT } from '../models/bedData.js';
+import { STATUS_OPTIONS, DEFAULT_BED_LAYOUT } from '../models/bedData.js';
+
+function sanitizeBedLayout(layout = []) {
+  const list = Array.isArray(layout) ? layout : [];
+  const seen = new Set();
+  const sanitized = [];
+
+  list.forEach((value) => {
+    if (value === null || value === undefined) {
+      return;
+    }
+    const text = String(value).trim();
+    if (!text || seen.has(text)) {
+      return;
+    }
+    sanitized.push(text);
+    seen.add(text);
+  });
+
+  if (sanitized.length === 0) {
+    return [...DEFAULT_BED_LAYOUT];
+  }
+
+  return sanitized;
+}
+
+function buildBedOptions(layout, preselectedBedId) {
+  return layout
+    .map((bedId) =>
+      `<option value="${bedId}" ${bedId === preselectedBedId ? 'selected' : ''}>${bedId}</option>`,
+    )
+    .join('');
+}
 import { t, texts } from '../texts.js';
 
 export class BedStatusForm {
@@ -15,6 +47,19 @@ export class BedStatusForm {
     this.submitButton = null;
     this.feedbackElement = null;
     this.currentTrigger = 'ui';
+    this.bedLayout = sanitizeBedLayout(options.bedLayout ?? DEFAULT_BED_LAYOUT);
+  }
+
+  setBedLayout(layout = []) {
+    this.bedLayout = sanitizeBedLayout(layout);
+
+    if (this.modal) {
+      const select = this.modal.querySelector('#bedId');
+      if (select) {
+        const currentValue = select.value ?? '';
+        select.innerHTML = `<option value="">Pasirinkite lovą</option>${buildBedOptions(this.bedLayout, currentValue)}`;
+      }
+    }
   }
 
   /**
@@ -108,9 +153,7 @@ export class BedStatusForm {
                 class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Pasirinkite lovą</option>
-                ${BED_LAYOUT.map(bedId => 
-                  `<option value="${bedId}" ${bedId === preselectedBedId ? 'selected' : ''}>${bedId}</option>`
-                ).join('')}
+                ${buildBedOptions(this.bedLayout, preselectedBedId)}
               </select>
             </div>
             
@@ -364,10 +407,23 @@ export class BedStatusForm {
  * Occupancy form for tracking bed occupancy changes
  */
 export class OccupancyForm {
-  constructor(onSubmit) {
+  constructor(onSubmit, options = {}) {
     this.onSubmit = onSubmit;
     this.isOpen = false;
     this.modal = null;
+    this.bedLayout = sanitizeBedLayout(options.bedLayout ?? DEFAULT_BED_LAYOUT);
+  }
+
+  setBedLayout(layout = []) {
+    this.bedLayout = sanitizeBedLayout(layout);
+
+    if (this.modal) {
+      const select = this.modal.querySelector('#occupancyBedId');
+      if (select) {
+        const currentValue = select.value ?? '';
+        select.innerHTML = `<option value="">Pasirinkite lovą</option>${buildBedOptions(this.bedLayout, currentValue)}`;
+      }
+    }
   }
 
   /**
@@ -429,9 +485,7 @@ export class OccupancyForm {
                 class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Pasirinkite lovą</option>
-                ${BED_LAYOUT.map(bedId => 
-                  `<option value="${bedId}" ${bedId === preselectedBedId ? 'selected' : ''}>${bedId}</option>`
-                ).join('')}
+                ${buildBedOptions(this.bedLayout, preselectedBedId)}
               </select>
             </div>
             

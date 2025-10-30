@@ -1,4 +1,4 @@
-import { BED_LAYOUT, STATUS_OPTIONS, PRIORITY_LEVELS } from '../models/bedData.js';
+import { DEFAULT_BED_LAYOUT, STATUS_OPTIONS, PRIORITY_LEVELS } from '../models/bedData.js';
 import { getSupabaseClient } from './supabaseClient.js';
 import { getLastSupabaseUpdate } from './syncMetadataService.js';
 import { parseSupabaseTimestamp } from '../utils/time.js';
@@ -301,6 +301,7 @@ export class DataPersistenceManager {
     this.bedLabelToId = new Map();
     this.bedIdToLabel = new Map();
     this.bedsLoaded = false;
+    this.remoteBedLayout = [];
     this.lastSyncCache = null;
   }
 
@@ -322,20 +323,54 @@ export class DataPersistenceManager {
       return;
     }
 
-    const { data, error } = await this.client
-      .from('beds')
-      .select('id, label');
+    const fromBeds = this.client.from('beds');
+    const selectBuilder = typeof fromBeds?.select === 'function'
+      ? fromBeds.select('id, label')
+      : null;
+
+    if (!selectBuilder) {
+      throw new Error('Nuotolinės paslaugos kliento objektas nepalaiko lovų užklausos.');
+    }
+
+    let response;
+    if (typeof selectBuilder.order === 'function') {
+      response = await selectBuilder.order('label', { ascending: true });
+    } else {
+      response = await selectBuilder;
+      if (!response.error && Array.isArray(response.data)) {
+        response.data.sort((a, b) => {
+          const left = (a?.label ?? '').toString();
+          const right = (b?.label ?? '').toString();
+          return left.localeCompare(right, 'lt', { numeric: true, sensitivity: 'base' });
+        });
+      }
+    }
+
+    const { data, error } = response;
 
     if (error) {
       throw new Error(`Nepavyko gauti lovų sąrašo iš nuotolinės paslaugos: ${error.message}`);
     }
 
+    const layout = [];
+    const seen = new Set();
     data.forEach(({ id, label }) => {
       if (!id || !label) return;
+      const sanitizedLabel = label.toString().trim();
+      if (!sanitizedLabel || seen.has(sanitizedLabel)) {
+        return;
+      }
       this.bedLabelToId.set(label, id);
       this.bedIdToLabel.set(id, label);
+      layout.push(sanitizedLabel);
+      seen.add(sanitizedLabel);
     });
 
+    if (layout.length === 0) {
+      this.remoteBedLayout = [];
+    } else {
+      this.remoteBedLayout = layout;
+    }
     this.bedsLoaded = true;
   }
 
@@ -355,6 +390,32 @@ export class DataPersistenceManager {
   async getBedLabelById(id) {
     await this.#ensureBedsLoaded();
     return this.#resolveBedLabel(id) ?? null;
+  }
+
+  async loadBedLayout(options = {}) {
+    if (!this.#isSupabaseAvailable()) {
+      return [];
+    }
+
+    if (options.forceRefresh) {
+      this.bedsLoaded = false;
+      this.bedLabelToId.clear();
+      this.bedIdToLabel.clear();
+      this.remoteBedLayout = [];
+    }
+
+    await this.#ensureBedsLoaded();
+    return [...this.remoteBedLayout];
+  }
+
+  getCachedBedLayout() {
+    return [...this.remoteBedLayout];
+  }
+
+  getEffectiveBedLayout() {
+    return this.remoteBedLayout.length > 0
+      ? [...this.remoteBedLayout]
+      : [...DEFAULT_BED_LAYOUT];
   }
 
   #mapBoardRecordToOccupancy(record) {
@@ -875,8 +936,9 @@ export class DataPersistenceManager {
     });
 
     const aggregated = [];
+    const baseLayout = this.getEffectiveBedLayout();
     const bedIds = new Set([
-      ...BED_LAYOUT,
+      ...baseLayout,
       ...latestStatus.keys(),
       ...latestOccupancy.keys(),
     ]);

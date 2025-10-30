@@ -57,7 +57,7 @@
 
 **Kas daroma Supabase.**
 - Supabase SQL editoriuje paleiskite migracijos scenarijų (žemiau), kuris sukuria lenteles `beds`, `bed_status_events`, `occupancy_events`, `user_interactions`, `nfc_tags`, pagalbines funkcijas ir vaizdą `aggregated_bed_state`.
-- Įkelkite `BED_LAYOUT` informaciją į `beds` lentelę (galima naudoti `insert` ar CSV importą).
+- Įkelkite `BED_LAYOUT` informaciją į `beds` lentelę (galima naudoti `insert` ar CSV importą). Priekinė dalis dabar automatiškai nuskaito lovų sąrašą tiesiai iš šios lentelės, todėl nereikia redaguoti `BED_LAYOUT` masyvo kode.
 - Jeigu turite senų įrašų iš Google Sheets, juos eksportuokite į CSV ir naudokite `copy` arba `supabase import`, kad užpildytumėte istoriją.
 
 ```sql

@@ -4,8 +4,8 @@ import { parseSupabaseTimestamp } from '../utils/time.js';
  * Data models and calculation engine for bed cleanliness management system
  */
 
-// Bed layout configuration
-export const BED_LAYOUT = [
+// Bed layout configuration (used as fallback when Supabase is unavailable)
+export const DEFAULT_BED_LAYOUT = [
   'IT1', 'IT2',
   '1', '2', '3', '4', '5', '6', '7', '8', '9', '10',
   '11', '12', '13', '14', '15', '16', '17',
@@ -13,6 +13,36 @@ export const BED_LAYOUT = [
   'S4', 'S5', 'S6', 'S7', 'S8', 'S9', 'S10', 'S11', 'S12',
   '121A', '121B', 'IZO'
 ];
+
+function sanitizeBedId(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const stringValue = String(value).trim();
+  return stringValue.length > 0 ? stringValue : null;
+}
+
+function sanitizeBedLayout(layout = [], { fallback = DEFAULT_BED_LAYOUT } = {}) {
+  const source = Array.isArray(layout) ? layout : [];
+  const sanitized = [];
+  const seen = new Set();
+
+  source.forEach((value) => {
+    const bedId = sanitizeBedId(value);
+    if (!bedId || seen.has(bedId)) {
+      return;
+    }
+    seen.add(bedId);
+    sanitized.push(bedId);
+  });
+
+  if (sanitized.length === 0 && fallback) {
+    return sanitizeBedLayout(fallback, { fallback: null });
+  }
+
+  return sanitized;
+}
 
 // Form response status options
 export const STATUS_OPTIONS = {
@@ -454,18 +484,37 @@ export class BedData {
  * Main data manager for all beds
  */
 export class BedDataManager {
-  constructor() {
+  constructor(options = {}) {
+    const initialLayout = sanitizeBedLayout(options.bedLayout);
+
     this.beds = new Map();
+    this.bedLayout = initialLayout;
     this.settings = { ...DEFAULT_SETTINGS };
     this.formResponses = [];
     this.occupancyData = [];
     this.formResponseIndex = new Map();
     this.occupancyRecordIndex = new Map();
 
-    // Initialize all beds
-    BED_LAYOUT.forEach(bedId => {
+    this.bedLayout.forEach((bedId) => {
       this.beds.set(bedId, new BedData(bedId));
     });
+  }
+
+  #ensureBedExists(bedId) {
+    const sanitized = sanitizeBedId(bedId);
+    if (!sanitized) {
+      return null;
+    }
+
+    if (!this.beds.has(sanitized)) {
+      this.beds.set(sanitized, new BedData(sanitized));
+    }
+
+    if (!this.bedLayout.includes(sanitized)) {
+      this.bedLayout.push(sanitized);
+    }
+
+    return this.beds.get(sanitized) ?? null;
   }
 
   #resetBedState(bed) {
@@ -481,6 +530,35 @@ export class BedDataManager {
     bed.occupancyAssignedNurse = null;
     bed.notifications = [];
     bed.history = [];
+  }
+
+  setBedLayout(layout = []) {
+    const sanitized = sanitizeBedLayout(layout);
+    const sanitizedSet = new Set(sanitized);
+
+    this.beds.forEach((_, key) => {
+      if (!sanitizedSet.has(key)) {
+        this.beds.delete(key);
+      }
+    });
+
+    sanitized.forEach((bedId) => {
+      if (!this.beds.has(bedId)) {
+        this.beds.set(bedId, new BedData(bedId));
+      }
+    });
+
+    this.bedLayout = sanitized;
+    return this.getBedLayout();
+  }
+
+  getBedLayout() {
+    return [...this.bedLayout];
+  }
+
+  hasBed(bedId) {
+    const sanitized = sanitizeBedId(bedId);
+    return sanitized ? this.beds.has(sanitized) : false;
   }
 
   applyAggregatedState(records = []) {
@@ -499,12 +577,11 @@ export class BedDataManager {
 
     records.forEach((record) => {
       if (!record) return;
-      const bedId = record.bedId ?? record.label;
-      if (!bedId) return;
-      const bed = this.beds.get(bedId);
+      const bed = this.#ensureBedExists(record.bedId ?? record.label);
       if (!bed) {
         return;
       }
+      const bedId = bed.bedId;
 
       if (record.status) {
         bed.currentStatus = record.status;
@@ -541,23 +618,29 @@ export class BedDataManager {
    */
   addFormResponse(formResponse, options = {}) {
     const { allowUpdate = false } = options;
-    const recordId = formResponse?.id ?? `${formResponse?.bedId ?? 'unknown'}-${formResponse?.timestamp ?? Date.now()}`;
+    const bedId = sanitizeBedId(formResponse?.bedId);
+    if (!bedId) {
+      return false;
+    }
+
+    const normalizedResponse = { ...formResponse, bedId };
+    const recordId = normalizedResponse?.id ?? `${bedId}-${normalizedResponse?.timestamp ?? Date.now()}`;
     const existingIndex = recordId !== undefined ? this.formResponseIndex.get(recordId) : undefined;
 
     if (typeof existingIndex === 'number') {
       if (!allowUpdate) {
         return false;
       }
-      this.formResponses[existingIndex] = formResponse;
+      this.formResponses[existingIndex] = normalizedResponse;
     } else {
-      this.formResponses.push(formResponse);
+      this.formResponses.push(normalizedResponse);
       if (recordId) {
         this.formResponseIndex.set(recordId, this.formResponses.length - 1);
       }
     }
-    const bed = this.beds.get(formResponse.bedId);
+    const bed = this.#ensureBedExists(bedId);
     if (bed) {
-      bed.updateStatus(formResponse);
+      bed.updateStatus(normalizedResponse);
       bed.calculateNotifications(this.settings);
     }
     return true;
@@ -568,39 +651,37 @@ export class BedDataManager {
    */
   addOccupancyData(occupancyData, options = {}) {
     const { allowUpdate = false } = options;
-    const recordId = occupancyData?.id ?? `${occupancyData?.bedId ?? 'unknown'}-${occupancyData?.timestamp ?? Date.now()}`;
+    const bedId = sanitizeBedId(occupancyData?.bedId);
+    if (!bedId) {
+      return false;
+    }
+
+    const normalizedOccupancy = {
+      ...occupancyData,
+      bedId,
+      occupancy: normalizeOccupancyFlag(
+        occupancyData.occupancy ?? occupancyData.metadata?.occupancy ?? null,
+      ),
+    };
+
+    const recordId = normalizedOccupancy?.id ?? `${bedId}-${normalizedOccupancy?.timestamp ?? Date.now()}`;
     const existingIndex = recordId !== undefined ? this.occupancyRecordIndex.get(recordId) : undefined;
 
     if (typeof existingIndex === 'number') {
       if (!allowUpdate) {
         return false;
       }
-      const normalized = {
-        ...occupancyData,
-        occupancy: normalizeOccupancyFlag(
-          occupancyData.occupancy ?? occupancyData.metadata?.occupancy ?? null,
-        ),
-      };
-      this.occupancyData[existingIndex] = normalized;
+      this.occupancyData[existingIndex] = normalizedOccupancy;
     } else {
-      const normalized = {
-        ...occupancyData,
-        occupancy: normalizeOccupancyFlag(
-          occupancyData.occupancy ?? occupancyData.metadata?.occupancy ?? null,
-        ),
-      };
-      this.occupancyData.push(normalized);
+      this.occupancyData.push(normalizedOccupancy);
       if (recordId) {
         this.occupancyRecordIndex.set(recordId, this.occupancyData.length - 1);
       }
     }
-    const bed = this.beds.get(occupancyData.bedId);
+    const bed = this.#ensureBedExists(bedId);
     if (bed) {
       bed.updateOccupancy({
-        ...occupancyData,
-        occupancy: normalizeOccupancyFlag(
-          occupancyData.occupancy ?? occupancyData.metadata?.occupancy ?? null,
-        ),
+        ...normalizedOccupancy,
       });
       bed.calculateNotifications(this.settings);
     }
@@ -621,7 +702,9 @@ export class BedDataManager {
    * Get all beds as array
    */
   getAllBeds() {
-    return Array.from(this.beds.values());
+    return this.bedLayout
+      .map((bedId) => this.beds.get(bedId) ?? null)
+      .filter((bed) => bed !== null);
   }
 
   /**
@@ -679,6 +762,7 @@ export class BedDataManager {
       settings: this.settings,
       formResponses: this.formResponses,
       occupancyData: this.occupancyData,
+      bedLayout: this.getBedLayout(),
       exportTimestamp: new Date().toISOString()
     };
   }
@@ -687,6 +771,10 @@ export class BedDataManager {
    * Import data from backup/export
    */
   importData(data) {
+    if (Array.isArray(data.bedLayout) && data.bedLayout.length > 0) {
+      this.setBedLayout(data.bedLayout);
+    }
+
     if (data.settings) {
       this.settings = { ...DEFAULT_SETTINGS, ...data.settings };
     }
@@ -694,11 +782,10 @@ export class BedDataManager {
     if (data.formResponses) {
       this.formResponses = [];
       this.formResponseIndex.clear();
-      // Rebuild bed data from form responses
+      const layoutSnapshot = this.getBedLayout();
       this.beds.clear();
-      BED_LAYOUT.forEach(bedId => {
-        this.beds.set(bedId, new BedData(bedId));
-      });
+      this.bedLayout = [];
+      this.setBedLayout(layoutSnapshot);
       data.formResponses
         .slice()
         .sort((a, b) => new Date(a.timestamp ?? 0) - new Date(b.timestamp ?? 0))
