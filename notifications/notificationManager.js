@@ -674,11 +674,11 @@ export class NotificationManager {
     }
     const overdueClass = task.isOverdue ? 'text-red-600 dark:text-red-300' : '';
     const dueMarkup = dueParts.length
-      ? `<span class="notification-row__issue-meta ${overdueClass} ${applyFontSizeClasses('text-sm font-medium', level)}">${dueParts.join('<span class=\"notification-row__meta-separator\" aria-hidden=\"true\">•</span>')}</span>`
+      ? `<span class="notification-row__issue-due ${overdueClass} ${applyFontSizeClasses('text-sm font-medium', level)}">${dueParts.join('<span class=\"notification-row__meta-separator\" aria-hidden=\"true\">•</span>')}</span>`
       : '';
 
     const descriptionMarkup = task.description
-      ? `<p class="notification-row__issue-body ${applyFontSizeClasses('text-sm', level)}">${escapeHtml(task.description)}</p>`
+      ? `<span class="notification-row__issue-body ${applyFontSizeClasses('text-sm', level)}">${escapeHtml(task.description)}</span>`
       : '';
 
     const metaParts = [];
@@ -695,7 +695,7 @@ export class NotificationManager {
       metaParts.push(`<span>${escapeHtml(task.recurrenceLabel)}</span>`);
     }
     const metaMarkup = metaParts.length
-      ? `<div class="notification-task__meta ${applyFontSizeClasses('text-[11px]', level)}">${metaParts.join('<span class=\"notification-task__due-separator\" aria-hidden=\"true\">•</span>')}</div>`
+      ? `<span class="notification-task__meta ${applyFontSizeClasses('text-[11px]', level)}">${metaParts.join('<span class=\"notification-task__due-separator\" aria-hidden=\"true\">•</span>')}</span>`
       : '';
 
     return `
@@ -709,10 +709,10 @@ export class NotificationManager {
           <li class="notification-row__issue" data-variant="${cardVariant}">
             <span class="notification-row__dot" aria-hidden="true"></span>
             <div class="notification-row__issue-content">
-              <p class="notification-row__issue-title ${applyFontSizeClasses('text-base font-semibold', level)}">
+              <span class="notification-row__issue-title ${applyFontSizeClasses('text-base font-semibold', level)}">
                 <span>${escapeHtml(taskTitle)}</span>
                 ${dueMarkup}
-              </p>
+              </span>
               ${descriptionMarkup}
               ${metaMarkup}
             </div>

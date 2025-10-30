@@ -581,6 +581,68 @@
   gap: 0.25rem;
 }
 
+.notification-row[data-type="task"] .notification-row__issue-content {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.notification-row[data-type="task"] .notification-row__issue-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0;
+  color: #0f172a;
+}
+
+.notification-row[data-type="task"] .notification-row__issue-due {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #475569;
+}
+
+.notification-row[data-type="task"] .notification-row__issue-due time {
+  font-variant-numeric: tabular-nums;
+}
+
+.notification-row[data-type="task"] .notification-row__issue-body {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: #475569;
+}
+
+.notification-row[data-type="task"] .notification-task__meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  color: #475569;
+}
+
+.notification-row[data-type="task"] .notification-task__due-separator,
+.notification-row[data-type="task"] .notification-row__meta-separator {
+  color: #94a3b8;
+}
+
+.dark .notification-row[data-type="task"] .notification-row__issue-title {
+  color: #f8fafc;
+}
+
+.dark .notification-row[data-type="task"] .notification-row__issue-due,
+.dark .notification-row[data-type="task"] .notification-row__issue-body,
+.dark .notification-row[data-type="task"] .notification-task__meta {
+  color: #cbd5f5;
+}
+
+.dark .notification-row[data-type="task"] .notification-task__due-separator,
+.dark .notification-row[data-type="task"] .notification-row__meta-separator {
+  color: #94a3b8;
+}
+
 #notificationSummary .notification-row__issue-title {
   color: #0f172a;
   margin: 0;
