@@ -56,14 +56,6 @@ export const texts = {
   },
   notifications: {
     allClear: { lt: '✅ Visos lovos tvarkingos', en: '✅ All beds are ready' },
-    taskSummaryTitle: { lt: 'Bendros užduotys', en: 'Shared tasks' },
-    taskBuckets: {
-      critical: { lt: 'Kritinės', en: 'Critical' },
-      high: { lt: 'Didelė svarba', en: 'High priority' },
-      medium: { lt: 'Vidutinė svarba', en: 'Medium priority' },
-      low: { lt: 'Žema svarba', en: 'Low priority' },
-      none: { lt: 'Bazinės', en: 'General' },
-    },
   },
   tasks: {
     title: { lt: 'Skyrių užduotys', en: 'Ward tasks' },
