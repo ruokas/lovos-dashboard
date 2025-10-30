@@ -33,6 +33,9 @@ export class NotificationManager {
     this.audioContext = null;
     this.soundEnabled = true;
     this.fontSizeLevel = clampFontSizeLevel(options.fontSizeLevel ?? 0);
+    this.onTaskComplete = typeof options.onTaskComplete === 'function' ? options.onTaskComplete : null;
+    this.boundTaskActionHandler = (event) => this.handleTaskAction(event);
+    this.taskActionListenerAttached = false;
     
     // Initialize audio context
     this.initAudio();
@@ -372,6 +375,7 @@ export class NotificationManager {
       typeLabel,
       zoneKey,
       channelKey,
+      seriesId: typeof task.seriesId === 'string' && task.seriesId ? task.seriesId : null,
       metadata: task.metadata ? { ...task.metadata } : {},
     };
   }
@@ -580,6 +584,88 @@ export class NotificationManager {
       streamMarkup,
       taskSummaryMarkup,
     ].filter(Boolean).join('');
+
+    this.attachTaskActionListeners();
+  }
+
+  attachTaskActionListeners() {
+    if (typeof document === 'undefined' || this.taskActionListenerAttached) {
+      return;
+    }
+
+    const container = document.getElementById('notificationSummary');
+    if (!container) {
+      return;
+    }
+
+    container.addEventListener('click', this.boundTaskActionHandler);
+    container.addEventListener('keydown', this.boundTaskActionHandler);
+    this.taskActionListenerAttached = true;
+  }
+
+  handleTaskAction(event) {
+    if (!this.onTaskComplete) {
+      return;
+    }
+
+    const isActivationEvent = event.type === 'click'
+      || (event.type === 'keydown' && (event.key === 'Enter' || event.key === ' '));
+    if (!isActivationEvent) {
+      return;
+    }
+
+    const rawTarget = event.target;
+    const elementTarget = rawTarget && typeof rawTarget === 'object'
+      ? (typeof rawTarget.closest === 'function'
+        ? rawTarget
+        : rawTarget.parentElement ?? null)
+      : null;
+    const target = typeof elementTarget?.closest === 'function'
+      ? elementTarget.closest('button[data-action="complete-task"]')
+      : null;
+    if (!target) {
+      return;
+    }
+
+    if (event.type === 'keydown') {
+      event.preventDefault();
+    }
+
+    const taskId = target.dataset.taskId || '';
+    const seriesId = target.dataset.seriesId || '';
+    if (!taskId && !seriesId) {
+      return;
+    }
+
+    if (target.disabled || target.getAttribute('aria-disabled') === 'true') {
+      return;
+    }
+
+    const originalLabel = target.dataset.originalLabel || target.textContent || '';
+    const loadingLabel = target.dataset.loadingLabel || `${t(texts.tasks?.completeAction) || 'Pažymėti kaip atliktą'}…`;
+    target.dataset.originalLabel = originalLabel;
+    target.textContent = loadingLabel;
+    target.disabled = true;
+    target.setAttribute('aria-disabled', 'true');
+    target.classList.add('is-loading');
+
+    const actionResult = this.onTaskComplete(taskId, seriesId);
+    Promise.resolve(actionResult)
+      .then((succeeded) => {
+        if (succeeded === false) {
+          throw new Error('Task completion callback returned false.');
+        }
+        target.textContent = t(texts.tasks?.completedLabel) || 'Užduotis atlikta';
+        target.classList.remove('is-loading');
+        target.classList.add('is-completed');
+      })
+      .catch((error) => {
+        console.warn('Nepavyko pažymėti užduoties kaip atliktos iš pranešimo kortelės:', error);
+        target.disabled = false;
+        target.removeAttribute('aria-disabled');
+        target.classList.remove('is-loading');
+        target.textContent = originalLabel;
+      });
   }
 
   renderBedCard(bed, options = {}) {
@@ -702,8 +788,26 @@ export class NotificationManager {
       ? `<span class="notification-task__meta ${applyFontSizeClasses('text-[11px]', level)}">${metaParts.join('<span class=\"notification-task__due-separator\" aria-hidden=\"true\">•</span>')}</span>`
       : '';
 
+    const seriesAttribute = task.seriesId ? ` data-series-id="${escapeHtml(task.seriesId)}"` : '';
+    const completionMarkup = task.status === TASK_STATUSES.COMPLETED
+      ? `
+              <div class="notification-task__footer notification-task__footer--completed ${applyFontSizeClasses('text-xs font-semibold', level)}" role="status">
+                <span aria-hidden="true">✅</span>
+                <span>${escapeHtml(t(texts.tasks?.completedLabel) || 'Užduotis atlikta')}</span>
+              </div>
+            `
+      : this.onTaskComplete
+        ? `
+              <div class="notification-task__footer">
+                <button type="button" class="notification-task__complete-button ${applyFontSizeClasses('text-xs font-semibold', level)}" data-action="complete-task" data-task-id="${escapeHtml(task.id)}"${seriesAttribute}>
+                  ${escapeHtml(t(texts.tasks?.completeAction) || 'Pažymėti kaip atliktą')}
+                </button>
+              </div>
+            `
+        : '';
+
     return `
-      <article class="notification-row" data-type="task" data-variant="${cardVariant}" data-task-id="${escapeHtml(task.id)}">
+      <article class="notification-row" data-type="task" data-variant="${cardVariant}" data-task-id="${escapeHtml(task.id)}"${seriesAttribute}>
         <div class="notification-row__bed">
           <span class="notification-row__bed-label ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(headerLabel)}</span>
           <span class="notification-row__bed-id ${applyFontSizeClasses('text-2xl font-bold', level)}">${escapeHtml(headerId)}</span>
@@ -720,6 +824,7 @@ export class NotificationManager {
               ${highlightMarkup}
               ${descriptionMarkup}
               ${metaMarkup}
+              ${completionMarkup}
             </div>
           </li>
         </ul>

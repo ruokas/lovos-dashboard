@@ -628,6 +628,47 @@
   font-weight: 600;
 }
 
+.notification-row[data-type="task"] .notification-task__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+.notification-row[data-type="task"] .notification-task__footer--completed {
+  gap: 0.5rem;
+  align-items: center;
+  color: #047857;
+}
+
+.notification-row[data-type="task"] .notification-task__complete-button {
+  padding: 0.35rem 0.75rem;
+  border: none;
+  border-radius: 0.5rem;
+  background-color: #047857;
+  color: #fff;
+  cursor: pointer;
+  transition: background-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.notification-row[data-type="task"] .notification-task__complete-button:hover,
+.notification-row[data-type="task"] .notification-task__complete-button:focus-visible {
+  background-color: #16a34a;
+}
+
+.notification-row[data-type="task"] .notification-task__complete-button:focus-visible {
+  outline: 2px solid #22c55e;
+  outline-offset: 2px;
+}
+
+.notification-row[data-type="task"] .notification-task__complete-button.is-loading {
+  background-color: #065f46;
+  cursor: progress;
+}
+
+.notification-row[data-type="task"] .notification-task__complete-button.is-completed {
+  background-color: #065f46;
+}
+
 .notification-row[data-type="task"] .notification-task__due-separator,
 .notification-row[data-type="task"] .notification-row__meta-separator {
   color: #94a3b8;
@@ -645,6 +686,25 @@
 
 .dark .notification-row[data-type="task"] .notification-task__meta--highlight {
   color: #f8fafc;
+}
+
+.dark .notification-row[data-type="task"] .notification-task__footer--completed {
+  color: #6ee7b7;
+}
+
+.dark .notification-row[data-type="task"] .notification-task__complete-button {
+  background-color: #059669;
+  color: #ecfdf5;
+}
+
+.dark .notification-row[data-type="task"] .notification-task__complete-button:hover,
+.dark .notification-row[data-type="task"] .notification-task__complete-button:focus-visible {
+  background-color: #10b981;
+}
+
+.dark .notification-row[data-type="task"] .notification-task__complete-button.is-loading,
+.dark .notification-row[data-type="task"] .notification-task__complete-button.is-completed {
+  background-color: #047857;
 }
 
 .dark .notification-row[data-type="task"] .notification-task__due-separator,

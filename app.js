@@ -51,7 +51,10 @@ export class BedManagementApp {
     this.currentSearchTerm = '';
     this.searchDebounceTimer = null;
     this.persistenceManager = new DataPersistenceManager({ document: this.document });
-    this.notificationManager = new NotificationManager(this.settingsManager, { fontSizeLevel: this.fontSizeLevel });
+    this.notificationManager = new NotificationManager(this.settingsManager, {
+      fontSizeLevel: this.fontSizeLevel,
+      onTaskComplete: this.handleNotificationTaskCompletion.bind(this),
+    });
     this.taskManager = new TaskManager();
     const sharedDocument = this.document;
     this.reportingService = new ReportingService({
@@ -1783,6 +1786,45 @@ export class BedManagementApp {
       return 0;
     }
     return aTime - bTime;
+  }
+
+  handleNotificationTaskCompletion(taskId, seriesId) {
+    const targetTask = this.resolveTaskCompletionCandidate(taskId, seriesId);
+    if (!targetTask) {
+      const identifier = taskId || seriesId || '(nežinoma)';
+      console.warn('Nepavyko rasti užduoties pranešimo kortelėje:', identifier);
+      return false;
+    }
+
+    if (targetTask.status === TASK_STATUSES.COMPLETED) {
+      return true;
+    }
+
+    const metadata = { ...(targetTask.metadata ?? {}), completedAt: new Date().toISOString() };
+    const updatedTask = this.taskManager.updateTask(targetTask.id, {
+      status: TASK_STATUSES.COMPLETED,
+      metadata,
+    });
+
+    if (!updatedTask) {
+      console.warn('Nepavyko atnaujinti užduoties pranešimo kortelėje:', targetTask.id);
+      return false;
+    }
+
+    void this.userInteractionLogger.logInteraction('task_mark_completed', {
+      taskId: targetTask.id,
+      seriesId: targetTask.seriesId || seriesId || null,
+      source: 'notification_card',
+    });
+
+    this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
+      suppressAlerts: true,
+      fontSizeLevel: this.fontSizeLevel,
+    });
+
+    this.renderTaskList();
+    this.renderNotificationSummary();
+    return true;
   }
 
   resolveTaskCompletionCandidate(preferredId, seriesId, tasksSource) {

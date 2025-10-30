@@ -22,6 +22,7 @@ class FakeSettingsManager {
 describe('NotificationManager su bendromis užduotimis', () => {
   let dom;
   let notificationManager;
+  let completeSpy;
 
   beforeEach(() => {
     dom = new JSDOM(`<!DOCTYPE html><body>
@@ -36,10 +37,14 @@ describe('NotificationManager su bendromis užduotimis', () => {
       static requestPermission = vi.fn();
     };
 
+    completeSpy = vi.fn(() => true);
+
     notificationManager = new NotificationManager(new FakeSettingsManager({
       soundEnabled: true,
       notificationsEnabled: false,
-    }));
+    }), {
+      onTaskComplete: completeSpy,
+    });
     vi.spyOn(notificationManager, 'playNotificationSound').mockImplementation(() => {});
   });
 
@@ -151,5 +156,26 @@ describe('NotificationManager su bendromis užduotimis', () => {
 
     const taskCards = document.querySelectorAll('.notification-row[data-type="task"]');
     expect(taskCards.length).toBe(0);
+  });
+
+  it('leidžia pažymėti užduotį atlikta tiesiai iš kortelės', () => {
+    const task = {
+      id: 'task-inline',
+      title: 'Patikrinti defibriliatorių',
+      priority: 2,
+      status: 'inProgress',
+      zone: 'general',
+      channel: 'general',
+      metadata: { general: true },
+    };
+
+    notificationManager.updateNotifications([], [task], { suppressAlerts: true });
+
+    const button = document.querySelector('button[data-action="complete-task"]');
+    expect(button).not.toBeNull();
+
+    button.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+
+    expect(completeSpy).toHaveBeenCalledWith('task-inline', '');
   });
 });
