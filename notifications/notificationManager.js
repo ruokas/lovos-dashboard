@@ -599,6 +599,13 @@ export class NotificationManager {
     const cardVariant = this.getNotificationVariant(highestPriority.priority);
     const occupancyVariant = bed.occupancyStatus === 'occupied' ? 'busy' : 'free';
     const occupancyText = bed.occupancyStatus === 'occupied' ? 'Užimta' : 'Laisva';
+    const nurseName = typeof bed.occupancyAssignedNurse === 'string'
+      ? bed.occupancyAssignedNurse.trim()
+      : '';
+    const nurseLabel = t(texts.notifications?.nurseLabel) || 'Slaugytoja';
+    const nurseMarkup = nurseName
+      ? `<span class="notification-row__nurse ${applyFontSizeClasses('text-xs font-medium', level)}">${escapeHtml(nurseLabel)}: ${escapeHtml(nurseName)}</span>`
+      : '';
 
     const notifications = bed.notifications.map((notification) => {
       const issueVariant = this.getNotificationVariant(notification.priority);
@@ -635,6 +642,7 @@ export class NotificationManager {
         <div class="notification-row__bed">
           <span class="notification-row__bed-label ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(t(texts.ui.bedLabel))}</span>
           <span class="notification-row__bed-id ${applyFontSizeClasses('text-2xl font-bold', level)}">${escapeHtml(bed.bedId)}</span>
+          ${nurseMarkup}
         </div>
         <span class="notification-row__occupancy notification-row__occupancy--${occupancyVariant} ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(occupancyText)}</span>
         <ul class="notification-row__issues">

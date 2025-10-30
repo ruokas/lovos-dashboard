@@ -174,4 +174,27 @@ describe('NotificationManager su bendromis užduotimis', () => {
 
     expect(completeSpy).toHaveBeenCalledWith('task-inline', '');
   });
+
+  it('lovos pranešimų kortelėse rodo atsakingą slaugytoją', () => {
+    const bed = {
+      bedId: 'IT1',
+      occupancyStatus: 'occupied',
+      occupancyAssignedNurse: 'Asta Slaugė',
+      notifications: [
+        {
+          type: 'messy_bed',
+          priority: 1,
+          message: '🛏️ Netvarkinga lova',
+          timestamp: new Date().toISOString(),
+        },
+      ],
+    };
+
+    notificationManager.updateNotifications([bed], [], { suppressAlerts: true });
+
+    const nurseElement = document.querySelector('.notification-row__nurse');
+    expect(nurseElement).not.toBeNull();
+    expect(nurseElement?.textContent).toContain('Slaugytoja');
+    expect(nurseElement?.textContent).toContain('Asta Slaugė');
+  });
 });

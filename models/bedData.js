@@ -53,6 +53,8 @@ export class BedData {
     this.lastCheckedBy = null;
     this.lastCheckedEmail = null;
     this.problemDescription = null; // for "Other" status
+    this.currentPatientCode = null;
+    this.occupancyAssignedNurse = null;
     this.notifications = [];
     this.history = []; // Array of status changes
   }
@@ -95,14 +97,32 @@ export class BedData {
     const timestamp = occupancyData.timestamp ? new Date(occupancyData.timestamp) : null;
     const isValidTimestamp = timestamp instanceof Date && !Number.isNaN(timestamp);
     const rawStatus = typeof occupancyData.status === 'string'
-      ? occupancyData.status.toLowerCase()
+      ? occupancyData.status.trim().toLowerCase()
       : '';
+    const hasPatient = typeof occupancyData.patientCode === 'string' && occupancyData.patientCode.trim() !== '';
+    const derivedStatus = hasPatient ? 'occupied' : 'free';
+    const normalizedStatus = rawStatus || derivedStatus;
 
-    if (!rawStatus) {
+    this.currentPatientCode = hasPatient ? occupancyData.patientCode : null;
+
+    const assignedNurse = occupancyData.createdBy
+      || occupancyData.nurse
+      || occupancyData.metadata?.nurse
+      || occupancyData.metadata?.createdBy
+      || null;
+    this.occupancyAssignedNurse = assignedNurse || null;
+
+    if (!normalizedStatus) {
+      this.occupancyStatus = 'free';
+      if (isValidTimestamp) {
+        this.lastFreedTime = timestamp;
+      }
       return;
     }
 
-    if (rawStatus === 'occupied') {
+    const statusValue = normalizedStatus.toLowerCase();
+
+    if (['occupied', 'užimta', 'uzimta', 'užimtas', 'uzimtas'].includes(statusValue)) {
       if (isValidTimestamp) {
         this.lastOccupiedTime = timestamp;
       }
@@ -110,7 +130,7 @@ export class BedData {
       return;
     }
 
-    if (rawStatus === 'free' || rawStatus === 'available') {
+    if (['free', 'available', 'laisva', 'laisvas', 'laisvi', 'laisvos'].includes(statusValue)) {
       if (isValidTimestamp) {
         this.lastFreedTime = timestamp;
       }
@@ -118,7 +138,7 @@ export class BedData {
       return;
     }
 
-    if (rawStatus === 'cleaning') {
+    if (['cleaning', 'tvarkoma', 'tvarkomas', 'valoma', 'dezinfekuojama'].includes(statusValue)) {
       if (isValidTimestamp) {
         this.lastFreedTime = timestamp;
       }
@@ -126,7 +146,7 @@ export class BedData {
       return;
     }
 
-    this.occupancyStatus = rawStatus;
+    this.occupancyStatus = statusValue;
   }
 
   /**
@@ -279,6 +299,8 @@ export class BedDataManager {
     bed.lastCheckedBy = null;
     bed.lastCheckedEmail = null;
     bed.problemDescription = null;
+    bed.currentPatientCode = null;
+    bed.occupancyAssignedNurse = null;
     bed.notifications = [];
     bed.history = [];
   }
@@ -315,21 +337,14 @@ export class BedDataManager {
         bed.lastCheckedEmail = record.statusReportedBy ?? null;
       }
 
-      if (record.occupancyState) {
-        const normalized = String(record.occupancyState).toLowerCase();
-        const occupancyDate = parseSupabaseTimestamp(record.occupancyCreatedAt);
-        if (normalized === 'occupied') {
-          bed.occupancyStatus = 'occupied';
-          bed.lastOccupiedTime = occupancyDate;
-        } else if (normalized === 'free' || normalized === 'available') {
-          bed.occupancyStatus = 'free';
-          bed.lastFreedTime = occupancyDate;
-        } else {
-          bed.occupancyStatus = normalized;
-        }
-      } else {
-        bed.occupancyStatus = 'free';
-      }
+      bed.updateOccupancy({
+        bedId,
+        status: record.occupancyState ?? null,
+        timestamp: record.occupancyCreatedAt ?? null,
+        patientCode: record.patientCode ?? null,
+        createdBy: record.occupancyCreatedBy ?? null,
+        metadata: record.occupancyMetadata ?? {},
+      });
 
       bed.calculateNotifications(this.settings);
     });
