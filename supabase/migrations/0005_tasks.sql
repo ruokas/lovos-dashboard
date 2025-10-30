@@ -15,11 +15,25 @@ create table if not exists public.task_templates (
   updated_at timestamptz not null default now()
 );
 
-drop trigger if exists set_timestamp_task_templates on public.task_templates;
+do $$
+begin
+  if exists (
+    select 1
+    from pg_trigger t
+    join pg_class c on t.tgrelid = c.oid
+    where t.tgname = 'set_timestamp_task_templates'
+      and c.relname = 'task_templates'
+      and c.relnamespace = 'public'::regnamespace
+  ) then
+    execute 'drop trigger set_timestamp_task_templates on public.task_templates';
+  end if;
+end;
+$$;
+
 create trigger set_timestamp_task_templates
 before update on public.task_templates
 for each row
-execute procedure public.set_current_timestamp_updated_at();
+execute function public.set_current_timestamp_updated_at();
 
 create table if not exists public.tasks (
   id uuid primary key default gen_random_uuid(),
@@ -36,11 +50,25 @@ create table if not exists public.tasks (
   updated_at timestamptz not null default now()
 );
 
-drop trigger if exists set_timestamp_tasks on public.tasks;
+do $$
+begin
+  if exists (
+    select 1
+    from pg_trigger t
+    join pg_class c on t.tgrelid = c.oid
+    where t.tgname = 'set_timestamp_tasks'
+      and c.relname = 'tasks'
+      and c.relnamespace = 'public'::regnamespace
+  ) then
+    execute 'drop trigger set_timestamp_tasks on public.tasks';
+  end if;
+end;
+$$;
+
 create trigger set_timestamp_tasks
 before update on public.tasks
 for each row
-execute procedure public.set_current_timestamp_updated_at();
+execute function public.set_current_timestamp_updated_at();
 
 create index if not exists tasks_status_idx on public.tasks (status);
 create index if not exists tasks_due_at_idx on public.tasks (due_at);
