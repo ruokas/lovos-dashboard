@@ -1,4 +1,5 @@
 import { STATUS_OPTIONS, DEFAULT_SETTINGS } from '../models/bedData.js';
+import { TaskData } from '../models/taskData.js';
 
 const SUPABASE_SOURCE = 'supabase';
 const LOCAL_SOURCE = 'local';
@@ -410,6 +411,57 @@ export class ReportingService {
       totals,
       notifications: notificationBuckets,
     };
+  }
+
+  async fetchTaskBoard(options = {}) {
+    const { limit = null } = options;
+
+    if (!this.client) {
+      return { source: LOCAL_SOURCE, tasks: [], message: 'Nuotolinė paslauga nepasiekiama' };
+    }
+
+    try {
+      let query = this.client
+        .from('tasks')
+        .select(`
+          id,
+          template_id,
+          category,
+          description,
+          priority,
+          status,
+          due_at,
+          recurrence,
+          assigned_to,
+          metadata,
+          task_events (
+            id,
+            event_type,
+            status,
+            notes,
+            created_by,
+            metadata,
+            created_at
+          )
+        `)
+        .order('due_at', { ascending: true, nullsFirst: true });
+
+      if (Number.isInteger(limit) && limit > 0) {
+        query = query.limit(limit);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        throw error;
+      }
+
+      return {
+        source: SUPABASE_SOURCE,
+        tasks: (data ?? []).map((row) => TaskData.fromSupabase(row)),
+      };
+    } catch (error) {
+      return { source: LOCAL_SOURCE, tasks: [], error };
+    }
   }
 }
 
