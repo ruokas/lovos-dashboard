@@ -17,6 +17,8 @@ export const DEFAULT_RECURRING_TEMPLATES = [
     startTimes: ['07:30', '10:30', '13:30', '16:30', '19:30', '22:30'],
     recurrence: 'daily',
     recurrenceLabel: 'Kasdien',
+    frequencyMinutes: 30,
+    frequencyLabel: 'Kas 30 min.',
     type: 'logistics',
     typeLabel: 'Laboratoriniai pervežimai',
     metadata: { template: 'lab-default' },
@@ -85,11 +87,13 @@ export function generateOccurrences(template = {}, referenceDate = new Date()) {
         recurrenceLabel: template.recurrenceLabel ?? template.recurrence ?? 'daily',
         status: TASK_STATUSES.PLANNED,
         source: SCHEDULER_SOURCE,
-        metadata: {
-          scheduler: baseSeriesId,
-          ...template.metadata,
-        },
-      });
+      metadata: {
+        scheduler: baseSeriesId,
+        frequencyMinutes: template.frequencyMinutes ?? template.metadata?.frequencyMinutes ?? null,
+        frequencyLabel: template.frequencyLabel ?? template.metadata?.frequencyLabel ?? null,
+        ...template.metadata,
+      },
+    });
     }
   }
 

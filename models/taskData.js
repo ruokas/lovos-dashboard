@@ -35,6 +35,237 @@ export const TASK_CHANNEL_OPTIONS = [
   { value: 'wards', labelKey: 'wards' },
 ];
 
+function toDate(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function compareTasks(a, b) {
+  if (!a || !b) {
+    return 0;
+  }
+
+  const aPriority = Number.isFinite(a.priority) ? a.priority : TASK_PRIORITIES.MEDIUM;
+  const bPriority = Number.isFinite(b.priority) ? b.priority : TASK_PRIORITIES.MEDIUM;
+
+  if (aPriority !== bPriority) {
+    return aPriority - bPriority;
+  }
+
+  const aDue = toDate(a.dueAt ?? a.deadline);
+  const bDue = toDate(b.dueAt ?? b.deadline);
+
+  const aHasDue = Boolean(aDue);
+  const bHasDue = Boolean(bDue);
+
+  if (aHasDue && bHasDue) {
+    if (aDue.getTime() !== bDue.getTime()) {
+      return aDue.getTime() - bDue.getTime();
+    }
+  } else if (aHasDue) {
+    return -1;
+  } else if (bHasDue) {
+    return 1;
+  }
+
+  const aCreated = toDate(a.createdAt)?.getTime() ?? 0;
+  const bCreated = toDate(b.createdAt)?.getTime() ?? 0;
+  if (aCreated !== bCreated) {
+    return aCreated - bCreated;
+  }
+
+  const aTitle = typeof a.title === 'string' ? a.title : '';
+  const bTitle = typeof b.title === 'string' ? b.title : '';
+  return aTitle.localeCompare(bTitle, 'lt-LT');
+}
+
+export function sortTasksByPriorityAndDue(tasks = []) {
+  const list = Array.isArray(tasks) ? tasks.slice() : [];
+  return list.sort(compareTasks);
+}
+
+function deriveFrequencyMinutes(occurrences = [], explicitValue) {
+  if (Number.isFinite(explicitValue) && explicitValue > 0) {
+    return explicitValue;
+  }
+
+  if (!Array.isArray(occurrences) || occurrences.length < 2) {
+    return null;
+  }
+
+  const deltas = [];
+  for (let index = 1; index < occurrences.length; index += 1) {
+    const previous = occurrences[index - 1];
+    const current = occurrences[index];
+    const previousDue = toDate(previous?.dueAt ?? previous?.deadline);
+    const currentDue = toDate(current?.dueAt ?? current?.deadline);
+    if (!previousDue || !currentDue) {
+      continue;
+    }
+    const diffMinutes = Math.round((currentDue.getTime() - previousDue.getTime()) / 60000);
+    if (diffMinutes > 0) {
+      deltas.push(diffMinutes);
+    }
+  }
+
+  if (!deltas.length) {
+    return null;
+  }
+
+  return deltas.reduce((min, value) => Math.min(min, value), deltas[0]);
+}
+
+function deriveFrequencyLabel(frequencyMinutes, explicitLabel, fallbackLabel, fallbackKey) {
+  const label = typeof explicitLabel === 'string' ? explicitLabel.trim() : '';
+  if (label) {
+    return label;
+  }
+
+  if (Number.isFinite(frequencyMinutes) && frequencyMinutes > 0) {
+    if (frequencyMinutes % 1440 === 0) {
+      const days = frequencyMinutes / 1440;
+      return days === 1 ? 'Kasdien' : `Kas ${days} d.`;
+    }
+    if (frequencyMinutes % 60 === 0) {
+      const hours = frequencyMinutes / 60;
+      return hours === 1 ? 'Kas valandą' : `Kas ${hours} val.`;
+    }
+    return `Kas ${frequencyMinutes} min.`;
+  }
+
+  const normalizedFallback = typeof fallbackLabel === 'string' ? fallbackLabel.trim() : '';
+  if (normalizedFallback) {
+    return normalizedFallback;
+  }
+
+  const normalizedKey = typeof fallbackKey === 'string' ? fallbackKey.trim() : '';
+  if (normalizedKey) {
+    return normalizedKey;
+  }
+
+  return 'Pasikartojanti';
+}
+
+function pickFrequencyCandidate(values = []) {
+  for (const value of values) {
+    const numeric = Number(value);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric;
+    }
+  }
+  return null;
+}
+
+export function mergeRecurringTasksForDisplay(tasks = [], options = {}) {
+  if (!Array.isArray(tasks) || tasks.length === 0) {
+    return [];
+  }
+
+  const referenceDate = options.referenceDate instanceof Date && !Number.isNaN(options.referenceDate?.getTime?.())
+    ? new Date(options.referenceDate)
+    : new Date();
+
+  const standaloneTasks = [];
+  const seriesMap = new Map();
+
+  for (const task of tasks) {
+    if (!task || typeof task !== 'object') {
+      continue;
+    }
+
+    if (task.source === 'scheduler' && task.seriesId) {
+      const existing = seriesMap.get(task.seriesId);
+      if (existing) {
+        existing.occurrences.push(task);
+      } else {
+        seriesMap.set(task.seriesId, { template: task, occurrences: [task] });
+      }
+      continue;
+    }
+
+    standaloneTasks.push({
+      ...task,
+      metadata: task.metadata ? { ...task.metadata } : {},
+    });
+  }
+
+  for (const [seriesId, entry] of seriesMap.entries()) {
+    const sortedOccurrences = sortTasksByPriorityAndDue(entry.occurrences);
+    if (sortedOccurrences.length === 0) {
+      continue;
+    }
+
+    const nextOccurrence = sortedOccurrences.find((occurrence) => {
+      const dueDate = toDate(occurrence?.dueAt ?? occurrence?.deadline);
+      return dueDate && dueDate.getTime() >= referenceDate.getTime();
+    }) ?? sortedOccurrences[0];
+
+    const earliestCreated = sortedOccurrences.reduce((earliest, occurrence) => {
+      const created = toDate(occurrence?.createdAt);
+      if (!created) {
+        return earliest;
+      }
+      if (!earliest || created.getTime() < earliest.getTime()) {
+        return created;
+      }
+      return earliest;
+    }, null);
+
+    const metadataSources = [
+      entry.template?.metadata ?? {},
+      nextOccurrence?.metadata ?? {},
+    ];
+
+    const mergedMetadata = metadataSources.reduce((acc, source) => Object.assign(acc, source), {});
+
+    const frequencyMinutes = pickFrequencyCandidate([
+      mergedMetadata.recurringFrequencyMinutes,
+      mergedMetadata.frequencyMinutes,
+      entry.template?.frequencyMinutes,
+    ]);
+
+    const derivedFrequencyMinutes = deriveFrequencyMinutes(sortedOccurrences, frequencyMinutes);
+    const frequencyLabel = deriveFrequencyLabel(
+      derivedFrequencyMinutes,
+      mergedMetadata.frequencyLabel ?? mergedMetadata.recurringFrequencyLabel,
+      entry.template?.recurrenceLabel,
+      entry.template?.recurrence,
+    );
+
+    const occurrenceIds = sortedOccurrences.map((occurrence) => occurrence.id);
+    const highestPriority = sortedOccurrences.reduce((minPriority, occurrence) => {
+      const priority = Number.isFinite(occurrence?.priority) ? occurrence.priority : TASK_PRIORITIES.MEDIUM;
+      return Math.min(minPriority, priority);
+    }, TASK_PRIORITIES.LOW);
+
+    const representative = {
+      ...nextOccurrence,
+      id: seriesId,
+      dueAt: nextOccurrence?.dueAt ?? nextOccurrence?.deadline ?? null,
+      deadline: nextOccurrence?.deadline ?? nextOccurrence?.dueAt ?? null,
+      status: nextOccurrence?.status ?? entry.template?.status ?? TASK_STATUSES.PLANNED,
+      priority: highestPriority,
+      createdAt: earliestCreated ? earliestCreated.toISOString() : (nextOccurrence?.createdAt ?? entry.template?.createdAt),
+      updatedAt: nextOccurrence?.updatedAt ?? entry.template?.updatedAt ?? nextOccurrence?.createdAt,
+      metadata: {
+        ...mergedMetadata,
+        recurringFrequencyMinutes: derivedFrequencyMinutes ?? null,
+        recurringFrequencyLabel: frequencyLabel,
+        recurringOccurrencesCount: sortedOccurrences.length,
+        recurringNextDueAt: nextOccurrence?.dueAt ?? null,
+        recurringSourceTaskIds: occurrenceIds,
+      },
+      recurrence: nextOccurrence?.recurrence ?? entry.template?.recurrence ?? 'recurring',
+      recurrenceLabel: frequencyLabel,
+    };
+
+    standaloneTasks.push(representative);
+  }
+
+  return sortTasksByPriorityAndDue(standaloneTasks);
+}
+
 function isLocalStorageAvailable() {
   try {
     return typeof localStorage !== 'undefined';
@@ -130,31 +361,7 @@ export class TaskManager {
   }
 
   getTasks() {
-    return [...this.tasks].sort((a, b) => {
-      if (a.priority !== b.priority) {
-        return a.priority - b.priority;
-      }
-
-      const aDue = a.dueAt ? new Date(a.dueAt) : (a.deadline ? new Date(a.deadline) : null);
-      const bDue = b.dueAt ? new Date(b.dueAt) : (b.deadline ? new Date(b.deadline) : null);
-
-      const aHasDue = aDue instanceof Date && !Number.isNaN(aDue);
-      const bHasDue = bDue instanceof Date && !Number.isNaN(bDue);
-
-      if (aHasDue && bHasDue) {
-        if (aDue.getTime() !== bDue.getTime()) {
-          return aDue - bDue;
-        }
-      } else if (aHasDue) {
-        return -1;
-      } else if (bHasDue) {
-        return 1;
-      }
-
-      const aCreated = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-      const bCreated = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return aCreated - bCreated;
-    });
+    return sortTasksByPriorityAndDue(this.tasks);
   }
 
   filterTasks(filters = {}) {
@@ -162,7 +369,7 @@ export class TaskManager {
     const statusFilter = filters.status ?? 'all';
     const channelFilter = filters.channel ?? 'all';
 
-    return this.getTasks().filter((task) => {
+    const filtered = this.getTasks().filter((task) => {
       if (statusFilter !== 'all' && task.status !== statusFilter) {
         return false;
       }
@@ -189,6 +396,8 @@ export class TaskManager {
 
       return haystack.includes(searchTerm);
     });
+
+    return mergeRecurringTasksForDisplay(filtered, { referenceDate: new Date() });
   }
 
   addTask(payload) {

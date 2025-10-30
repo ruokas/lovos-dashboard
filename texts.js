@@ -97,7 +97,7 @@ export const texts = {
     channels: {
       laboratory: { lt: 'Laboratorija', en: 'Laboratory' },
       ambulatory: { lt: 'Ambulatorija', en: 'Outpatient clinic' },
-      wards: { lt: 'Stacionaras / skyrius', en: 'Inpatient ward' },
+      wards: { lt: 'Skyrius', en: 'Ward' },
     },
     labels: {
       responsible: { lt: 'Atsakingas', en: 'Responsible' },

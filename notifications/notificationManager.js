@@ -3,7 +3,7 @@
  */
 
 import { PRIORITY_LEVELS } from '../models/bedData.js';
-import { TASK_PRIORITIES, TASK_STATUSES } from '../models/taskData.js';
+import { TASK_PRIORITIES, TASK_STATUSES, mergeRecurringTasksForDisplay } from '../models/taskData.js';
 import { clampFontSizeLevel, applyFontSizeClasses } from '../utils/fontSize.js';
 import { t, texts } from '../texts.js';
 
@@ -272,7 +272,9 @@ export class NotificationManager {
       return { normalizedTasks: [], hasCriticalTaskChange: false };
     }
 
-    const normalizedTasks = tasks
+    const preparedTasks = mergeRecurringTasksForDisplay(tasks);
+
+    const normalizedTasks = preparedTasks
       .map((task) => this.normaliseTaskForSummary(task))
       .filter(Boolean)
       .sort((a, b) => {
@@ -340,6 +342,7 @@ export class NotificationManager {
     const dueTimestamp = dueValid ? dueDate.getTime() : null;
     const isCompleted = task.status === TASK_STATUSES.COMPLETED;
     const isOverdue = Boolean(dueValid && !isCompleted && dueDate.getTime() < now.getTime());
+    const recurrenceLabel = typeof task.recurrenceLabel === 'string' ? task.recurrenceLabel : null;
 
     return {
       id,
@@ -356,6 +359,7 @@ export class NotificationManager {
       isOverdue,
       status: task.status ?? TASK_STATUSES.PLANNED,
       source: task.source ?? 'local',
+      recurrenceLabel,
     };
   }
 
@@ -419,24 +423,31 @@ export class NotificationManager {
             ? `<p class="notification-task__description ${applyFontSizeClasses('text-xs', level)}">${escapeHtml(task.description)}</p>`
             : '';
 
-          const channelInfo = task.channel
-            ? `<span class="notification-task__channel ${applyFontSizeClasses('text-[11px] font-medium uppercase tracking-wide', level)}">${escapeHtml(task.channel)}</span>`
-            : '';
+        const metaParts = [];
+        if (task.channel) {
+          metaParts.push(`<span class="notification-task__channel ${applyFontSizeClasses('text-[11px] font-medium uppercase tracking-wide', level)}">${escapeHtml(task.channel)}</span>`);
+        }
+        if (task.recurrenceLabel) {
+          metaParts.push(`<span class="notification-task__recurrence ${applyFontSizeClasses('text-[11px] font-medium text-slate-600 dark:text-slate-300', level)}">${escapeHtml(task.recurrenceLabel)}</span>`);
+        }
+        if (task.responsible) {
+          metaParts.push(`<span>${escapeHtml(task.responsible)}</span>`);
+        }
+        const metaMarkup = metaParts.length
+          ? `<div class="notification-task__meta ${applyFontSizeClasses('text-[11px]', level)}">${metaParts.join('<span class="mx-1 text-slate-400 dark:text-slate-500" aria-hidden="true">•</span>')}</div>`
+          : '';
 
-          return `
-            <li class="notification-task" data-bucket="${bucket}">
-              <div class="notification-task__header">
-                <span class="notification-task__title ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(task.title)}</span>
-                ${dueInfo}
-              </div>
-              ${description}
-              <div class="notification-task__meta ${applyFontSizeClasses('text-[11px]', level)}">
-                ${channelInfo}
-                ${task.responsible ? `<span>${escapeHtml(task.responsible)}</span>` : ''}
-              </div>
-            </li>
-          `;
-        }).join('');
+        return `
+          <li class="notification-task" data-bucket="${bucket}">
+            <div class="notification-task__header">
+              <span class="notification-task__title ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(task.title)}</span>
+              ${dueInfo}
+            </div>
+            ${description}
+            ${metaMarkup}
+          </li>
+        `;
+      }).join('');
 
         return `
           <section class="notification-task__section" data-bucket="${bucket}">
@@ -470,7 +481,12 @@ export class NotificationManager {
       ? clampFontSizeLevel(options.fontSizeLevel)
       : this.fontSizeLevel;
 
-    const tasks = Array.isArray(options.tasks) ? options.tasks : this.currentTasks;
+    const taskSource = Array.isArray(options.tasks) ? options.tasks : this.currentTasks;
+    const hasNormalizedShape = Array.isArray(taskSource)
+      && taskSource.every((task) => task && typeof task === 'object' && 'priorityBucket' in task);
+    const summaryTasks = hasNormalizedShape
+      ? taskSource
+      : mergeRecurringTasksForDisplay(taskSource).map((task) => this.normaliseTaskForSummary(task)).filter(Boolean);
 
     const bedsWithNotifications = beds
       .filter(bed => bed.notifications.length > 0)
@@ -546,7 +562,7 @@ export class NotificationManager {
       }).join('')
       : '';
 
-    const taskSummaryMarkup = this.renderTaskSummary(tasks, { fontSizeLevel: level });
+    const taskSummaryMarkup = this.renderTaskSummary(summaryTasks, { fontSizeLevel: level });
 
     if (!hasBedNotifications && !taskSummaryMarkup) {
       notificationContainer.innerHTML = `
