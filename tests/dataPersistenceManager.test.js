@@ -191,6 +191,26 @@ describe('DataPersistenceManager with Supabase', () => {
     });
   });
 
+  it('saugodamas užimtumą nustato būseną pagal pacientą, jei ji nepateikta', async () => {
+    await manager.saveOccupancyData({
+      bedId: 'IT1',
+      patientCode: 'PX1',
+      notes: 'Pacientas įvestas ranka',
+      timestamp: '2024-01-01T11:30:00.000Z',
+    });
+
+    expect(supabaseMock.__mocks.boardUpsert).toHaveBeenCalledTimes(1);
+    const [records] = supabaseMock.__mocks.boardUpsert.mock.calls[0];
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      vieta: 'IT1',
+      pacientas: 'PX1',
+      busena: 'Užimta',
+      komentaras: 'Pacientas įvestas ranka',
+      updated_at: '2024-01-01T11:30:00.000Z',
+    });
+  });
+
   it('grąžina suvienodintus įrašus iš Supabase', async () => {
     const formResponses = await manager.loadFormResponses();
     const occupancy = await manager.loadOccupancyData();
@@ -229,6 +249,70 @@ describe('DataPersistenceManager with Supabase', () => {
     ]);
   });
 
+  it('nustato užimtumą pagal pacientą, kai lentelėje nėra būsenos', async () => {
+    supabaseMock.__mocks.occupancySelectOrder.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'occupancy-2',
+          vieta: 'IT2',
+          busena: null,
+          pacientas: 'P999',
+          komentaras: null,
+          slaugytojas: null,
+          padejejas: null,
+          gydytojas: null,
+          kat: null,
+          updated_at: '2024-01-01T12:00:00.000Z',
+        },
+        {
+          id: 'occupancy-3',
+          vieta: 'IT3',
+          busena: '',
+          pacientas: '',
+          komentaras: 'Be paciento',
+          slaugytojas: 'nurse2@example.com',
+          padejejas: null,
+          gydytojas: null,
+          kat: null,
+          updated_at: '2024-01-01T13:00:00.000Z',
+        },
+      ],
+      error: null,
+    });
+
+    const occupancy = await manager.loadOccupancyData();
+
+    expect(occupancy).toEqual([
+      {
+        id: 'occupancy-2',
+        timestamp: '2024-01-01T12:00:00.000Z',
+        bedId: 'IT2',
+        status: 'occupied',
+        patientCode: 'P999',
+        expectedUntil: null,
+        notes: null,
+        createdBy: null,
+        metadata: {
+          source: 'ed_board',
+        },
+      },
+      {
+        id: 'occupancy-3',
+        timestamp: '2024-01-01T13:00:00.000Z',
+        bedId: 'IT3',
+        status: 'free',
+        patientCode: '',
+        expectedUntil: null,
+        notes: 'Be paciento',
+        createdBy: 'nurse2@example.com',
+        metadata: {
+          source: 'ed_board',
+          nurse: 'nurse2@example.com',
+        },
+      },
+    ]);
+  });
+
   it('nuskaito suvestinius duomenis iš Supabase', async () => {
     const aggregated = await manager.loadAggregatedBedState();
 
@@ -257,6 +341,55 @@ describe('DataPersistenceManager with Supabase', () => {
       },
     ]);
     expect(manager.lastSyncCache).toBe('2024-01-01T10:00:00.000Z');
+  });
+
+  it('agreguotoje suvestinėje būseną nustato pagal pacientą, jei busena tuščia', async () => {
+    supabaseMock.__mocks.aggregatedSelect.mockResolvedValueOnce({
+      data: [
+        {
+          bed_id: 'bed-uuid-1',
+          label: 'IT1',
+          status: null,
+          priority: null,
+          status_notes: null,
+          status_reported_by: null,
+          status_metadata: {},
+          status_created_at: null,
+          occupancy_state: null,
+          patient_code: 'P555',
+          expected_until: null,
+          occupancy_notes: null,
+          occupancy_created_by: null,
+          occupancy_metadata: null,
+          occupancy_created_at: '2024-01-01T14:00:00.000Z',
+        },
+      ],
+      error: null,
+    });
+
+    const aggregated = await manager.loadAggregatedBedState();
+
+    expect(aggregated).toEqual([
+      {
+        bedId: 'IT1',
+        bedUuid: 'bed-uuid-1',
+        status: null,
+        statusNotes: null,
+        priority: 0,
+        statusReportedBy: null,
+        statusCreatedAt: null,
+        statusMetadata: {},
+        occupancyState: 'occupied',
+        patientCode: 'P555',
+        expectedUntil: null,
+        occupancyNotes: null,
+        occupancyCreatedBy: null,
+        occupancyCreatedAt: '2024-01-01T14:00:00.000Z',
+        occupancyMetadata: {
+          source: 'ed_board',
+        },
+      },
+    ]);
   });
 
   it('prisitaiko prie senesnės aggregated_bed_state schemos be status_reported_by', async () => {

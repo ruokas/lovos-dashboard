@@ -52,6 +52,14 @@ function normalizeString(value) {
     .replace(/\p{Diacritic}/gu, '');
 }
 
+function hasText(value) {
+  return normalizeString(value) !== '';
+}
+
+function deriveOccupancyStatusFromPatient(patientValue) {
+  return hasText(patientValue) ? 'occupied' : 'free';
+}
+
 function normalizeBoardStatus(value) {
   const normalized = normalizeString(value);
   if (!normalized) {
@@ -138,7 +146,11 @@ function buildOccupancyMetadata(record) {
     }
   });
 
-  const rawStatus = record?.busena ?? record?.occupancy_state ?? null;
+  const rawStatus = hasText(record?.busena)
+    ? record.busena
+    : hasText(record?.occupancy_state)
+      ? record.occupancy_state
+      : null;
   if (rawStatus) {
     entries.push(['rawStatus', rawStatus]);
   }
@@ -219,8 +231,15 @@ export class DataPersistenceManager {
     const timestamp = normalizeIsoTimestamp(rawTimestamp) ?? new Date().toISOString();
 
     const bedLabel = record.vieta ?? record.label ?? this.#resolveBedLabel(record.bed_id) ?? null;
-    const status = record.busena ?? record.occupancy_state ?? null;
-    const normalizedStatus = normalizeBoardStatus(status);
+    const patientCode = record.pacientas ?? record.patient_code ?? null;
+    const primaryStatus = hasText(record.busena)
+      ? record.busena
+      : hasText(record.occupancy_state)
+        ? record.occupancy_state
+        : null;
+    const normalizedStatus = normalizeBoardStatus(primaryStatus);
+    const derivedStatus = deriveOccupancyStatusFromPatient(patientCode);
+    const finalStatus = normalizedStatus ?? primaryStatus ?? derivedStatus ?? null;
 
     const metadata = {
       ...(record.metadata ?? {}),
@@ -233,8 +252,8 @@ export class DataPersistenceManager {
         ?? `${bedLabel ?? record.vieta ?? 'unknown'}-${timestamp}`,
       timestamp,
       bedId: bedLabel ?? record.vieta ?? 'Nežinoma lova',
-      status: normalizedStatus ?? status ?? null,
-      patientCode: record.pacientas ?? record.patient_code ?? null,
+      status: finalStatus,
+      patientCode,
       expectedUntil: record.expected_until ?? null,
       notes: record.komentaras ?? record.notes ?? null,
       createdBy:
@@ -257,11 +276,15 @@ export class DataPersistenceManager {
 
     const metadata = occupancyData.metadata ?? {};
     const timestamp = occupancyData.timestamp ?? new Date().toISOString();
+    const patientCode = occupancyData.patientCode ?? null;
+    const derivedStatus = deriveOccupancyStatusFromPatient(patientCode);
+    const status = occupancyData.status ?? derivedStatus ?? null;
+    const denormalizedStatus = status ? denormalizeBoardStatus(status) ?? status : null;
 
     const payload = {
       vieta: occupancyData.bedId,
-      busena: denormalizeBoardStatus(occupancyData.status) ?? occupancyData.status ?? null,
-      pacientas: occupancyData.patientCode ?? null,
+      busena: denormalizedStatus,
+      pacientas: patientCode,
       komentaras: occupancyData.notes ?? null,
       slaugytojas:
         occupancyData.createdBy
@@ -531,15 +554,23 @@ export class DataPersistenceManager {
 
         const statusCreatedAt = normalizeIsoTimestamp(row.status_created_at);
         const occupancyCreatedAt = normalizeIsoTimestamp(row.occupancy_created_at);
-        const normalizedOccupancy = normalizeBoardStatus(row.occupancy_state);
+        const hasBoardInfo = Boolean(
+          occupancyCreatedAt
+          || hasText(row.patient_code)
+          || hasText(row.occupancy_notes)
+          || (row.occupancy_metadata && Object.keys(row.occupancy_metadata).length > 0),
+        );
+        const rawOccupancy = hasText(row.occupancy_state) ? row.occupancy_state : null;
+        const normalizedOccupancy = normalizeBoardStatus(rawOccupancy);
+        const derivedOccupancy = hasBoardInfo ? deriveOccupancyStatusFromPatient(row.patient_code) : null;
         const occupancyMetadata = {
           ...(row.occupancy_metadata ?? {}),
         };
         if (!occupancyMetadata.source) {
           occupancyMetadata.source = 'ed_board';
         }
-        if (row.occupancy_state && !occupancyMetadata.rawStatus) {
-          occupancyMetadata.rawStatus = row.occupancy_state;
+        if (rawOccupancy && !occupancyMetadata.rawStatus) {
+          occupancyMetadata.rawStatus = rawOccupancy;
         }
 
         return {
@@ -551,7 +582,7 @@ export class DataPersistenceManager {
           statusReportedBy: row.status_reported_by ?? null,
           statusCreatedAt,
           statusMetadata: row.status_metadata ?? {},
-          occupancyState: normalizedOccupancy ?? row.occupancy_state ?? null,
+          occupancyState: normalizedOccupancy ?? rawOccupancy ?? derivedOccupancy ?? null,
           patientCode: row.patient_code ?? null,
           expectedUntil: row.expected_until ?? null,
           occupancyNotes: row.occupancy_notes ?? null,
