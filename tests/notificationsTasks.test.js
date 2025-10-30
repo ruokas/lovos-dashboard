@@ -64,7 +64,7 @@ describe('NotificationManager su bendromis užduotimis', () => {
       channel: 'laboratory',
       channelLabel: 'Laboratorija',
       responsible: 'Kurjeris',
-      metadata: { patient: { surname: 'Petraitis', chartNumber: 'A123' } },
+      metadata: { patient: { reference: 'Petraitis / A123' } },
     };
 
     notificationManager.updateNotifications([], [criticalTask]);

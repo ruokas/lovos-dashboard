@@ -1615,10 +1615,22 @@ export class BedManagementApp {
       const recurrenceText = task.recurrenceLabel || t(texts.tasks.recurrence?.none);
       const responsible = task.responsible?.trim() || '';
       const zoneLabel = task.zoneLabel || task.channelLabel || t(texts.tasks.labels.zoneFallback);
-      const patientSurname = task.metadata?.patient?.surname?.trim() ?? '';
-      const patientChart = task.metadata?.patient?.chartNumber?.trim() ?? '';
-      const patientDisplaySurname = patientSurname || t(texts.tasks.labels.patientUnknown);
-      const patientDisplayChart = patientChart || t(texts.tasks.labels.chartUnknown);
+      const patientMeta = task.metadata?.patient ?? {};
+      const patientReference = [
+        typeof patientMeta.reference === 'string' ? patientMeta.reference.trim() : '',
+        typeof patientMeta.surname === 'string' ? patientMeta.surname.trim() : '',
+        typeof patientMeta.chartNumber === 'string' ? patientMeta.chartNumber.trim() : '',
+      ]
+        .filter(Boolean)
+        .reduce((acc, value) => {
+          if (acc.includes(value)) {
+            return acc;
+          }
+          return [...acc, value];
+        }, [])
+        .join(' / ');
+      const patientDisplayReference =
+        patientReference || t(texts.tasks.labels.patientReferenceUnknown);
       const isOverdue = this.isTaskOverdue(task);
       const deadlineClass = isOverdue
         ? 'text-red-600 dark:text-red-300'
@@ -1641,11 +1653,8 @@ export class BedManagementApp {
                 ${overdueBadge}
               </div>
               <div class="text-xs text-slate-600 dark:text-slate-300">
-                <span class="font-medium text-slate-800 dark:text-slate-100">${escapeHtml(t(texts.tasks.labels.patient))}:</span>
-                <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(patientDisplaySurname)}</span>
-                <span class="mx-1 text-slate-400">•</span>
-                <span class="uppercase tracking-wide">${escapeHtml(t(texts.tasks.labels.chart))}:</span>
-                <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(patientDisplayChart)}</span>
+                <span class="font-medium text-slate-800 dark:text-slate-100">${escapeHtml(t(texts.tasks.labels.patientReference))}:</span>
+                <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(patientDisplayReference)}</span>
               </div>
               <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">${escapeHtml(task.description)}</p>
             </div>

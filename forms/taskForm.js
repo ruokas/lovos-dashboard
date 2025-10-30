@@ -16,6 +16,21 @@ const RECURRENCE_DEFAULT_MINUTES = {
   weekly: 10080,
 };
 
+function formatDateTimeLocal(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const pad = (value) => String(value).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 function escapeHtml(value) {
   if (value === null || value === undefined) {
     return '';
@@ -136,37 +151,19 @@ export class TaskForm {
           <div id="taskFormFeedback" class="hidden text-sm"></div>
 
           <form id="taskForm" class="space-y-4">
-            <div class="grid gap-4 md:grid-cols-2">
-              <div>
-                <label for="taskPatientSurname" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  ${escapeHtml(t(texts.forms.task?.patientSurnameLabel))}
-                </label>
-                <input
-                  type="text"
-                  id="taskPatientSurname"
-                  name="taskPatientSurname"
-                  required
-                  autocomplete="family-name"
-                  placeholder="${escapeHtml(t(texts.forms.task?.patientSurnamePlaceholder))}"
-                  class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-              </div>
-
-              <div>
-                <label for="taskPatientChart" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  ${escapeHtml(t(texts.forms.task?.patientChartLabel))}
-                </label>
-                <input
-                  type="text"
-                  id="taskPatientChart"
-                  name="taskPatientChart"
-                  required
-                  inputmode="text"
-                  autocomplete="off"
-                  placeholder="${escapeHtml(t(texts.forms.task?.patientChartPlaceholder))}"
-                  class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-              </div>
+            <div>
+              <label for="taskPatientReference" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                ${escapeHtml(t(texts.forms.task?.patientReferenceLabel))}
+              </label>
+              <input
+                type="text"
+                id="taskPatientReference"
+                name="taskPatientReference"
+                required
+                autocomplete="off"
+                placeholder="${escapeHtml(t(texts.forms.task?.patientReferencePlaceholder))}"
+                class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
             </div>
 
             <div class="grid gap-4 md:grid-cols-2">
@@ -327,6 +324,11 @@ export class TaskForm {
       applyRecurrenceState();
     }
 
+    const deadlineField = this.modal.querySelector('#taskDeadline');
+    if (deadlineField && !deadlineField.value) {
+      deadlineField.value = formatDateTimeLocal(new Date());
+    }
+
     this.modal.addEventListener('click', (event) => {
       if (event.target === this.modal) {
         this.hide();
@@ -342,11 +344,10 @@ export class TaskForm {
 
     const formData = new FormData(form);
     const description = formData.get('taskDescription')?.trim();
-    const surname = formData.get('taskPatientSurname')?.trim();
-    const chartNumber = formData.get('taskPatientChart')?.trim();
+    const patientReference = formData.get('taskPatientReference')?.trim();
     const zone = formData.get('taskZone');
 
-    if (!description || !surname || !chartNumber || !zone) {
+    if (!description || !patientReference || !zone) {
       this.setFeedback(t(texts.forms.validationError), 'error');
       return;
     }
@@ -385,8 +386,7 @@ export class TaskForm {
     const zoneValue = formData.get('taskZone');
     const deadlineValue = formData.get('taskDeadline');
     const frequencyValue = formData.get('taskFrequencyMinutes');
-    const surnameValue = formData.get('taskPatientSurname')?.trim() ?? '';
-    const chartValue = formData.get('taskPatientChart')?.trim() ?? '';
+    const patientReferenceValue = formData.get('taskPatientReference')?.trim() ?? '';
 
     let normalizedDeadline = null;
     if (deadlineValue) {
@@ -403,8 +403,7 @@ export class TaskForm {
 
     const metadata = {
       patient: {
-        surname: surnameValue,
-        chartNumber: chartValue,
+        reference: patientReferenceValue,
       },
     };
     if (Number.isFinite(frequencyMinutes) && frequencyMinutes > 0 && recurrenceValue !== 'none') {

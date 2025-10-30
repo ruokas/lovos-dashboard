@@ -206,7 +206,7 @@ describe('ReportingService', () => {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           responsible: 'Kurjeris',
-          metadata: { patient: { surname: 'Petraitis', chartNumber: 'A123' } },
+          metadata: { patient: { reference: 'Petraitis / A123' } },
         },
       ]),
     };

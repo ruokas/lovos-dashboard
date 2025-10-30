@@ -428,10 +428,15 @@ export class NotificationManager {
         if (task.zone) {
           metaParts.push(`<span class="notification-task__zone ${applyFontSizeClasses('text-[11px] font-medium uppercase tracking-wide', level)}">${escapeHtml(task.zone)}</span>`);
         }
-        if (task.metadata?.patient?.surname || task.metadata?.patient?.chartNumber) {
-          const patientSurname = task.metadata?.patient?.surname || t(texts.tasks.labels.patientUnknown);
-          const patientChart = task.metadata?.patient?.chartNumber || t(texts.tasks.labels.chartUnknown);
-          metaParts.push(`<span>${escapeHtml(patientSurname)} (${escapeHtml(patientChart)})</span>`);
+        if (task.metadata?.patient) {
+          const patientMeta = task.metadata.patient;
+          const reference = [patientMeta.reference, patientMeta.surname, patientMeta.chartNumber]
+            .filter((value) => typeof value === 'string' && value.trim())
+            .map((value) => value.trim())
+            .filter((value, index, arr) => arr.indexOf(value) === index)
+            .join(' / ');
+          const displayReference = reference || t(texts.tasks.labels.patientReferenceUnknown);
+          metaParts.push(`<span>${escapeHtml(displayReference)}</span>`);
         }
         if (task.recurrenceLabel) {
           metaParts.push(`<span class="notification-task__recurrence ${applyFontSizeClasses('text-[11px] font-medium text-slate-600 dark:text-slate-300', level)}">${escapeHtml(task.recurrenceLabel)}</span>`);

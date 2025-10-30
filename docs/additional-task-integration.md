@@ -10,7 +10,7 @@
 
 ## 2. UI formos ir srautai
 - [ ] **Sukurti naują modulį `forms/taskForm.js`** pagal `BedStatusForm` pavyzdį.
-  - Reikalingi laukai: paciento pavardė, kortelės numeris, aprašymas, zona (select), terminas ir pasirenkamas priminimo metas.
+  - Reikalingi laukai: paciento pavardė arba kortelės numeris (vienas laukas), aprašymas, zona (select), terminas ir pasirenkamas priminimo metas.
   - Valdikliai: mygtukai „Išsaugoti“, „Pridėti priminimą“, „Atšaukti“.
   - Pridėti klaviatūros šauktinį (pvz., `Ctrl+Shift+L` – laboratorijai).
 - [ ] **Greito pridėjimo mygtukas** pagrindinėje įrankių juostoje (`index.html` → naujas `<button id="addTaskBtn">` su LT tekstu).

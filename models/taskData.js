@@ -339,7 +339,23 @@ function normaliseMetadata(value) {
     return {};
   }
   try {
-    return JSON.parse(JSON.stringify(value));
+    const clone = JSON.parse(JSON.stringify(value));
+    if (clone.patient && typeof clone.patient === 'object') {
+      const patient = clone.patient;
+      const referenceCandidate =
+        typeof patient.reference === 'string' && patient.reference.trim()
+          ? patient.reference.trim()
+          : [patient.surname, patient.chartNumber]
+              .filter((field) => typeof field === 'string' && field.trim())
+              .map((field) => field.trim())
+              .filter((field, index, arr) => arr.indexOf(field) === index)
+              .join(' / ');
+
+      if (referenceCandidate && !patient.reference) {
+        patient.reference = referenceCandidate;
+      }
+    }
+    return clone;
   } catch (error) {
     console.warn('Nepavyko normalizuoti užduoties metadata reikšmės:', error);
     return {};
@@ -432,13 +448,17 @@ export class TaskManager {
         return true;
       }
 
+      const patientMeta = task.metadata?.patient ?? {};
+      const patientReference = [patientMeta.reference, patientMeta.surname, patientMeta.chartNumber]
+        .filter((value) => typeof value === 'string' && value.trim())
+        .join(' ');
+
       const haystack = [
         task.description,
         task.responsible,
         zoneValue,
         task.zoneLabel ?? task.channelLabel,
-        task.metadata?.patient?.surname,
-        task.metadata?.patient?.chartNumber,
+        patientReference,
         task.dueAt,
         task.seriesId,
       ]

@@ -53,13 +53,13 @@ Palaipsniui migruojame į Supabase, todėl visas front-end veikia kaip ES moduli
 
 ### Nauja užduotis skyriui
 1. Spustelėkite "Nauja užduotis" (arba paspauskite **Ctrl+Shift+T**)
-2. Įveskite paciento pavardę ir kortelės numerį
+2. Įveskite paciento pavardę arba kortelės numerį
 3. Aprašykite veiksmą, pasirinkite zoną (pvz., laboratorija, ambulatorija) ir, jei reikia, terminą
 4. Nurodykite pasikartojimo intervalą ("Nepasikartojanti" palikite, jei užduotis vienkartinė)
 5. Spustelėkite "Sukurti" – užduotis iškart atsiras sąraše su būsenos ženkleliu
 
 ### Užduočių paieška ir filtravimas
-- Paieškos laukelyje įveskite raktažodį (zona, paciento pavardė ar kortelės Nr.)
+- Paieškos laukelyje įveskite raktažodį (zona, paciento duomenys ar aprašymas)
 - Filtras „Būsena“ leidžia atsijoti planuojamas, vykdomas, užbaigtas ar sustabdytas užduotis
 - Filtras „Zona“ leidžia fokusuotis tik į laboratoriją, ambulatoriją ar stacionarą
 - Tuščias sąrašas rodo pranešimą, kad pagal pasirinktus filtrus nėra įrašų
