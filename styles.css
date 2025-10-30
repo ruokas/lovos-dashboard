@@ -20,7 +20,10 @@
   --element-gap: var(--space-1);
   --button-padding: var(--space-1) var(--space-2);
   --input-padding: var(--space-1) var(--space-2);
-  
+
+  /* Typography scaling */
+  --app-font-scale: 1;
+
   /* Border Radius */
   --radius-sm: 0.375rem;  /* 6px */
   --radius-md: 0.5rem;    /* 8px */
@@ -133,6 +136,32 @@
   --status-occupied-bg: #7c2d12;
   --status-free-bg: #1f2937;
   --primary-blue-light: #374151;
+}
+
+:root {
+  font-size: 16px;
+}
+
+#alerts {
+  font-size: calc(0.875rem * var(--app-font-scale, 1));
+}
+
+#notificationSummary {
+  font-size: calc(1rem * var(--app-font-scale, 1));
+}
+
+#kpis {
+  font-size: calc(1rem * var(--app-font-scale, 1));
+}
+
+.text-\[11px\] {
+  font-size: 11px;
+}
+
+#notificationSummary .text-\[11px\],
+#kpis .text-\[11px\],
+#alerts .text-\[11px\] {
+  font-size: calc(11px * var(--app-font-scale, 1));
 }
 
 /* Custom scrollbar styles */
@@ -262,18 +291,22 @@
   pointer-events: none;
 }
 
-.kpi-card__label {
+#kpis .kpi-card__label {
   margin: 0;
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--app-font-scale, 1));
   letter-spacing: 0.08em;
   text-transform: uppercase;
   font-weight: 700;
   color: #1e293b;
 }
 
-.kpi-card__value {
+#kpis .kpi-card__value {
   margin: 0;
-  font-size: clamp(1.9rem, 3vw + 0.25rem, 2.5rem);
+  font-size: clamp(
+    calc(1.9rem * var(--app-font-scale, 1)),
+    calc((3vw + 0.25rem) * var(--app-font-scale, 1)),
+    calc(2.5rem * var(--app-font-scale, 1))
+  );
   font-weight: 700;
   line-height: 1;
   color: #0f172a;
@@ -288,8 +321,8 @@
   box-shadow: none;
 }
 
-.dark .kpi-card__label,
-.dark .kpi-card__value {
+.dark #kpis .kpi-card__label,
+.dark #kpis .kpi-card__value {
   color: #f8fafc;
 }
 
@@ -373,19 +406,19 @@
   flex: 0 0 auto;
 }
 
-.notification-row__bed-label {
+#notificationSummary .notification-row__bed-label {
   color: #64748b;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--app-font-scale, 1));
 }
 
-.notification-row__bed-id {
+#notificationSummary .notification-row__bed-id {
   color: #0f172a;
-  font-size: 1.75rem;
+  font-size: calc(1.75rem * var(--app-font-scale, 1));
 }
 
-.notification-row__occupancy {
+#notificationSummary .notification-row__occupancy {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
@@ -394,7 +427,7 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
   flex: 0 0 auto;
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--app-font-scale, 1));
 }
 
 .notification-row__occupancy--busy {
@@ -438,19 +471,19 @@
   gap: 0.25rem;
 }
 
-.notification-row__issue-title {
+#notificationSummary .notification-row__issue-title {
   color: #0f172a;
   margin: 0;
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
   flex-wrap: wrap;
-  font-size: 1rem;
+  font-size: calc(1rem * var(--app-font-scale, 1));
 }
 
-.notification-row__issue-meta {
+#notificationSummary .notification-row__issue-meta {
   color: #475569;
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--app-font-scale, 1));
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
@@ -465,10 +498,10 @@
   color: #94a3b8;
 }
 
-.notification-row__issue-body {
+#notificationSummary .notification-row__issue-body {
   color: #475569;
   margin: 0;
-  font-size: 0.95rem;
+  font-size: calc(0.95rem * var(--app-font-scale, 1));
 }
 
 .notification-row__issue[data-variant="critical"] .notification-row__dot {
@@ -495,32 +528,32 @@
   gap: var(--space-3);
 }
 
-.dark .notification-row {
+.dark #notificationSummary .notification-row {
   background: rgba(15, 23, 42, 0.75);
   border-color: rgba(148, 163, 184, 0.25);
 }
 
-.dark .notification-row__bed-label,
-.dark .notification-row__issue-meta,
-.dark .notification-row__issue-body {
+.dark #notificationSummary .notification-row__bed-label,
+.dark #notificationSummary .notification-row__issue-meta,
+.dark #notificationSummary .notification-row__issue-body {
   color: #cbd5f5;
 }
 
-.dark .notification-row__meta-separator {
+.dark #notificationSummary .notification-row__meta-separator {
   color: #94a3b8;
 }
 
-.dark .notification-row__bed-id,
-.dark .notification-row__issue-title {
+.dark #notificationSummary .notification-row__bed-id,
+.dark #notificationSummary .notification-row__issue-title {
   color: #f8fafc;
 }
 
-.dark .notification-row__occupancy--busy {
+.dark #notificationSummary .notification-row__occupancy--busy {
   background: rgba(220, 38, 38, 0.2);
   color: #fecaca;
 }
 
-.dark .notification-row__occupancy--free {
+.dark #notificationSummary .notification-row__occupancy--free {
   background: rgba(34, 197, 94, 0.2);
   color: #bbf7d0;
 }

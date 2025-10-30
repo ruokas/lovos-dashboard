@@ -13,7 +13,7 @@ import { ReportingService } from './reports/reportingService.js';
 import { SupabaseAuthManager } from './auth/supabaseAuth.js';
 import { t, texts } from './texts.js';
 import { loadData as loadCsvData, rowsToOccupancyEvents } from './data.js';
-import { clampFontSizeLevel, readStoredFontSizeLevel, storeFontSizeLevel, applyFontSizeClasses } from './utils/fontSize.js';
+import { clampFontSizeLevel, readStoredFontSizeLevel, storeFontSizeLevel, applyFontSizeLevelToDocument } from './utils/fontSize.js';
 
 const HTML_ESCAPE_MAP = {
   '&': '&amp;',
@@ -38,15 +38,17 @@ export class BedManagementApp {
   constructor() {
     this.bedDataManager = new BedDataManager();
     this.settingsManager = new SettingsManager();
+    this.document = typeof document !== 'undefined' ? document : undefined;
     this.fontSizeLevel = readStoredFontSizeLevel();
+    applyFontSizeLevelToDocument(this.fontSizeLevel, this.document);
     this.viewMode = this.readViewMode();
     this.isGridView = this.viewMode === 'grid';
     this.isBedListVisible = this.readBedListVisibility();
     this.currentSearchTerm = '';
     this.searchDebounceTimer = null;
-    this.persistenceManager = new DataPersistenceManager({ document: typeof document !== 'undefined' ? document : undefined });
+    this.persistenceManager = new DataPersistenceManager({ document: this.document });
     this.notificationManager = new NotificationManager(this.settingsManager, { fontSizeLevel: this.fontSizeLevel });
-    const sharedDocument = typeof document !== 'undefined' ? document : undefined;
+    const sharedDocument = this.document;
     this.reportingService = new ReportingService({
       client: this.persistenceManager.client,
       bedDataManager: this.bedDataManager,
@@ -690,13 +692,10 @@ export class BedManagementApp {
       return;
     }
     this.fontSizeLevel = storeFontSizeLevel(nextLevel);
+    applyFontSizeLevelToDocument(this.fontSizeLevel, this.document);
     this.notificationManager.setFontSizeLevel?.(this.fontSizeLevel);
     this.renderNotificationSummary();
     this.renderBedGrid();
-  }
-
-  applyFontSizeClass(classNames) {
-    return applyFontSizeClasses(classNames, this.fontSizeLevel);
   }
 
   getStatusBadgeClass(status) {
@@ -1019,7 +1018,7 @@ export class BedManagementApp {
     if (filteredBedIds.length === 0) {
       gridContainer.className = `${baseClasses.join(' ')} flex items-center justify-center`;
       gridContainer.innerHTML = `
-        <div class="${this.applyFontSizeClass('text-sm text-slate-500 dark:text-slate-300')}">
+        <div class="text-sm text-slate-500 dark:text-slate-300">
           ${escapeHtml(t(texts.ui.noBedsFound))}
         </div>
       `;
@@ -1036,15 +1035,15 @@ export class BedManagementApp {
         const occupancyText = bed.occupancyStatus === 'occupied' ? '🔴 Užimta' : '🟢 Laisva';
         const notificationCount = bed.notifications.length;
         const notificationBadge = notificationCount > 0
-          ? `<span class="${this.applyFontSizeClass('text-[11px] font-semibold text-red-600 dark:text-red-300')}">⚠️ ${notificationCount}</span>`
+          ? `<span class="text-[11px] font-semibold text-red-600 dark:text-red-300">⚠️ ${notificationCount}</span>`
           : '';
 
         return `
           <div class="rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-3 flex flex-col items-center gap-2 hover:border-blue-400 hover:shadow-sm transition cursor-pointer" data-bed-id="${escapeHtml(bedId)}">
-            <div class="${this.applyFontSizeClass('text-sm font-semibold text-slate-900 dark:text-slate-100')}">${escapeHtml(`${t(texts.ui.bedLabel)} ${bedId}`)}</div>
+            <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">${escapeHtml(`${t(texts.ui.bedLabel)} ${bedId}`)}</div>
             <div class="flex flex-wrap items-center justify-center gap-2">
-              <span class="px-2 py-0.5 rounded-md ${this.applyFontSizeClass('text-xs font-medium')} ${statusBadge}">${escapeHtml(bed.currentStatus)}</span>
-              <span class="px-2 py-0.5 rounded-md ${this.applyFontSizeClass('text-xs font-medium')} ${occupancyBadge}">${escapeHtml(occupancyText)}</span>
+              <span class="px-2 py-0.5 rounded-md text-xs font-medium ${statusBadge}">${escapeHtml(bed.currentStatus)}</span>
+              <span class="px-2 py-0.5 rounded-md text-xs font-medium ${occupancyBadge}">${escapeHtml(occupancyText)}</span>
             </div>
             ${notificationBadge}
           </div>
@@ -1063,20 +1062,20 @@ export class BedManagementApp {
           : t(texts.ui.noData);
         const lastCheckedBy = bed.lastCheckedBy ? bed.lastCheckedBy : t(texts.ui.unknownUser);
         const notificationBadge = bed.notifications.length
-          ? `<span class="${this.applyFontSizeClass('text-[11px] font-semibold text-red-600 dark:text-red-300')}">⚠️ ${bed.notifications.length}</span>`
+          ? `<span class="text-[11px] font-semibold text-red-600 dark:text-red-300">⚠️ ${bed.notifications.length}</span>`
           : '';
 
         return `
           <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900/40 p-3 hover:border-blue-400 transition cursor-pointer" data-bed-id="${escapeHtml(bedId)}">
             <div class="flex flex-col sm:flex-row sm:items-center sm:gap-3">
-              <span class="rounded-md px-2 py-0.5 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 ${this.applyFontSizeClass('text-xs font-semibold')}">${escapeHtml(`${t(texts.ui.bedLabel)} ${bedId}`)}</span>
+              <span class="rounded-md px-2 py-0.5 bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-xs font-semibold">${escapeHtml(`${t(texts.ui.bedLabel)} ${bedId}`)}</span>
               <div class="mt-1 sm:mt-0 flex flex-wrap items-center gap-2">
-                <span class="px-2 py-0.5 rounded-md ${this.applyFontSizeClass('text-xs font-medium')} ${statusBadge}">${escapeHtml(bed.currentStatus)}</span>
-                <span class="px-2 py-0.5 rounded-md ${this.applyFontSizeClass('text-xs font-medium')} ${occupancyBadge}">${escapeHtml(occupancyText)}</span>
+                <span class="px-2 py-0.5 rounded-md text-xs font-medium ${statusBadge}">${escapeHtml(bed.currentStatus)}</span>
+                <span class="px-2 py-0.5 rounded-md text-xs font-medium ${occupancyBadge}">${escapeHtml(occupancyText)}</span>
                 ${notificationBadge}
               </div>
             </div>
-            <div class="flex flex-col sm:items-end ${this.applyFontSizeClass('text-[11px] text-slate-500 dark:text-slate-300')}">
+            <div class="flex flex-col sm:items-end text-[11px] text-slate-500 dark:text-slate-300">
               <span>${escapeHtml(t(texts.ui.lastChecked))}: ${escapeHtml(lastChecked)}</span>
               <span>${escapeHtml(t(texts.ui.checkedBy))}: ${escapeHtml(lastCheckedBy)}</span>
             </div>
