@@ -16,7 +16,7 @@ import { t, texts } from './texts.js';
 import { TaskManager, TASK_STATUSES, TASK_CHANNEL_OPTIONS, TASK_PRIORITIES } from './models/taskData.js';
 import { loadData as loadCsvData, rowsToOccupancyEvents } from './data.js';
 import { clampFontSizeLevel, readStoredFontSizeLevel, storeFontSizeLevel, applyFontSizeLevelToDocument } from './utils/fontSize.js';
-import { materializeRecurringTasks } from './utils/taskScheduler.js';
+import { materializeRecurringTasks, DEFAULT_RECURRING_TEMPLATES } from './utils/taskScheduler.js';
 
 const HTML_ESCAPE_MAP = {
   '&': '&amp;',
@@ -125,7 +125,7 @@ export class BedManagementApp {
       await this.loadSavedData();
 
       // Sugeneruokite suplanuotas laboratorijos užduotis prieš paleidžiant signalus
-      materializeRecurringTasks({ taskManager: this.taskManager });
+      this.refreshRecurringTasks();
 
       // Mark current notifications as jau matytos, kad realaus laiko įvykiai neskambėtų du kartus
       this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
@@ -357,7 +357,7 @@ export class BedManagementApp {
         return;
       }
 
-      materializeRecurringTasks({ taskManager: this.taskManager });
+      this.refreshRecurringTasks();
 
       this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
         fontSizeLevel: this.fontSizeLevel,
@@ -384,7 +384,7 @@ export class BedManagementApp {
       if ((eventType ?? '').toUpperCase() === 'DELETE') {
         if (taskId) {
           this.taskManager.removeTask(taskId);
-          materializeRecurringTasks({ taskManager: this.taskManager });
+          this.refreshRecurringTasks();
           this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
             fontSizeLevel: this.fontSizeLevel,
           });
@@ -414,7 +414,7 @@ export class BedManagementApp {
       };
 
       this.taskManager.upsertTask(taskPayload);
-      materializeRecurringTasks({ taskManager: this.taskManager });
+      this.refreshRecurringTasks();
 
       this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
         fontSizeLevel: this.fontSizeLevel,
@@ -478,7 +478,7 @@ export class BedManagementApp {
         this.taskManager.upsertTask({ id: taskId, ...record.task, ...updates });
       }
 
-      materializeRecurringTasks({ taskManager: this.taskManager });
+      this.refreshRecurringTasks();
 
       this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
         fontSizeLevel: this.fontSizeLevel,
@@ -556,6 +556,19 @@ export class BedManagementApp {
     } catch (error) {
       console.error('Failed to load saved data:', error);
     }
+  }
+
+  refreshRecurringTasks(options = {}) {
+    const templates = [
+      ...DEFAULT_RECURRING_TEMPLATES,
+      ...this.taskManager.getRecurringTemplates(),
+    ];
+
+    return materializeRecurringTasks({
+      taskManager: this.taskManager,
+      templates,
+      ...options,
+    });
   }
 
   async applyCsvOccupancyFallback() {
@@ -1089,15 +1102,29 @@ export class BedManagementApp {
   async handleTaskCreated(taskPayload) {
     try {
       const savedTask = this.taskManager.addTask(taskPayload);
-      materializeRecurringTasks({ taskManager: this.taskManager });
+
+      let logTarget = savedTask;
+      if (taskPayload.recurrence && taskPayload.recurrence !== 'none') {
+        const template = this.taskManager.registerRecurringTemplate(savedTask, {
+          frequencyMinutes: taskPayload.metadata?.recurringFrequencyMinutes,
+          startAt: savedTask.deadline ?? savedTask.dueAt ?? new Date().toISOString(),
+        });
+
+        if (template) {
+          this.taskManager.removeTask(savedTask.id);
+          logTarget = { ...savedTask, id: template.seriesId, seriesId: template.seriesId };
+        }
+      }
+
+      this.refreshRecurringTasks({ referenceDate: new Date() });
       this.renderTaskList();
       this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
         fontSizeLevel: this.fontSizeLevel,
       });
       void this.userInteractionLogger.logInteraction('task_created', {
-        taskId: savedTask.id,
-        channel: savedTask.channel,
-        status: savedTask.status,
+        taskId: logTarget.id,
+        channel: logTarget.channel,
+        status: logTarget.status,
       });
       return savedTask;
     } catch (error) {
@@ -1732,7 +1759,7 @@ export class BedManagementApp {
         await this.applyCsvOccupancyFallback();
       }
 
-      materializeRecurringTasks({ taskManager: this.taskManager });
+      this.refreshRecurringTasks();
 
       await this.render();
       this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
@@ -1768,7 +1795,7 @@ export class BedManagementApp {
         try {
           await this.persistenceManager.uploadData(file);
           await this.loadSavedData();
-          materializeRecurringTasks({ taskManager: this.taskManager });
+          this.refreshRecurringTasks();
           await this.render();
           alert('Duomenys sėkmingai importuoti');
         } catch (error) {

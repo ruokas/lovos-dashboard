@@ -131,6 +131,12 @@ export const texts = {
       descriptionLabel: { lt: 'Aprašymas', en: 'Description' },
       descriptionPlaceholder: { lt: 'Trumpai aprašykite, ką atlikti...', en: 'Describe what needs to be done…' },
       recurrenceLabel: { lt: 'Pasikartojimo intervalas', en: 'Recurrence' },
+      frequencyLabel: { lt: 'Dažnis (minutėmis)', en: 'Frequency (minutes)' },
+      frequencyPlaceholder: { lt: 'Pvz., 60', en: 'e.g. 60' },
+      frequencyHelp: {
+        lt: 'Naudojame terminą kaip pirmą atlikimo laiką. Jei paliksite tuščią, bus pritaikytas numatytasis dažnis pagal pasirinktą intervalą.',
+        en: 'The deadline becomes the first run time. Leave empty to use the default cadence for the selected recurrence.',
+      },
       ownerLabel: { lt: 'Atsakingas asmuo / komanda', en: 'Responsible person / team' },
       ownerPlaceholder: { lt: 'Pvz., M. Slaugytoja', en: 'e.g. Nurse M.' },
       deadlineLabel: { lt: 'Terminas', en: 'Deadline' },

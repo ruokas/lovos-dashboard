@@ -11,6 +11,12 @@ import {
 } from '../models/taskData.js';
 import { t, texts } from '../texts.js';
 
+const RECURRENCE_DEFAULT_MINUTES = {
+  perShift: 480,
+  daily: 1440,
+  weekly: 10080,
+};
+
 function escapeHtml(value) {
   if (value === null || value === undefined) {
     return '';
@@ -166,6 +172,25 @@ export class TaskForm {
               </div>
             </div>
 
+            <div id="recurringDetails" class="hidden rounded-md border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60 p-4 space-y-3">
+              <div>
+                <label for="taskFrequencyMinutes" class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+                  ${escapeHtml(t(texts.forms.task?.frequencyLabel))}
+                </label>
+                <input
+                  type="number"
+                  inputmode="numeric"
+                  min="5"
+                  step="5"
+                  id="taskFrequencyMinutes"
+                  name="taskFrequencyMinutes"
+                  class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="${escapeHtml(t(texts.forms.task?.frequencyPlaceholder))}"
+                >
+                <p class="text-xs text-slate-500 dark:text-slate-300 mt-1">${escapeHtml(t(texts.forms.task?.frequencyHelp))}</p>
+              </div>
+            </div>
+
             <div>
               <label for="taskDescription" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                 ${escapeHtml(t(texts.forms.task?.descriptionLabel))}
@@ -255,6 +280,7 @@ export class TaskForm {
     const form = this.modal.querySelector('#taskForm');
     const closeBtn = this.modal.querySelector('#closeTaskForm');
     const cancelBtn = this.modal.querySelector('#cancelTaskForm');
+    const recurrenceSelect = this.modal.querySelector('#taskRecurrence');
 
     if (closeBtn) {
       closeBtn.addEventListener('click', () => this.hide());
@@ -267,6 +293,38 @@ export class TaskForm {
         event.preventDefault();
         void this.handleSubmit(form);
       });
+    }
+
+    if (recurrenceSelect) {
+      const frequencyContainer = this.modal.querySelector('#recurringDetails');
+      const frequencyInput = this.modal.querySelector('#taskFrequencyMinutes');
+      const deadlineInput = this.modal.querySelector('#taskDeadline');
+
+      const applyRecurrenceState = () => {
+        const value = recurrenceSelect.value ?? 'none';
+        const isRecurring = value !== 'none';
+        if (frequencyContainer) {
+          frequencyContainer.classList.toggle('hidden', !isRecurring);
+        }
+        if (deadlineInput) {
+          deadlineInput.required = isRecurring;
+        }
+
+        if (isRecurring && frequencyInput) {
+          const current = Number.parseInt(frequencyInput.value, 10);
+          if (!Number.isFinite(current) || current <= 0) {
+            const suggested = RECURRENCE_DEFAULT_MINUTES[value] ?? RECURRENCE_DEFAULT_MINUTES.daily;
+            if (Number.isFinite(suggested)) {
+              frequencyInput.value = String(suggested);
+            }
+          }
+        } else if (!isRecurring && frequencyInput) {
+          frequencyInput.value = '';
+        }
+      };
+
+      recurrenceSelect.addEventListener('change', applyRecurrenceState);
+      applyRecurrenceState();
     }
 
     this.modal.addEventListener('click', (event) => {
@@ -328,6 +386,7 @@ export class TaskForm {
     const recurrenceValue = formData.get('taskRecurrence') || 'none';
     const channelValue = formData.get('taskChannel');
     const deadlineValue = formData.get('taskDeadline');
+    const frequencyValue = formData.get('taskFrequencyMinutes');
 
     let normalizedDeadline = null;
     if (deadlineValue) {
@@ -335,6 +394,16 @@ export class TaskForm {
       if (!Number.isNaN(parsed.getTime())) {
         normalizedDeadline = parsed.toISOString();
       }
+    }
+
+    let frequencyMinutes = Number.parseInt(frequencyValue, 10);
+    if (!Number.isFinite(frequencyMinutes) || frequencyMinutes <= 0) {
+      frequencyMinutes = RECURRENCE_DEFAULT_MINUTES[recurrenceValue] ?? null;
+    }
+
+    const metadata = {};
+    if (Number.isFinite(frequencyMinutes) && frequencyMinutes > 0 && recurrenceValue !== 'none') {
+      metadata.recurringFrequencyMinutes = frequencyMinutes;
     }
 
     return {
@@ -348,6 +417,7 @@ export class TaskForm {
       channel: channelValue,
       channelLabel: resolveOptionLabel(TASK_CHANNEL_OPTIONS, channelValue, channelValue),
       status: TASK_STATUSES.PLANNED,
+      metadata,
     };
   }
 
