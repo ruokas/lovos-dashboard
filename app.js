@@ -860,7 +860,6 @@ export class BedManagementApp {
     try {
       const snapshot = await this.reportingService.fetchKpiSnapshot();
 
-      const totals = snapshot?.totals ?? {};
       const formatValue = (value) => {
         if (value === null || value === undefined) return '0';
         const numeric = Number(value);
@@ -870,6 +869,28 @@ export class BedManagementApp {
         const numeric = Number(value);
         return Number.isFinite(numeric) ? numeric : 0;
       };
+
+      let totals = { ...(snapshot?.totals ?? {}) };
+      let usedLocalOverlay = false;
+
+      if (typeof this.bedDataManager?.getStatistics === 'function') {
+        const localStats = this.bedDataManager.getStatistics();
+        const shouldOverlay = this.usingCsvOccupancy
+          || (toFiniteNumber(totals.totalBeds) === 0 && toFiniteNumber(localStats?.totalBeds) > 0)
+          || (toFiniteNumber(totals.occupiedBeds) === 0 && toFiniteNumber(localStats?.occupiedBeds) > 0);
+
+        if (shouldOverlay && localStats) {
+          totals = {
+            ...totals,
+            totalBeds: localStats.totalBeds ?? totals.totalBeds ?? 0,
+            occupiedBeds: localStats.occupiedBeds ?? totals.occupiedBeds ?? 0,
+            freeBeds: localStats.freeBeds ?? totals.freeBeds ?? 0,
+            bedsNeedingCheck: localStats.bedsNeedingCheck ?? totals.bedsNeedingCheck ?? 0,
+            recentlyFreedBeds: localStats.recentlyFreedBeds ?? totals.recentlyFreedBeds ?? 0,
+          };
+          usedLocalOverlay = true;
+        }
+      }
 
       const totalsForAttention = (totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0);
       const totalBeds = toFiniteNumber(totals.totalBeds);
@@ -960,7 +981,9 @@ export class BedManagementApp {
         })
         .join('');
 
-      if (snapshot?.source === 'supabase') {
+      if (snapshot?.source === 'supabase' && usedLocalOverlay) {
+        this.setReportingNotice('Supabase KPI duomenys nepilni – rodome CSV pagrįstą suvestinę.', 'warning');
+      } else if (snapshot?.source === 'supabase') {
         const generatedAt = snapshot?.generatedAt ? new Date(snapshot.generatedAt).toLocaleString('lt-LT') : '';
         this.setReportingNotice(generatedAt ? `Atnaujinta ${generatedAt}.` : 'Atnaujinta.', 'success');
       } else if (snapshot?.error) {
