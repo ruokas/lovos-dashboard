@@ -1,5 +1,12 @@
 const FALLBACK_ID_PREFIX = 'task-';
 export const TASK_STORAGE_KEY = 'lovos-dashboard.tasks.v1';
+export const TASK_TEMPLATE_STORAGE_KEY = 'lovos-dashboard.taskTemplates.v1';
+
+const RECURRENCE_DEFAULT_MINUTES = {
+  perShift: 480,
+  daily: 1440,
+  weekly: 10080,
+};
 
 export const TASK_STATUSES = {
   PLANNED: 'planned',
@@ -15,13 +22,6 @@ export const TASK_PRIORITIES = {
   LOW: 4,
 };
 
-export const TASK_TYPE_OPTIONS = [
-  { value: 'patientCare', labelKey: 'patientCare' },
-  { value: 'logistics', labelKey: 'logistics' },
-  { value: 'communication', labelKey: 'communication' },
-  { value: 'training', labelKey: 'training' },
-];
-
 export const TASK_RECURRENCE_OPTIONS = [
   { value: 'none', labelKey: 'none' },
   { value: 'perShift', labelKey: 'perShift' },
@@ -29,7 +29,7 @@ export const TASK_RECURRENCE_OPTIONS = [
   { value: 'weekly', labelKey: 'weekly' },
 ];
 
-export const TASK_CHANNEL_OPTIONS = [
+export const TASK_ZONE_OPTIONS = [
   { value: 'laboratory', labelKey: 'laboratory' },
   { value: 'ambulatory', labelKey: 'ambulatory' },
   { value: 'wards', labelKey: 'wards' },
@@ -317,12 +317,45 @@ function ensurePriority(value) {
   return Math.min(Math.max(numeric, TASK_PRIORITIES.CRITICAL), TASK_PRIORITIES.LOW);
 }
 
+function ensurePositiveMinutes(value, fallback = null) {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  if (typeof value === 'string' && value.trim() === '') {
+    return fallback;
+  }
+
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return fallback;
+  }
+
+  return numeric;
+}
+
 function normaliseMetadata(value) {
   if (!value || typeof value !== 'object') {
     return {};
   }
   try {
-    return JSON.parse(JSON.stringify(value));
+    const clone = JSON.parse(JSON.stringify(value));
+    if (clone.patient && typeof clone.patient === 'object') {
+      const patient = clone.patient;
+      const referenceCandidate =
+        typeof patient.reference === 'string' && patient.reference.trim()
+          ? patient.reference.trim()
+          : [patient.surname, patient.chartNumber]
+              .filter((field) => typeof field === 'string' && field.trim())
+              .map((field) => field.trim())
+              .filter((field, index, arr) => arr.indexOf(field) === index)
+              .join(' / ');
+
+      if (referenceCandidate && !patient.reference) {
+        patient.reference = referenceCandidate;
+      }
+    }
+    return clone;
   } catch (error) {
     console.warn('Nepavyko normalizuoti užduoties metadata reikšmės:', error);
     return {};
@@ -332,8 +365,11 @@ function normaliseMetadata(value) {
 export class TaskManager {
   constructor(options = {}) {
     this.storageKey = options.storageKey ?? TASK_STORAGE_KEY;
+    this.templateStorageKey = options.templateStorageKey ?? TASK_TEMPLATE_STORAGE_KEY;
     this.tasks = [];
+    this.recurringTemplates = [];
     this.loadFromStorage();
+    this.loadRecurringTemplates();
   }
 
   loadFromStorage() {
@@ -346,6 +382,18 @@ export class TaskManager {
     const parsedTasks = safeParse(raw).map((task) => this.#normalizeTask(task));
     this.tasks = parsedTasks.filter(Boolean);
     return this.getTasks();
+  }
+
+  loadRecurringTemplates() {
+    if (!isLocalStorageAvailable()) {
+      this.recurringTemplates = [];
+      return [];
+    }
+
+    const raw = localStorage.getItem(this.templateStorageKey);
+    const parsedTemplates = safeParse(raw).map((template) => this.#normalizeTemplate(template));
+    this.recurringTemplates = parsedTemplates.filter(Boolean);
+    return this.getRecurringTemplates();
   }
 
   saveToStorage() {
@@ -364,29 +412,53 @@ export class TaskManager {
     return sortTasksByPriorityAndDue(this.tasks);
   }
 
+  getRecurringTemplates() {
+    return this.recurringTemplates.map((template) => ({
+      ...template,
+      metadata: normaliseMetadata(template.metadata),
+    }));
+  }
+
+  saveRecurringTemplates() {
+    if (!isLocalStorageAvailable()) {
+      return;
+    }
+
+    try {
+      localStorage.setItem(this.templateStorageKey, JSON.stringify(this.recurringTemplates));
+    } catch (error) {
+      console.error('Nepavyko išsaugoti pasikartojančių užduočių šablonų localStorage:', error);
+    }
+  }
+
   filterTasks(filters = {}) {
     const searchTerm = (filters.search ?? '').toLowerCase().trim();
     const statusFilter = filters.status ?? 'all';
-    const channelFilter = filters.channel ?? 'all';
+    const zoneFilter = filters.zone ?? filters.channel ?? 'all';
 
     const filtered = this.getTasks().filter((task) => {
       if (statusFilter !== 'all' && task.status !== statusFilter) {
         return false;
       }
-      if (channelFilter !== 'all' && task.channel !== channelFilter) {
+      const zoneValue = task.zone ?? task.channel;
+      if (zoneFilter !== 'all' && zoneValue !== zoneFilter) {
         return false;
       }
       if (!searchTerm) {
         return true;
       }
 
+      const patientMeta = task.metadata?.patient ?? {};
+      const patientReference = [patientMeta.reference, patientMeta.surname, patientMeta.chartNumber]
+        .filter((value) => typeof value === 'string' && value.trim())
+        .join(' ');
+
       const haystack = [
-        task.type,
-        task.typeLabel,
         task.description,
         task.responsible,
-        task.channel,
-        task.channelLabel,
+        zoneValue,
+        task.zoneLabel ?? task.channelLabel,
+        patientReference,
         task.dueAt,
         task.seriesId,
       ]
@@ -491,6 +563,57 @@ export class TaskManager {
     return false;
   }
 
+  registerRecurringTemplate(sourceTask, options = {}) {
+    const template = this.#normalizeTemplate(sourceTask, options);
+    if (!template) {
+      return null;
+    }
+
+    const existingIndex = this.recurringTemplates.findIndex((item) => item.seriesId === template.seriesId);
+    if (existingIndex === -1) {
+      this.recurringTemplates.push(template);
+    } else {
+      this.recurringTemplates[existingIndex] = {
+        ...this.recurringTemplates[existingIndex],
+        ...template,
+        metadata: normaliseMetadata({
+          ...this.recurringTemplates[existingIndex]?.metadata,
+          ...template.metadata,
+        }),
+      };
+    }
+
+    this.saveRecurringTemplates();
+    return template;
+  }
+
+  removeRecurringTemplate(seriesId) {
+    if (!seriesId) {
+      return false;
+    }
+
+    const originalLength = this.recurringTemplates.length;
+    this.recurringTemplates = this.recurringTemplates.filter((template) => template.seriesId !== seriesId);
+    if (this.recurringTemplates.length !== originalLength) {
+      this.saveRecurringTemplates();
+      return true;
+    }
+    return false;
+  }
+
+  clearRecurringTemplates() {
+    this.recurringTemplates = [];
+    if (!isLocalStorageAvailable()) {
+      return;
+    }
+
+    try {
+      localStorage.removeItem(this.templateStorageKey);
+    } catch (error) {
+      console.warn('Nepavyko pašalinti pasikartojančių užduočių šablonų iš localStorage:', error);
+    }
+  }
+
   clearAllTasks() {
     this.tasks = [];
     if (isLocalStorageAvailable()) {
@@ -510,11 +633,25 @@ export class TaskManager {
     const createdAt = safeIsoString(task.createdAt) ?? new Date().toISOString();
     const updatedAt = safeIsoString(task.updatedAt) ?? createdAt;
     const dueAt = task.dueAt !== undefined ? safeIsoString(task.dueAt) : safeIsoString(task.deadline);
+    const zoneValueCandidate = typeof task.zone === 'string' && task.zone.trim() ? task.zone.trim() : null;
+    const channelValueCandidate = typeof task.channel === 'string' && task.channel.trim() ? task.channel.trim() : null;
+    const zoneValue = zoneValueCandidate ?? channelValueCandidate ?? 'general';
+    const zoneLabelCandidate = typeof task.zoneLabel === 'string' && task.zoneLabel.trim()
+      ? task.zoneLabel.trim()
+      : null;
+    const channelLabelCandidate = typeof task.channelLabel === 'string' && task.channelLabel.trim()
+      ? task.channelLabel.trim()
+      : null;
+    const zoneLabel = zoneLabelCandidate ?? channelLabelCandidate ?? zoneValue;
+    const normalizedMetadata = normaliseMetadata(task.metadata);
 
     return {
       id: typeof task.id === 'string' ? task.id : this.#generateId(),
       type: typeof task.type === 'string' ? task.type : 'general',
-      typeLabel: typeof task.typeLabel === 'string' ? task.typeLabel : (task.type ?? 'general'),
+      typeLabel:
+        typeof task.typeLabel === 'string' && task.typeLabel.trim()
+          ? task.typeLabel.trim()
+          : (task.type ?? 'Užduotis'),
       title: typeof task.title === 'string' ? task.title : null,
       description: typeof task.description === 'string' ? task.description : '',
       recurrence: typeof task.recurrence === 'string' ? task.recurrence : 'none',
@@ -522,16 +659,113 @@ export class TaskManager {
       responsible: typeof task.responsible === 'string' ? task.responsible : '',
       deadline: safeIsoString(task.deadline),
       dueAt,
-      channel: typeof task.channel === 'string' ? task.channel : 'general',
-      channelLabel: typeof task.channelLabel === 'string' ? task.channelLabel : (task.channel ?? 'general'),
+      zone: zoneValue,
+      zoneLabel,
+      channel: zoneValue,
+      channelLabel: zoneLabel,
       priority: ensurePriority(task.priority),
       status: ensureStatus(task.status),
       seriesId: typeof task.seriesId === 'string' ? task.seriesId : null,
       source: typeof task.source === 'string' ? task.source : (task.source === null ? null : 'local'),
-      metadata: normaliseMetadata(task.metadata),
+      metadata: normalizedMetadata,
       createdAt,
       updatedAt,
     };
+  }
+
+  #normalizeTemplate(source = {}, options = {}) {
+    if (!source || typeof source !== 'object') {
+      return null;
+    }
+
+    const recurrenceValue = typeof source.recurrence === 'string' ? source.recurrence : 'daily';
+    const providedMetadata = normaliseMetadata(source.metadata);
+    const frequencyMinutes = ensurePositiveMinutes(
+      options.frequencyMinutes ?? providedMetadata.recurringFrequencyMinutes ?? RECURRENCE_DEFAULT_MINUTES[recurrenceValue],
+      null,
+    );
+
+    const startAtIso = safeIsoString(
+      options.startAt ?? source.deadline ?? source.dueAt ?? source.createdAt ?? new Date().toISOString(),
+    );
+
+    if (!startAtIso) {
+      return null;
+    }
+
+    const baseSeriesId = this.#normalizeSeriesId(options.seriesId ?? source.seriesId);
+
+    const metadata = normaliseMetadata({
+      ...providedMetadata,
+      recurringFrequencyMinutes: frequencyMinutes ?? null,
+      recurringSourceTaskId: source.id ?? providedMetadata.recurringSourceTaskId ?? null,
+    });
+
+    const zoneValueCandidate = typeof source.zone === 'string' && source.zone.trim() ? source.zone.trim() : null;
+    const channelValueCandidate = typeof source.channel === 'string' && source.channel.trim() ? source.channel.trim() : null;
+    const zoneValue = zoneValueCandidate ?? channelValueCandidate ?? 'general';
+    const zoneLabelCandidate = typeof source.zoneLabel === 'string' && source.zoneLabel.trim()
+      ? source.zoneLabel.trim()
+      : null;
+    const channelLabelCandidate = typeof source.channelLabel === 'string' && source.channelLabel.trim()
+      ? source.channelLabel.trim()
+      : null;
+    const zoneLabel = zoneLabelCandidate ?? channelLabelCandidate ?? zoneValue;
+
+    const lookaheadDays = Number.isFinite(options.lookaheadDays)
+      ? options.lookaheadDays
+      : this.#resolveLookaheadDays(recurrenceValue);
+
+    return {
+      seriesId: baseSeriesId,
+      title: typeof source.title === 'string' && source.title.trim() ? source.title : (source.typeLabel ?? 'Pasikartojanti užduotis'),
+      description: typeof source.description === 'string' ? source.description : '',
+      zone: zoneValue,
+      zoneLabel,
+      channel: zoneValue,
+      channelLabel: zoneLabel,
+      responsible: typeof source.responsible === 'string' ? source.responsible : '',
+      priority: ensurePriority(source.priority),
+      recurrence: recurrenceValue,
+      recurrenceLabel: typeof source.recurrenceLabel === 'string' ? source.recurrenceLabel : recurrenceValue,
+      type: typeof source.type === 'string' ? source.type : 'general',
+      typeLabel: typeof source.typeLabel === 'string' ? source.typeLabel : (source.type ?? 'general'),
+      frequencyMinutes,
+      startAt: startAtIso,
+      lookaheadDays,
+      metadata,
+      frequencyLabel: typeof options.frequencyLabel === 'string'
+        ? options.frequencyLabel
+        : (providedMetadata.frequencyLabel ?? providedMetadata.recurringFrequencyLabel ?? null),
+      gracePeriodMinutes: ensurePositiveMinutes(
+        options.gracePeriodMinutes ?? providedMetadata.gracePeriodMinutes ?? null,
+        undefined,
+      ),
+      retentionMinutes: ensurePositiveMinutes(
+        options.retentionMinutes ?? providedMetadata.retentionMinutes ?? null,
+        undefined,
+      ),
+    };
+  }
+
+  #normalizeSeriesId(seriesId) {
+    if (typeof seriesId === 'string' && seriesId.trim()) {
+      return seriesId.trim();
+    }
+    return this.#generateSeriesId();
+  }
+
+  #resolveLookaheadDays(recurrence) {
+    switch (recurrence) {
+      case 'weekly':
+        return 21;
+      case 'daily':
+        return 5;
+      case 'perShift':
+        return 3;
+      default:
+        return 2;
+    }
   }
 
   #generateId() {
@@ -539,6 +773,13 @@ export class TaskManager {
       return crypto.randomUUID();
     }
     return `${FALLBACK_ID_PREFIX}${Math.random().toString(36).slice(2, 11)}`;
+  }
+
+  #generateSeriesId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      return `series-${crypto.randomUUID()}`;
+    }
+    return `series-${Math.random().toString(36).slice(2, 11)}`;
   }
 }
 

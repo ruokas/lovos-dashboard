@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { TaskManager, TASK_PRIORITIES, TASK_STATUSES, mergeRecurringTasksForDisplay } from '../models/taskData.js';
+import { materializeRecurringTasks } from '../utils/taskScheduler.js';
 
 const createIso = (date) => date.toISOString();
 
@@ -35,6 +36,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
         source: 'scheduler',
         title: 'Laboratoriniai mėginiai',
         description: 'Išsiųsti laboratorijos mėginius.',
+        zone: 'laboratory',
+        zoneLabel: 'Laboratorija',
         channel: 'laboratory',
         channelLabel: 'Laboratorija',
         responsible: 'Kurjeris',
@@ -53,6 +56,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
         source: 'scheduler',
         title: 'Laboratoriniai mėginiai',
         description: 'Išsiųsti laboratorijos mėginius.',
+        zone: 'laboratory',
+        zoneLabel: 'Laboratorija',
         channel: 'laboratory',
         channelLabel: 'Laboratorija',
         responsible: 'Kurjeris',
@@ -88,6 +93,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
         source: 'scheduler',
         title: 'Laboratoriniai mėginiai',
         description: 'Išsiųsti laboratorijos mėginius.',
+        zone: 'laboratory',
+        zoneLabel: 'Laboratorija',
         channel: 'laboratory',
         channelLabel: 'Laboratorija',
         responsible: 'Kurjeris',
@@ -106,6 +113,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
         source: 'scheduler',
         title: 'Laboratoriniai mėginiai',
         description: 'Išsiųsti laboratorijos mėginius.',
+        zone: 'laboratory',
+        zoneLabel: 'Laboratorija',
         channel: 'laboratory',
         channelLabel: 'Laboratorija',
         responsible: 'Kurjeris',
@@ -124,6 +133,8 @@ describe('Pasikartojančių užduočių sujungimas', () => {
         source: 'local',
         title: 'Patikra',
         description: 'Patikrinti įrangą.',
+        zone: 'wards',
+        zoneLabel: 'Skyrius',
         channel: 'wards',
         channelLabel: 'Skyrius',
         responsible: 'Slaugytoja',
@@ -138,11 +149,56 @@ describe('Pasikartojančių užduočių sujungimas', () => {
       },
     ];
 
-    const result = manager.filterTasks({ search: '', status: 'all', channel: 'all' });
+    const result = manager.filterTasks({ search: '', status: 'all', zone: 'all' });
     expect(result.some((task) => task.id === 'lab-1' || task.id === 'lab-2')).toBe(false);
     const mergedEntry = result.find((task) => task.id === 'lab-transport');
     expect(mergedEntry).toBeTruthy();
     expect(mergedEntry.recurrenceLabel).toBe('Kas 30 min.');
     expect(result).toHaveLength(2);
+  });
+
+  it('leidžia registruoti naudotojo pasikartojančią užduotį ir sugeneruoja artimiausias atsiradimų datas', () => {
+    const manager = new TaskManager({ storageKey: 'test.tasks', templateStorageKey: 'test.templates' });
+    const reference = new Date('2024-03-10T07:00:00Z');
+
+    const created = manager.addTask({
+      type: 'logistics',
+      typeLabel: 'Logistika',
+      description: 'Kas 2 val. perduoti mėginius.',
+      recurrence: 'daily',
+      recurrenceLabel: 'Kasdien',
+      responsible: 'Kurjeris',
+      zone: 'laboratory',
+      zoneLabel: 'Laboratorija',
+      channel: 'laboratory',
+      channelLabel: 'Laboratorija',
+      deadline: new Date(reference.getTime() + 60 * 60 * 1000).toISOString(),
+      metadata: { recurringFrequencyMinutes: 120 },
+      status: TASK_STATUSES.PLANNED,
+      priority: TASK_PRIORITIES.HIGH,
+    });
+
+    const template = manager.registerRecurringTemplate(created, {
+      frequencyMinutes: 120,
+      startAt: created.deadline,
+    });
+
+    expect(template).toBeTruthy();
+    expect(template.seriesId).toBeTruthy();
+
+    manager.removeTask(created.id);
+
+    materializeRecurringTasks({
+      taskManager: manager,
+      templates: manager.getRecurringTemplates(),
+      referenceDate: reference,
+      lookaheadDays: 1,
+    });
+
+    const occurrences = manager.getTasks().filter((task) => task.seriesId === template.seriesId);
+    expect(occurrences.length).toBeGreaterThan(0);
+    const next = occurrences[0];
+    expect(next.metadata.recurringFrequencyMinutes).toBe(120);
+    expect(new Date(next.dueAt).getTime()).toBeGreaterThanOrEqual(reference.getTime());
   });
 });

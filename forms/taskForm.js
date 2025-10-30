@@ -4,12 +4,32 @@
  */
 
 import {
-  TASK_CHANNEL_OPTIONS,
   TASK_RECURRENCE_OPTIONS,
   TASK_STATUSES,
-  TASK_TYPE_OPTIONS,
+  TASK_ZONE_OPTIONS,
 } from '../models/taskData.js';
 import { t, texts } from '../texts.js';
+
+const RECURRENCE_DEFAULT_MINUTES = {
+  perShift: 480,
+  daily: 1440,
+  weekly: 10080,
+};
+
+function formatDateTimeLocal(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  const pad = (value) => String(value).padStart(2, '0');
+  const year = date.getFullYear();
+  const month = pad(date.getMonth() + 1);
+  const day = pad(date.getDate());
+  const hours = pad(date.getHours());
+  const minutes = pad(date.getMinutes());
+
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
 
 function escapeHtml(value) {
   if (value === null || value === undefined) {
@@ -33,14 +53,11 @@ function resolveOptionLabel(optionGroup, value, fallback) {
     return fallback ?? value ?? '';
   }
 
-  if (optionGroup === TASK_TYPE_OPTIONS) {
-    return t(texts.tasks?.types?.[option.labelKey]) || fallback || value;
-  }
   if (optionGroup === TASK_RECURRENCE_OPTIONS) {
     return t(texts.tasks?.recurrence?.[option.labelKey]) || fallback || value;
   }
-  if (optionGroup === TASK_CHANNEL_OPTIONS) {
-    return t(texts.tasks?.channels?.[option.labelKey]) || fallback || value;
+  if (optionGroup === TASK_ZONE_OPTIONS) {
+    return t(texts.tasks?.zones?.[option.labelKey]) || fallback || value;
   }
 
   return fallback ?? value ?? '';
@@ -70,6 +87,7 @@ export class TaskForm {
     this.isOpen = true;
     this.createModal();
     document.body.appendChild(this.modal);
+    document.body.classList.add('overflow-hidden');
 
     document.addEventListener('keydown', this.boundHandleEscape);
 
@@ -95,6 +113,7 @@ export class TaskForm {
 
     this.isOpen = false;
     document.removeEventListener('keydown', this.boundHandleEscape);
+    document.body.classList.remove('overflow-hidden');
 
     if (this.modal?.parentNode) {
       this.modal.parentNode.removeChild(this.modal);
@@ -107,7 +126,7 @@ export class TaskForm {
 
   createModal() {
     this.modal = document.createElement('div');
-    this.modal.className = 'fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4';
+    this.modal.className = 'fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4';
     this.modal.setAttribute('role', 'dialog');
     this.modal.setAttribute('aria-modal', 'true');
     this.modal.innerHTML = `
@@ -132,24 +151,22 @@ export class TaskForm {
           <div id="taskFormFeedback" class="hidden text-sm"></div>
 
           <form id="taskForm" class="space-y-4">
-            <div class="grid gap-4 md:grid-cols-2">
-              <div>
-                <label for="taskType" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  ${escapeHtml(t(texts.forms.task?.typeLabel))}
-                </label>
-                <select
-                  id="taskType"
-                  name="taskType"
-                  required
-                  class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">${escapeHtml(t(texts.forms.task?.typePlaceholder))}</option>
-                  ${TASK_TYPE_OPTIONS.map((option) => `
-                    <option value="${escapeHtml(option.value)}">${escapeHtml(t(texts.tasks.types?.[option.labelKey]))}</option>
-                  `).join('')}
-                </select>
-              </div>
+            <div>
+              <label for="taskPatientReference" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                ${escapeHtml(t(texts.forms.task?.patientReferenceLabel))}
+              </label>
+              <input
+                type="text"
+                id="taskPatientReference"
+                name="taskPatientReference"
+                required
+                autocomplete="off"
+                placeholder="${escapeHtml(t(texts.forms.task?.patientReferencePlaceholder))}"
+                class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+            </div>
 
+            <div class="grid gap-4 md:grid-cols-2">
               <div>
                 <label for="taskRecurrence" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   ${escapeHtml(t(texts.forms.task?.recurrenceLabel))}
@@ -163,6 +180,25 @@ export class TaskForm {
                     <option value="${escapeHtml(option.value)}"${option.value === 'none' ? ' selected' : ''}>${escapeHtml(t(texts.tasks.recurrence?.[option.labelKey]))}</option>
                   `).join('')}
                 </select>
+              </div>
+            </div>
+
+            <div id="recurringDetails" class="hidden rounded-md border border-slate-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-800/60 p-4 space-y-3">
+              <div>
+                <label for="taskFrequencyMinutes" class="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+                  ${escapeHtml(t(texts.forms.task?.frequencyLabel))}
+                </label>
+                <input
+                  type="number"
+                  inputmode="numeric"
+                  min="5"
+                  step="5"
+                  id="taskFrequencyMinutes"
+                  name="taskFrequencyMinutes"
+                  class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="${escapeHtml(t(texts.forms.task?.frequencyPlaceholder))}"
+                >
+                <p class="text-xs text-slate-500 dark:text-slate-300 mt-1">${escapeHtml(t(texts.forms.task?.frequencyHelp))}</p>
               </div>
             </div>
 
@@ -182,20 +218,6 @@ export class TaskForm {
 
             <div class="grid gap-4 md:grid-cols-2">
               <div>
-                <label for="taskOwner" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                  ${escapeHtml(t(texts.forms.task?.ownerLabel))}
-                </label>
-                <input
-                  type="text"
-                  id="taskOwner"
-                  name="taskOwner"
-                  required
-                  placeholder="${escapeHtml(t(texts.forms.task?.ownerPlaceholder))}"
-                  class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-              </div>
-
-              <div>
                 <label for="taskDeadline" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
                   ${escapeHtml(t(texts.forms.task?.deadlineLabel))}
                 </label>
@@ -206,23 +228,23 @@ export class TaskForm {
                   class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
               </div>
-            </div>
 
-            <div>
-              <label for="taskChannel" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
-                ${escapeHtml(t(texts.forms.task?.channelLabel))}
-              </label>
-              <select
-                id="taskChannel"
-                name="taskChannel"
-                required
-                class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="">${escapeHtml(t(texts.forms.task?.channelPlaceholder))}</option>
-                ${TASK_CHANNEL_OPTIONS.map((option) => `
-                  <option value="${escapeHtml(option.value)}">${escapeHtml(t(texts.tasks.channels?.[option.labelKey]))}</option>
-                `).join('')}
-              </select>
+              <div>
+                <label for="taskZone" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
+                  ${escapeHtml(t(texts.forms.task?.zoneLabel))}
+                </label>
+                <select
+                  id="taskZone"
+                  name="taskZone"
+                  required
+                  class="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">${escapeHtml(t(texts.forms.task?.zonePlaceholder))}</option>
+                  ${TASK_ZONE_OPTIONS.map((option) => `
+                    <option value="${escapeHtml(option.value)}">${escapeHtml(t(texts.tasks.zones?.[option.labelKey]))}</option>
+                  `).join('')}
+                </select>
+              </div>
             </div>
 
             <div class="flex justify-end space-x-3 pt-2">
@@ -255,6 +277,7 @@ export class TaskForm {
     const form = this.modal.querySelector('#taskForm');
     const closeBtn = this.modal.querySelector('#closeTaskForm');
     const cancelBtn = this.modal.querySelector('#cancelTaskForm');
+    const recurrenceSelect = this.modal.querySelector('#taskRecurrence');
 
     if (closeBtn) {
       closeBtn.addEventListener('click', () => this.hide());
@@ -267,6 +290,43 @@ export class TaskForm {
         event.preventDefault();
         void this.handleSubmit(form);
       });
+    }
+
+    if (recurrenceSelect) {
+      const frequencyContainer = this.modal.querySelector('#recurringDetails');
+      const frequencyInput = this.modal.querySelector('#taskFrequencyMinutes');
+      const deadlineInput = this.modal.querySelector('#taskDeadline');
+
+      const applyRecurrenceState = () => {
+        const value = recurrenceSelect.value ?? 'none';
+        const isRecurring = value !== 'none';
+        if (frequencyContainer) {
+          frequencyContainer.classList.toggle('hidden', !isRecurring);
+        }
+        if (deadlineInput) {
+          deadlineInput.required = isRecurring;
+        }
+
+        if (isRecurring && frequencyInput) {
+          const current = Number.parseInt(frequencyInput.value, 10);
+          if (!Number.isFinite(current) || current <= 0) {
+            const suggested = RECURRENCE_DEFAULT_MINUTES[value] ?? RECURRENCE_DEFAULT_MINUTES.daily;
+            if (Number.isFinite(suggested)) {
+              frequencyInput.value = String(suggested);
+            }
+          }
+        } else if (!isRecurring && frequencyInput) {
+          frequencyInput.value = '';
+        }
+      };
+
+      recurrenceSelect.addEventListener('change', applyRecurrenceState);
+      applyRecurrenceState();
+    }
+
+    const deadlineField = this.modal.querySelector('#taskDeadline');
+    if (deadlineField && !deadlineField.value) {
+      deadlineField.value = formatDateTimeLocal(new Date());
     }
 
     this.modal.addEventListener('click', (event) => {
@@ -284,11 +344,10 @@ export class TaskForm {
 
     const formData = new FormData(form);
     const description = formData.get('taskDescription')?.trim();
-    const responsible = formData.get('taskOwner')?.trim();
-    const type = formData.get('taskType');
-    const channel = formData.get('taskChannel');
+    const patientReference = formData.get('taskPatientReference')?.trim();
+    const zone = formData.get('taskZone');
 
-    if (!description || !responsible || !type || !channel) {
+    if (!description || !patientReference || !zone) {
       this.setFeedback(t(texts.forms.validationError), 'error');
       return;
     }
@@ -307,8 +366,7 @@ export class TaskForm {
 
       if (this.logger?.logInteraction) {
         void this.logger.logInteraction('task_form_submitted', {
-          taskType: payload.type,
-          channel: payload.channel,
+          zone: payload.zone,
           recurrence: payload.recurrence,
         });
       }
@@ -324,10 +382,11 @@ export class TaskForm {
   }
 
   buildPayload(formData) {
-    const typeValue = formData.get('taskType');
     const recurrenceValue = formData.get('taskRecurrence') || 'none';
-    const channelValue = formData.get('taskChannel');
+    const zoneValue = formData.get('taskZone');
     const deadlineValue = formData.get('taskDeadline');
+    const frequencyValue = formData.get('taskFrequencyMinutes');
+    const patientReferenceValue = formData.get('taskPatientReference')?.trim() ?? '';
 
     let normalizedDeadline = null;
     if (deadlineValue) {
@@ -337,17 +396,31 @@ export class TaskForm {
       }
     }
 
+    let frequencyMinutes = Number.parseInt(frequencyValue, 10);
+    if (!Number.isFinite(frequencyMinutes) || frequencyMinutes <= 0) {
+      frequencyMinutes = RECURRENCE_DEFAULT_MINUTES[recurrenceValue] ?? null;
+    }
+
+    const metadata = {
+      patient: {
+        reference: patientReferenceValue,
+      },
+    };
+    if (Number.isFinite(frequencyMinutes) && frequencyMinutes > 0 && recurrenceValue !== 'none') {
+      metadata.recurringFrequencyMinutes = frequencyMinutes;
+    }
+
     return {
-      type: typeValue,
-      typeLabel: resolveOptionLabel(TASK_TYPE_OPTIONS, typeValue, typeValue),
       description: formData.get('taskDescription')?.trim() ?? '',
       recurrence: recurrenceValue,
       recurrenceLabel: resolveOptionLabel(TASK_RECURRENCE_OPTIONS, recurrenceValue, recurrenceValue),
-      responsible: formData.get('taskOwner')?.trim() ?? '',
       deadline: normalizedDeadline,
-      channel: channelValue,
-      channelLabel: resolveOptionLabel(TASK_CHANNEL_OPTIONS, channelValue, channelValue),
+      zone: zoneValue,
+      zoneLabel: resolveOptionLabel(TASK_ZONE_OPTIONS, zoneValue, zoneValue),
+      channel: zoneValue,
+      channelLabel: resolveOptionLabel(TASK_ZONE_OPTIONS, zoneValue, zoneValue),
       status: TASK_STATUSES.PLANNED,
+      metadata,
     };
   }
 
