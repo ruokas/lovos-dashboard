@@ -380,7 +380,18 @@ export class DataPersistenceManager {
       occupancyValue: occupancyFlag,
       patientValue: patientCode,
     });
-    const finalStatus = normalizedStatus ?? primaryStatus ?? derivedStatus ?? null;
+    const finalStatus = (() => {
+      if (normalizedStatus === 'cleaning' || normalizedStatus === 'reserved') {
+        return normalizedStatus;
+      }
+      if (typeof occupancyFlag === 'boolean') {
+        return occupancyFlag ? 'occupied' : 'free';
+      }
+      if (normalizedStatus) {
+        return normalizedStatus;
+      }
+      return derivedStatus ?? null;
+    })();
 
     const metadata = {
       ...(record.metadata ?? {}),
@@ -768,6 +779,24 @@ export class DataPersistenceManager {
         const derivedOccupancy = hasBoardInfo
           ? deriveOccupancyStatus({ occupancyValue: occupancyFlag, patientValue: row.patient_code })
           : null;
+        const occupancyState = (() => {
+          if (normalizedOccupancy === 'cleaning' || normalizedOccupancy === 'reserved') {
+            return normalizedOccupancy;
+          }
+          if (typeof occupancyFlag === 'boolean') {
+            return occupancyFlag ? 'occupied' : 'free';
+          }
+          if (normalizedOccupancy) {
+            return normalizedOccupancy;
+          }
+          if (rawOccupancy !== null && rawOccupancy !== undefined) {
+            const booleanRaw = normalizeOccupancyFlag(rawOccupancy);
+            if (typeof booleanRaw === 'boolean') {
+              return booleanRaw ? 'occupied' : 'free';
+            }
+          }
+          return derivedOccupancy ?? null;
+        })();
         const occupancyMetadata = {
           ...(row.occupancy_metadata ?? {}),
         };
@@ -790,7 +819,7 @@ export class DataPersistenceManager {
           statusReportedBy: row.status_reported_by ?? null,
           statusCreatedAt,
           statusMetadata: row.status_metadata ?? {},
-          occupancyState: normalizedOccupancy ?? rawOccupancy ?? derivedOccupancy ?? null,
+          occupancyState,
           occupancy: typeof occupancyFlag === 'boolean' ? occupancyFlag : null,
           patientCode: row.patient_code ?? null,
           expectedUntil: row.expected_until ?? null,
