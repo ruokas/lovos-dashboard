@@ -56,8 +56,61 @@ function hasText(value) {
   return normalizeString(value) !== '';
 }
 
-function deriveOccupancyStatusFromPatient(patientValue) {
+function normalizeOccupancyFlag(value) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) {
+      return null;
+    }
+    return value !== 0;
+  }
+
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  if (['1', 't', 'true', 'y', 'yes', 'occupied', 'uzimta', 'užimta', 'uzimtas', 'užimtas'].includes(normalized)) {
+    return true;
+  }
+
+  if (['0', 'f', 'false', 'n', 'no', 'free', 'laisva', 'laisvas', 'laisvi', 'laisvos', 'available'].includes(normalized)) {
+    return false;
+  }
+
+  return null;
+}
+
+function deriveOccupancyStatus({ occupancyValue, patientValue }) {
+  const normalizedFlag = normalizeOccupancyFlag(occupancyValue);
+  if (normalizedFlag === true) {
+    return 'occupied';
+  }
+  if (normalizedFlag === false) {
+    return 'free';
+  }
   return hasText(patientValue) ? 'occupied' : 'free';
+}
+
+function statusToOccupancyFlag(status) {
+  const normalized = normalizeBoardStatus(status);
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === 'occupied') {
+    return true;
+  }
+  if (normalized === 'free') {
+    return false;
+  }
+  return null;
 }
 
 function normalizeBoardStatus(value) {
@@ -155,6 +208,17 @@ function buildOccupancyMetadata(record) {
     entries.push(['rawStatus', rawStatus]);
   }
 
+  const occupancyFlag = normalizeOccupancyFlag(
+    record?.occupancy
+      ?? record?.occupied
+      ?? record?.is_occupied
+      ?? record?.isOccupied
+      ?? null,
+  );
+  if (occupancyFlag !== null) {
+    entries.push(['occupancy', occupancyFlag]);
+  }
+
   return Object.fromEntries(entries);
 }
 
@@ -232,19 +296,28 @@ export class DataPersistenceManager {
 
     const bedLabel = record.vieta ?? record.label ?? this.#resolveBedLabel(record.bed_id) ?? null;
     const patientCode = record.pacientas ?? record.patient_code ?? null;
+    const occupancyFlag = normalizeOccupancyFlag(
+      record.occupancy ?? record.occupied ?? record.is_occupied ?? record.isOccupied ?? null,
+    );
     const primaryStatus = hasText(record.busena)
       ? record.busena
       : hasText(record.occupancy_state)
         ? record.occupancy_state
         : null;
     const normalizedStatus = normalizeBoardStatus(primaryStatus);
-    const derivedStatus = deriveOccupancyStatusFromPatient(patientCode);
+    const derivedStatus = deriveOccupancyStatus({
+      occupancyValue: occupancyFlag,
+      patientValue: patientCode,
+    });
     const finalStatus = normalizedStatus ?? primaryStatus ?? derivedStatus ?? null;
 
     const metadata = {
       ...(record.metadata ?? {}),
       ...buildOccupancyMetadata(record),
     };
+    if (occupancyFlag !== null && metadata.occupancy === undefined) {
+      metadata.occupancy = occupancyFlag;
+    }
 
     return {
       id:
@@ -254,6 +327,7 @@ export class DataPersistenceManager {
       bedId: bedLabel ?? record.vieta ?? 'Nežinoma lova',
       status: finalStatus,
       patientCode,
+      occupancy: occupancyFlag,
       expectedUntil: record.expected_until ?? null,
       notes: record.komentaras ?? record.notes ?? null,
       createdBy:
@@ -269,26 +343,63 @@ export class DataPersistenceManager {
     return this.#mapBoardRecordToOccupancy(record);
   }
 
+  #normalizeOccupancyInput(occupancyData) {
+    if (!occupancyData) {
+      return null;
+    }
+
+    const metadata = { ...(occupancyData.metadata ?? {}) };
+    const patientCode = occupancyData.patientCode ?? null;
+    const occupancyInputFlag = normalizeOccupancyFlag(
+      occupancyData.occupancy
+        ?? metadata.occupancy
+        ?? occupancyData.isOccupied
+        ?? metadata.isOccupied
+        ?? null,
+    );
+    const derivedStatus = deriveOccupancyStatus({
+      occupancyValue: occupancyInputFlag,
+      patientValue: patientCode,
+    });
+    const status = occupancyData.status ?? derivedStatus ?? null;
+    const occupancyFlag =
+      occupancyInputFlag ?? statusToOccupancyFlag(status) ?? (hasText(patientCode) ? true : null);
+
+    if (occupancyFlag !== null && metadata.occupancy === undefined) {
+      metadata.occupancy = occupancyFlag;
+    }
+
+    return {
+      ...occupancyData,
+      status,
+      patientCode,
+      occupancy: occupancyFlag,
+      metadata,
+    };
+  }
+
   #buildBoardPayload(occupancyData) {
     if (!occupancyData?.bedId) {
       throw new Error('Trūksta lovos identifikatoriaus (vieta) ed_board įrašui.');
     }
 
-    const metadata = occupancyData.metadata ?? {};
-    const timestamp = occupancyData.timestamp ?? new Date().toISOString();
-    const patientCode = occupancyData.patientCode ?? null;
-    const derivedStatus = deriveOccupancyStatusFromPatient(patientCode);
-    const status = occupancyData.status ?? derivedStatus ?? null;
+    const normalized = this.#normalizeOccupancyInput(occupancyData);
+    const metadata = { ...(normalized.metadata ?? {}) };
+    const timestamp = normalized.timestamp ?? new Date().toISOString();
+    const patientCode = normalized.patientCode ?? null;
+    const status = normalized.status ?? null;
     const denormalizedStatus = status ? denormalizeBoardStatus(status) ?? status : null;
+    const occupancyFlag = normalized.occupancy ?? null;
 
     const payload = {
-      vieta: occupancyData.bedId,
+      vieta: normalized.bedId,
       busena: denormalizedStatus,
       pacientas: patientCode,
-      komentaras: occupancyData.notes ?? null,
+      occupancy: occupancyFlag,
+      komentaras: normalized.notes ?? null,
       slaugytojas:
-        occupancyData.createdBy
-        ?? occupancyData.email
+        normalized.createdBy
+        ?? normalized.email
         ?? metadata.nurse
         ?? null,
       padejejas: metadata.assistant ?? null,
@@ -362,26 +473,32 @@ export class DataPersistenceManager {
   async saveOccupancyData(occupancyData) {
     if (!occupancyData) return false;
 
+    const normalizedOccupancy = this.#normalizeOccupancyInput(occupancyData);
+    if (!normalizedOccupancy) {
+      return false;
+    }
+
     if (!this.#isSupabaseAvailable()) {
       const records = createLocalArray(LOCAL_STORAGE_KEYS.occupancyData);
-      records.push(occupancyData);
+      records.push(normalizedOccupancy);
       if (records.length > MAX_LOCAL_ITEMS) {
         records.splice(0, records.length - MAX_LOCAL_ITEMS);
       }
       saveLocalArray(LOCAL_STORAGE_KEYS.occupancyData, records);
-      this.#updateLocalLastSync(occupancyData.timestamp);
-      this.lastSyncCache = occupancyData.timestamp;
+      const latestTimestamp = normalizedOccupancy.timestamp ?? new Date().toISOString();
+      this.#updateLocalLastSync(latestTimestamp);
+      this.lastSyncCache = latestTimestamp;
       return true;
     }
 
     await this.#ensureBedsLoaded();
 
     const payload = this.#buildBoardPayload({
-      ...occupancyData,
+      ...normalizedOccupancy,
       metadata: {
-        ...(occupancyData.metadata ?? {}),
+        ...(normalizedOccupancy.metadata ?? {}),
         source: 'web_form',
-        originalTimestamp: occupancyData.timestamp,
+        originalTimestamp: normalizedOccupancy.timestamp,
       },
     });
 
@@ -395,7 +512,7 @@ export class DataPersistenceManager {
       throw new Error(`Nepavyko išsaugoti lovos užimtumo nuotolinėje paslaugoje: ${error.message}`);
     }
 
-    const createdAt = data?.[0]?.updated_at ?? occupancyData.timestamp ?? new Date().toISOString();
+    const createdAt = data?.[0]?.updated_at ?? normalizedOccupancy.timestamp ?? new Date().toISOString();
     this.lastSyncCache = createdAt;
     return true;
   }
@@ -420,6 +537,12 @@ export class DataPersistenceManager {
       },
       { key: 'status_metadata', select: 'status_metadata', optional: true },
       { key: 'status_created_at', select: 'status_created_at' },
+      {
+        key: 'occupancy',
+        select: 'occupancy',
+        optional: true,
+        fallbacks: ['occupancy_flag', 'is_occupied'],
+      },
       { key: 'occupancy_state', select: 'occupancy_state' },
       { key: 'patient_code', select: 'patient_code' },
       { key: 'expected_until', select: 'expected_until' },
@@ -554,20 +677,34 @@ export class DataPersistenceManager {
 
         const statusCreatedAt = normalizeIsoTimestamp(row.status_created_at);
         const occupancyCreatedAt = normalizeIsoTimestamp(row.occupancy_created_at);
+        const occupancyFlag = normalizeOccupancyFlag(
+          row.occupancy
+            ?? row.occupancy_flag
+            ?? row.is_occupied
+            ?? row.occupied
+            ?? row.occupancy_state
+            ?? null,
+        );
         const hasBoardInfo = Boolean(
           occupancyCreatedAt
           || hasText(row.patient_code)
           || hasText(row.occupancy_notes)
+          || typeof occupancyFlag === 'boolean'
           || (row.occupancy_metadata && Object.keys(row.occupancy_metadata).length > 0),
         );
         const rawOccupancy = hasText(row.occupancy_state) ? row.occupancy_state : null;
         const normalizedOccupancy = normalizeBoardStatus(rawOccupancy);
-        const derivedOccupancy = hasBoardInfo ? deriveOccupancyStatusFromPatient(row.patient_code) : null;
+        const derivedOccupancy = hasBoardInfo
+          ? deriveOccupancyStatus({ occupancyValue: occupancyFlag, patientValue: row.patient_code })
+          : null;
         const occupancyMetadata = {
           ...(row.occupancy_metadata ?? {}),
         };
         if (!occupancyMetadata.source) {
           occupancyMetadata.source = 'ed_board';
+        }
+        if (typeof occupancyFlag === 'boolean' && occupancyMetadata.occupancy === undefined) {
+          occupancyMetadata.occupancy = occupancyFlag;
         }
         if (rawOccupancy && !occupancyMetadata.rawStatus) {
           occupancyMetadata.rawStatus = rawOccupancy;
@@ -583,6 +720,7 @@ export class DataPersistenceManager {
           statusCreatedAt,
           statusMetadata: row.status_metadata ?? {},
           occupancyState: normalizedOccupancy ?? rawOccupancy ?? derivedOccupancy ?? null,
+          occupancy: typeof occupancyFlag === 'boolean' ? occupancyFlag : null,
           patientCode: row.patient_code ?? null,
           expectedUntil: row.expected_until ?? null,
           occupancyNotes: row.occupancy_notes ?? null,
@@ -649,6 +787,18 @@ export class DataPersistenceManager {
       const occupancyRecord = latestOccupancy.get(bedId) ?? null;
       const statusCreatedAt = statusRecord ? normalizeIsoTimestamp(statusRecord.timestamp) : null;
       const occupancyCreatedAt = occupancyRecord ? normalizeIsoTimestamp(occupancyRecord.timestamp) : null;
+      const occupancyFlag = normalizeOccupancyFlag(
+        occupancyRecord?.occupancy
+          ?? occupancyRecord?.metadata?.occupancy
+          ?? null,
+      );
+      const occupancyState = occupancyRecord
+        ? occupancyRecord.status
+          ?? deriveOccupancyStatus({
+            occupancyValue: occupancyFlag,
+            patientValue: occupancyRecord.patientCode,
+          })
+        : null;
 
       latest = pickLatestTimestamp(latest, statusCreatedAt);
       latest = pickLatestTimestamp(latest, occupancyCreatedAt);
@@ -662,7 +812,8 @@ export class DataPersistenceManager {
         statusReportedBy: statusRecord?.email ?? null,
         statusCreatedAt,
         statusMetadata: statusRecord?.metadata ?? {},
-        occupancyState: occupancyRecord?.status ?? null,
+        occupancyState,
+        occupancy: typeof occupancyFlag === 'boolean' ? occupancyFlag : null,
         patientCode: occupancyRecord?.patientCode ?? null,
         expectedUntil: occupancyRecord?.expectedUntil ?? null,
         occupancyNotes: occupancyRecord?.notes ?? null,
@@ -722,7 +873,7 @@ export class DataPersistenceManager {
     await this.#ensureBedsLoaded();
     const { data, error } = await this.client
       .from('ed_board')
-      .select('vieta, busena, pacientas, komentaras, updated_at, slaugytojas, padejejas, gydytojas, kat')
+      .select('vieta, busena, pacientas, komentaras, updated_at, slaugytojas, padejejas, gydytojas, kat, occupancy')
       .order('updated_at', { ascending: true });
 
     if (error) {

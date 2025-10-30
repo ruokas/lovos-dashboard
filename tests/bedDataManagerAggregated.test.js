@@ -15,6 +15,7 @@ describe('BedDataManager.applyAggregatedState', () => {
         statusReportedBy: 'nurse@example.com',
         statusCreatedAt: statusTimestamp,
         occupancyState: 'occupied',
+        occupancy: true,
         occupancyCreatedAt: occupancyTimestamp,
       },
     ]);
@@ -49,7 +50,7 @@ describe('BedDataManager.applyAggregatedState', () => {
     expect(bed.notifications).toHaveLength(0);
   });
 
-  it('kai lentelėje nėra būsenos, užimtumą nustato pagal pacientą', () => {
+  it('kai lentelėje nėra būsenos, užimtumą nustato pagal occupancy lauką', () => {
     const manager = new BedDataManager();
 
     manager.applyAggregatedState([
@@ -57,15 +58,36 @@ describe('BedDataManager.applyAggregatedState', () => {
         bedId: '1',
         occupancyState: null,
         occupancyCreatedAt: '2024-02-01T08:15:00.000Z',
-        patientCode: 'PAC-123',
+        occupancy: true,
+        patientCode: '',
         occupancyCreatedBy: 'slaugytoja@example.com',
       },
     ]);
 
     const bed = manager.beds.get('1');
     expect(bed.occupancyStatus).toBe('occupied');
-    expect(bed.currentPatientCode).toBe('PAC-123');
+    expect(bed.currentPatientCode).toBeNull();
     expect(bed.occupancyAssignedNurse).toBe('slaugytoja@example.com');
+  });
+
+  it('kai occupancy reikšmė false, lova laikoma laisva net jei pacientas nenuvalytas', () => {
+    const manager = new BedDataManager();
+
+    manager.applyAggregatedState([
+      {
+        bedId: '3',
+        occupancyState: null,
+        occupancyCreatedAt: '2024-02-02T10:00:00.000Z',
+        occupancy: false,
+        patientCode: 'PAC-OLD',
+        occupancyCreatedBy: 'nurse.beta@example.com',
+      },
+    ]);
+
+    const bed = manager.beds.get('3');
+    expect(bed.occupancyStatus).toBe('free');
+    expect(bed.currentPatientCode).toBeNull();
+    expect(bed.occupancyAssignedNurse).toBe('nurse.beta@example.com');
   });
 
   it('išsaugo atsakingą slaugytoją ir laisvina lovą kai pacientas pašalintas', () => {

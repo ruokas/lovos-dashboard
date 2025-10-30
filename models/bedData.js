@@ -39,6 +39,43 @@ export const DEFAULT_SETTINGS = {
   notificationsEnabled: true
 };
 
+function normalizeText(value) {
+  if (typeof value !== 'string') {
+    return '';
+  }
+  return value.trim().toLowerCase();
+}
+
+function normalizeOccupancyFlag(value) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) {
+      return null;
+    }
+    return value !== 0;
+  }
+
+  const normalized = normalizeText(value);
+  if (!normalized) {
+    return null;
+  }
+
+  if (['1', 't', 'true', 'y', 'yes', 'occupied', 'uzimta', 'užimta', 'uzimtas', 'užimtas'].includes(normalized)) {
+    return true;
+  }
+
+  if (['0', 'f', 'false', 'n', 'no', 'free', 'laisva', 'laisvas', 'laisvi', 'laisvos', 'available'].includes(normalized)) {
+    return false;
+  }
+
+  return null;
+}
+
 /**
  * Bed data model
  */
@@ -96,12 +133,36 @@ export class BedData {
 
     const timestamp = occupancyData.timestamp ? new Date(occupancyData.timestamp) : null;
     const isValidTimestamp = timestamp instanceof Date && !Number.isNaN(timestamp);
-    const rawStatus = typeof occupancyData.status === 'string'
-      ? occupancyData.status.trim().toLowerCase()
+    const rawStatusText = typeof occupancyData.status === 'string'
+      ? occupancyData.status.trim()
       : '';
-    const hasPatient = typeof occupancyData.patientCode === 'string' && occupancyData.patientCode.trim() !== '';
-    const derivedStatus = hasPatient ? 'occupied' : 'free';
-    const normalizedStatus = rawStatus || derivedStatus;
+    const rawStatus = rawStatusText.toLowerCase();
+    const occupancyFlag = normalizeOccupancyFlag(
+      occupancyData.occupancy
+        ?? occupancyData.metadata?.occupancy
+        ?? occupancyData.isOccupied
+        ?? occupancyData.metadata?.isOccupied
+        ?? null,
+    );
+    const patientValue = typeof occupancyData.patientCode === 'string'
+      ? occupancyData.patientCode.trim()
+      : '';
+    const hasPatient = occupancyFlag !== false && patientValue !== '';
+    const derivedStatus = occupancyFlag === true
+      ? 'occupied'
+      : occupancyFlag === false
+        ? 'free'
+        : hasPatient
+          ? 'occupied'
+          : 'free';
+    const overrideStatuses = [
+      'occupied', 'užimta', 'uzimta', 'užimtas', 'uzimtas',
+      'free', 'laisva', 'laisvas', 'laisvi', 'laisvos', 'available',
+    ];
+    const shouldOverrideWithDerived = occupancyFlag !== null
+      ? (!rawStatusText || overrideStatuses.includes(rawStatus))
+      : !rawStatusText;
+    const normalizedStatus = shouldOverrideWithDerived ? derivedStatus : rawStatus;
 
     this.currentPatientCode = hasPatient ? occupancyData.patientCode : null;
 
@@ -337,12 +398,16 @@ export class BedDataManager {
         bed.lastCheckedEmail = record.statusReportedBy ?? null;
       }
 
+      const aggregatedOccupancyFlag = normalizeOccupancyFlag(
+        record.occupancy ?? record.occupancyMetadata?.occupancy ?? null,
+      );
       bed.updateOccupancy({
         bedId,
         status: record.occupancyState ?? null,
         timestamp: record.occupancyCreatedAt ?? null,
         patientCode: record.patientCode ?? null,
         createdBy: record.occupancyCreatedBy ?? null,
+        occupancy: aggregatedOccupancyFlag,
         metadata: record.occupancyMetadata ?? {},
       });
 
@@ -393,16 +458,33 @@ export class BedDataManager {
       if (!allowUpdate) {
         return false;
       }
-      this.occupancyData[existingIndex] = occupancyData;
+      const normalized = {
+        ...occupancyData,
+        occupancy: normalizeOccupancyFlag(
+          occupancyData.occupancy ?? occupancyData.metadata?.occupancy ?? null,
+        ),
+      };
+      this.occupancyData[existingIndex] = normalized;
     } else {
-      this.occupancyData.push(occupancyData);
+      const normalized = {
+        ...occupancyData,
+        occupancy: normalizeOccupancyFlag(
+          occupancyData.occupancy ?? occupancyData.metadata?.occupancy ?? null,
+        ),
+      };
+      this.occupancyData.push(normalized);
       if (recordId) {
         this.occupancyRecordIndex.set(recordId, this.occupancyData.length - 1);
       }
     }
     const bed = this.beds.get(occupancyData.bedId);
     if (bed) {
-      bed.updateOccupancy(occupancyData);
+      bed.updateOccupancy({
+        ...occupancyData,
+        occupancy: normalizeOccupancyFlag(
+          occupancyData.occupancy ?? occupancyData.metadata?.occupancy ?? null,
+        ),
+      });
       bed.calculateNotifications(this.settings);
     }
     return true;

@@ -15,6 +15,7 @@ create table if not exists public.ed_board (
   kat numeric,
   pacientas text,
   busena text,
+  occupancy boolean,
   komentaras text,
   updated_at timestamptz default timezone('utc', now())
 );
@@ -29,6 +30,7 @@ create view public.ed_board_events as
     e.vieta,
     b.id as bed_id,
     e.busena,
+    e.occupancy,
     e.pacientas,
     e.komentaras,
     e.slaugytojas,
@@ -56,6 +58,7 @@ create view public.aggregated_bed_state as
     select distinct on (e.vieta)
       e.vieta,
       e.busena,
+      e.occupancy,
       e.pacientas,
       e.komentaras,
       e.slaugytojas,
@@ -80,6 +83,7 @@ create view public.aggregated_bed_state as
     ls.metadata as status_metadata,
     ls.created_at as status_created_at,
     lb.busena as occupancy_state,
+    lb.occupancy as occupancy,
     lb.pacientas as patient_code,
     null::timestamptz as expected_until,
     lb.komentaras as occupancy_notes,
@@ -88,7 +92,8 @@ create view public.aggregated_bed_state as
       'nurse', lb.slaugytojas,
       'assistant', lb.padejejas,
       'doctor', lb.gydytojas,
-      'kat', lb.kat
+      'kat', lb.kat,
+      'occupancy', lb.occupancy
     )) as occupancy_metadata,
     lb.updated_at as occupancy_created_at,
     greatest(

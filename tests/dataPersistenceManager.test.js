@@ -76,6 +76,7 @@ function createSupabaseMock() {
         padejejas: 'assistant@example.com',
         gydytojas: null,
         kat: 2,
+        occupancy: true,
         updated_at: '2024-01-01T09:00:00.000Z',
       },
     ],
@@ -108,6 +109,7 @@ function createSupabaseMock() {
         occupancy_notes: 'Pastaba',
         occupancy_created_by: 'nurse@example.com',
         occupancy_metadata: { nurse: 'nurse@example.com' },
+        occupancy: true,
         occupancy_created_at: '2024-01-01T09:00:00.000Z',
       },
     ],
@@ -191,7 +193,7 @@ describe('DataPersistenceManager with Supabase', () => {
     });
   });
 
-  it('saugodamas užimtumą nustato būseną pagal pacientą, jei ji nepateikta', async () => {
+  it('saugodamas užimtumą nustato occupancy lauką pagal paciento reikšmę, jei statusas nepateiktas', async () => {
     await manager.saveOccupancyData({
       bedId: 'IT1',
       patientCode: 'PX1',
@@ -206,6 +208,7 @@ describe('DataPersistenceManager with Supabase', () => {
       vieta: 'IT1',
       pacientas: 'PX1',
       busena: 'Užimta',
+      occupancy: true,
       komentaras: 'Pacientas įvestas ranka',
       updated_at: '2024-01-01T11:30:00.000Z',
     });
@@ -235,6 +238,7 @@ describe('DataPersistenceManager with Supabase', () => {
         bedId: 'IT1',
         status: 'occupied',
         patientCode: 'P123',
+        occupancy: true,
         expectedUntil: null,
         notes: 'Pastaba',
         createdBy: 'nurse@example.com',
@@ -244,12 +248,13 @@ describe('DataPersistenceManager with Supabase', () => {
           assistant: 'assistant@example.com',
           rawStatus: 'Užimta',
           kat: 2,
+          occupancy: true,
         },
       },
     ]);
   });
 
-  it('nustato užimtumą pagal pacientą, kai lentelėje nėra būsenos', async () => {
+  it('nustato užimtumą pagal occupancy lauką', async () => {
     supabaseMock.__mocks.occupancySelectOrder.mockResolvedValueOnce({
       data: [
         {
@@ -262,6 +267,7 @@ describe('DataPersistenceManager with Supabase', () => {
           padejejas: null,
           gydytojas: null,
           kat: null,
+          occupancy: true,
           updated_at: '2024-01-01T12:00:00.000Z',
         },
         {
@@ -274,6 +280,7 @@ describe('DataPersistenceManager with Supabase', () => {
           padejejas: null,
           gydytojas: null,
           kat: null,
+          occupancy: false,
           updated_at: '2024-01-01T13:00:00.000Z',
         },
       ],
@@ -289,11 +296,13 @@ describe('DataPersistenceManager with Supabase', () => {
         bedId: 'IT2',
         status: 'occupied',
         patientCode: 'P999',
+        occupancy: true,
         expectedUntil: null,
         notes: null,
         createdBy: null,
         metadata: {
           source: 'ed_board',
+          occupancy: true,
         },
       },
       {
@@ -302,12 +311,14 @@ describe('DataPersistenceManager with Supabase', () => {
         bedId: 'IT3',
         status: 'free',
         patientCode: '',
+        occupancy: false,
         expectedUntil: null,
         notes: 'Be paciento',
         createdBy: 'nurse2@example.com',
         metadata: {
           source: 'ed_board',
           nurse: 'nurse2@example.com',
+          occupancy: false,
         },
       },
     ]);
@@ -328,6 +339,7 @@ describe('DataPersistenceManager with Supabase', () => {
         statusCreatedAt: '2024-01-01T10:00:00.000Z',
         statusMetadata: { description: 'Pastaba' },
         occupancyState: 'occupied',
+        occupancy: true,
         patientCode: 'P123',
         expectedUntil: null,
         occupancyNotes: 'Pastaba',
@@ -337,13 +349,14 @@ describe('DataPersistenceManager with Supabase', () => {
           nurse: 'nurse@example.com',
           source: 'ed_board',
           rawStatus: 'Užimta',
+          occupancy: true,
         },
       },
     ]);
     expect(manager.lastSyncCache).toBe('2024-01-01T10:00:00.000Z');
   });
 
-  it('agreguotoje suvestinėje būseną nustato pagal pacientą, jei busena tuščia', async () => {
+  it('agreguotoje suvestinėje būseną nustato pagal occupancy lauką, jei busena tuščia', async () => {
     supabaseMock.__mocks.aggregatedSelect.mockResolvedValueOnce({
       data: [
         {
@@ -356,11 +369,12 @@ describe('DataPersistenceManager with Supabase', () => {
           status_metadata: {},
           status_created_at: null,
           occupancy_state: null,
-          patient_code: 'P555',
+          patient_code: null,
           expected_until: null,
           occupancy_notes: null,
           occupancy_created_by: null,
           occupancy_metadata: null,
+          occupancy: true,
           occupancy_created_at: '2024-01-01T14:00:00.000Z',
         },
       ],
@@ -380,13 +394,15 @@ describe('DataPersistenceManager with Supabase', () => {
         statusCreatedAt: null,
         statusMetadata: {},
         occupancyState: 'occupied',
-        patientCode: 'P555',
+        occupancy: true,
+        patientCode: null,
         expectedUntil: null,
         occupancyNotes: null,
         occupancyCreatedBy: null,
         occupancyCreatedAt: '2024-01-01T14:00:00.000Z',
         occupancyMetadata: {
           source: 'ed_board',
+          occupancy: true,
         },
       },
     ]);
@@ -685,6 +701,8 @@ describe('DataPersistenceManager local režime', () => {
           status: 'occupied',
           timestamp: occupancyTimestamp,
           createdBy: 'porter@example.com',
+          occupancy: true,
+          metadata: { occupancy: true },
         },
       ]),
     );
@@ -697,6 +715,7 @@ describe('DataPersistenceManager local režime', () => {
     expect(target.statusNotes).toBe('Trūksta lašelinės');
     expect(target.statusCreatedAt).toBe(statusTimestamp);
     expect(target.occupancyState).toBe('occupied');
+    expect(target.occupancy).toBe(true);
     expect(target.occupancyCreatedAt).toBe(occupancyTimestamp);
     expect(manager.lastSyncCache).toBe(statusTimestamp);
     expect(global.localStorage.getItem('bed-management-last-sync')).toBe(statusTimestamp);
