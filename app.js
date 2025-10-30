@@ -588,9 +588,18 @@ export class BedManagementApp {
       });
     }
 
+    const taskSearchLabel = document.querySelector('label[for="taskSearch"]');
+    const searchLabelText = t(texts.tasks.searchLabel);
+    if (taskSearchLabel) {
+      taskSearchLabel.textContent = searchLabelText;
+    }
+
     const taskSearchInput = document.getElementById('taskSearch');
     if (taskSearchInput) {
       taskSearchInput.placeholder = t(texts.tasks.searchPlaceholder);
+      if (searchLabelText) {
+        taskSearchInput.setAttribute('aria-label', searchLabelText);
+      }
       taskSearchInput.addEventListener('input', (event) => {
         this.handleTaskSearch(event.target.value ?? '');
       });

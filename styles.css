@@ -183,10 +183,74 @@
   background: var(--gray-400);
 }
 
-.status-pill { 
-  border-radius: var(--radius-full); 
-  padding: var(--space-1) var(--space-2); 
-  font-weight: 700; 
+.task-filter-container {
+  gap: var(--space-4);
+}
+
+.task-filter-group {
+  gap: var(--space-3);
+}
+
+.task-filter-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.task-filter-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.task-filter-control {
+  min-height: 2.75rem;
+  line-height: 1.25rem;
+  border-radius: var(--radius-md);
+}
+
+.task-filter-field-set {
+  gap: var(--space-3);
+}
+
+.task-filter-icon {
+  height: 100%;
+}
+
+.task-filter-icon svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+@media (min-width: 768px) {
+  .task-filter-group {
+    align-items: flex-end;
+  }
+
+  .task-filter-field-set {
+    display: flex;
+    align-items: flex-end;
+  }
+}
+
+@media (min-width: 1280px) {
+  .task-filter-group {
+    align-items: center;
+  }
+
+  .task-filter-field-set {
+    align-items: center;
+  }
+
+  .task-filter-field {
+    min-width: 160px;
+  }
+}
+
+.status-pill {
+  border-radius: var(--radius-full);
+  padding: var(--space-1) var(--space-2);
+  font-weight: 700;
   font-size: 0.75rem;
   display: inline-block; 
   max-width: 100%; 

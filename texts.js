@@ -60,6 +60,7 @@ export const texts = {
   tasks: {
     title: { lt: 'Skyrių užduotys', en: 'Ward tasks' },
     empty: { lt: 'Nėra užduočių pagal pasirinktus filtrus.', en: 'No tasks match the selected filters.' },
+    searchLabel: { lt: 'Paieška', en: 'Search' },
     searchPlaceholder: { lt: 'Ieškoti užduoties...', en: 'Search tasks…' },
     statusFilterLabel: { lt: 'Būsena', en: 'Status' },
     channelFilterLabel: { lt: 'Kanalas', en: 'Channel' },
