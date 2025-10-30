@@ -1,4 +1,5 @@
 import { STATUS_OPTIONS, DEFAULT_SETTINGS } from '../models/bedData.js';
+import { TASK_PRIORITIES, TASK_STATUSES } from '../models/taskData.js';
 
 const SUPABASE_SOURCE = 'supabase';
 const LOCAL_SOURCE = 'local';
@@ -11,6 +12,16 @@ const ATTENTION_STATUSES = new Set([
 const PRIORITY_BUCKETS = {
   high: (priority) => priority !== null && priority !== undefined && priority <= 1,
   medium: (priority) => priority === 2,
+};
+
+const TASK_SLA_THRESHOLD_MINUTES = 60;
+
+const TASK_SLA_LABELS = {
+  completed: 'Įvykdyta',
+  breach: 'Viršytas terminas',
+  due_soon: 'Artėja terminas',
+  on_track: 'Laiku',
+  no_due: 'Terminas nenustatytas',
 };
 
 function toNumber(value, fallback = 0) {
@@ -32,12 +43,55 @@ function safeDate(value) {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
+function parseTaskPriority(value) {
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric)) {
+    return TASK_PRIORITIES.MEDIUM;
+  }
+  return Math.min(Math.max(numeric, TASK_PRIORITIES.CRITICAL), TASK_PRIORITIES.LOW);
+}
+
+function normaliseTaskStatus(value) {
+  if (!value) {
+    return TASK_STATUSES.PLANNED;
+  }
+  const allowed = new Set(Object.values(TASK_STATUSES));
+  return allowed.has(value) ? value : TASK_STATUSES.PLANNED;
+}
+
+function minutesBetween(later, earlier) {
+  if (!(later instanceof Date) || !(earlier instanceof Date)) {
+    return null;
+  }
+  return Math.round((later.getTime() - earlier.getTime()) / (1000 * 60));
+}
+
+function escapeCsvValue(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  const stringValue = String(value);
+  if (/[",\n]/.test(stringValue)) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+  return stringValue;
+}
+
+function escapePdfText(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  const ascii = String(value).normalize('NFKD').replace(/[\u0300-\u036f]/g, '');
+  return ascii.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)');
+}
+
 export class ReportingService {
   constructor(options = {}) {
     this.client = options.client ?? null;
     this.bedDataManager = options.bedDataManager ?? null;
     this.notificationManager = options.notificationManager ?? null;
     this.settings = options.settings ?? null;
+    this.taskManager = options.taskManager ?? null;
   }
 
   setClient(client) {
@@ -46,6 +100,10 @@ export class ReportingService {
 
   setSettings(settings) {
     this.settings = settings;
+  }
+
+  setTaskManager(taskManager) {
+    this.taskManager = taskManager;
   }
 
   #resolveSettings() {
@@ -60,6 +118,7 @@ export class ReportingService {
 
   getLocalSnapshot() {
     if (!this.bedDataManager) {
+      const taskData = this.#buildTaskExportData();
       return {
         source: LOCAL_SOURCE,
         generatedAt: new Date().toISOString(),
@@ -76,6 +135,9 @@ export class ReportingService {
           recentlyFreedBeds: 0,
         },
         notifications: { total: 0, high: 0, medium: 0, low: 0 },
+        taskMetrics: taskData.metrics,
+        sharedTasks: taskData.items,
+        taskEvents: taskData.events,
       };
     }
 
@@ -84,6 +146,7 @@ export class ReportingService {
     const notificationStats = this.notificationManager?.getNotificationStats
       ? this.notificationManager.getNotificationStats(beds)
       : { total: 0, high: 0, medium: 0, low: 0 };
+    const taskData = this.#buildTaskExportData();
 
     return {
       source: LOCAL_SOURCE,
@@ -101,6 +164,9 @@ export class ReportingService {
         recentlyFreedBeds: stats.recentlyFreedBeds ?? 0,
       },
       notifications: notificationStats,
+      taskMetrics: taskData.metrics,
+      sharedTasks: taskData.items,
+      taskEvents: taskData.events,
     };
   }
 
@@ -118,8 +184,14 @@ export class ReportingService {
         throw error;
       }
 
+      const taskData = this.#buildTaskExportData();
+      const taskOverlay = taskData.items.length || taskData.events.length
+        ? { taskMetrics: taskData.metrics, sharedTasks: taskData.items, taskEvents: taskData.events }
+        : {};
+
       return {
         ...this.#aggregateSupabaseSnapshot(data ?? []),
+        ...taskOverlay,
         source: SUPABASE_SOURCE,
         generatedAt: new Date().toISOString(),
       };
@@ -204,11 +276,20 @@ export class ReportingService {
 
   async exportReport(options = {}) {
     const { format = 'json', signal } = options;
+    const normalizedFormat = ['csv', 'json', 'pdf'].includes(String(format).toLowerCase())
+      ? String(format).toLowerCase()
+      : 'json';
+
+    if (normalizedFormat === 'pdf') {
+      const taskData = this.#buildTaskExportData();
+      const buffer = this.#generateTaskPdfBuffer(taskData);
+      return { format: 'pdf', data: buffer };
+    }
+
     if (!this.client) {
       throw new Error('Nuotolinės paslaugos klientas nepasiekiamas');
     }
 
-    const normalizedFormat = format === 'csv' ? 'csv' : 'json';
     const { data: sessionData, error: sessionError } = await this.client.auth.getSession();
     if (sessionError) {
       throw sessionError;
@@ -235,11 +316,11 @@ export class ReportingService {
 
     if (normalizedFormat === 'csv') {
       const text = await response.text();
-      return { format: normalizedFormat, data: text };
+      return { format: normalizedFormat, data: this.#appendTasksToCsv(text) };
     }
 
     const payload = await response.json();
-    return { format: normalizedFormat, data: payload };
+    return { format: normalizedFormat, data: this.#enrichPayloadWithTasks(payload) };
   }
 
   async #performInteractionQuery({ select, orderBy, limit }) {
@@ -334,6 +415,247 @@ export class ReportingService {
       }
     }
     return {};
+  }
+
+  #buildTaskExportData() {
+    if (!this.taskManager?.getTasks) {
+      return { metrics: null, items: [], events: [] };
+    }
+
+    const tasks = this.taskManager.getTasks();
+    const now = new Date();
+
+    const items = tasks.map((task) => {
+      const dueAt = safeDate(task.dueAt ?? task.deadline);
+      const createdAt = safeDate(task.createdAt);
+      const updatedAt = safeDate(task.updatedAt);
+      const priority = parseTaskPriority(task.priority);
+      const status = normaliseTaskStatus(task.status);
+      const sla = this.#classifyTaskSla(status, dueAt, now);
+
+      return {
+        id: task.id,
+        title: task.title ?? task.typeLabel ?? task.type ?? 'Užduotis',
+        description: task.description ?? '',
+        channel: task.channelLabel ?? task.channel ?? '',
+        responsible: task.responsible ?? '',
+        priority,
+        status,
+        dueAt: dueAt ? dueAt.toISOString() : null,
+        createdAt: createdAt ? createdAt.toISOString() : null,
+        updatedAt: updatedAt ? updatedAt.toISOString() : null,
+        sla,
+        source: task.source ?? 'local',
+      };
+    });
+
+    const metrics = items.reduce((acc, task) => {
+      acc.total += 1;
+      if (task.priority <= TASK_PRIORITIES.CRITICAL) {
+        acc.critical += 1;
+      } else if (task.priority === TASK_PRIORITIES.HIGH) {
+        acc.high += 1;
+      } else if (task.priority === TASK_PRIORITIES.MEDIUM) {
+        acc.medium += 1;
+      } else {
+        acc.low += 1;
+      }
+
+      if (task.status === TASK_STATUSES.COMPLETED) {
+        acc.completed += 1;
+      } else if (task.sla.code === 'breach') {
+        acc.overdue += 1;
+      } else if (task.sla.code === 'due_soon') {
+        acc.dueSoon += 1;
+      } else {
+        acc.onTrack += 1;
+      }
+      return acc;
+    }, { total: 0, critical: 0, high: 0, medium: 0, low: 0, overdue: 0, dueSoon: 0, onTrack: 0, completed: 0 });
+
+    const events = this.#buildTaskEvents(items);
+
+    return { metrics, items, events };
+  }
+
+  #classifyTaskSla(status, dueAt, now) {
+    if (status === TASK_STATUSES.COMPLETED) {
+      return { code: 'completed', label: TASK_SLA_LABELS.completed, minutesUntilDue: null };
+    }
+
+    if (!dueAt) {
+      return { code: 'no_due', label: TASK_SLA_LABELS.no_due, minutesUntilDue: null };
+    }
+
+    const minutesUntilDue = Math.round((dueAt.getTime() - now.getTime()) / (1000 * 60));
+    if (minutesUntilDue < 0) {
+      return { code: 'breach', label: TASK_SLA_LABELS.breach, minutesUntilDue };
+    }
+
+    if (minutesUntilDue <= TASK_SLA_THRESHOLD_MINUTES) {
+      return { code: 'due_soon', label: TASK_SLA_LABELS.due_soon, minutesUntilDue };
+    }
+
+    return { code: 'on_track', label: TASK_SLA_LABELS.on_track, minutesUntilDue };
+  }
+
+  #buildTaskEvents(tasks) {
+    const events = [];
+    tasks.forEach((task) => {
+      if (task.createdAt) {
+        events.push({
+          id: `${task.id}-created`,
+          taskId: task.id,
+          type: 'created',
+          status: task.status,
+          occurredAt: task.createdAt,
+        });
+      }
+
+      if (task.updatedAt && task.updatedAt !== task.createdAt) {
+        events.push({
+          id: `${task.id}-updated`,
+          taskId: task.id,
+          type: 'updated',
+          status: task.status,
+          occurredAt: task.updatedAt,
+        });
+      }
+
+      if (task.status === TASK_STATUSES.COMPLETED && task.updatedAt) {
+        events.push({
+          id: `${task.id}-completed`,
+          taskId: task.id,
+          type: 'completed',
+          status: task.status,
+          occurredAt: task.updatedAt,
+        });
+      }
+    });
+
+    return events
+      .filter((event) => Boolean(event.occurredAt))
+      .sort((a, b) => new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime());
+  }
+
+  #appendTasksToCsv(csvText) {
+    const taskData = this.#buildTaskExportData();
+    if (!taskData.items.length && !taskData.events.length) {
+      return csvText;
+    }
+
+    const lines = [];
+    if (csvText) {
+      lines.push(csvText.trimEnd());
+      lines.push('');
+    }
+
+    if (taskData.items.length) {
+      lines.push('"Bendros užduotys"');
+      lines.push('id,title,status,due_at,priority,responsible,channel,sla_label,minutes_until_due');
+      taskData.items.forEach((task) => {
+        lines.push([
+          escapeCsvValue(task.id),
+          escapeCsvValue(task.title),
+          escapeCsvValue(task.status),
+          escapeCsvValue(task.dueAt ?? ''),
+          escapeCsvValue(task.priority),
+          escapeCsvValue(task.responsible),
+          escapeCsvValue(task.channel),
+          escapeCsvValue(task.sla.label),
+          escapeCsvValue(task.sla.minutesUntilDue ?? ''),
+        ].join(','));
+      });
+      lines.push('');
+    }
+
+    if (taskData.events.length) {
+      lines.push('"task_events"');
+      lines.push('event_id,task_id,type,status,occurred_at');
+      taskData.events.forEach((event) => {
+        lines.push([
+          escapeCsvValue(event.id),
+          escapeCsvValue(event.taskId),
+          escapeCsvValue(event.type),
+          escapeCsvValue(event.status),
+          escapeCsvValue(event.occurredAt),
+        ].join(','));
+      });
+    }
+
+    return lines.join('\n');
+  }
+
+  #enrichPayloadWithTasks(payload) {
+    const taskData = this.#buildTaskExportData();
+    if (!taskData.items.length && !taskData.events.length) {
+      return payload;
+    }
+    return {
+      ...payload,
+      taskMetrics: taskData.metrics,
+      sharedTasks: taskData.items,
+      taskEvents: taskData.events,
+    };
+  }
+
+  #generateTaskPdfBuffer(taskData) {
+    if (!taskData.items.length && !taskData.events.length) {
+      return new Uint8Array();
+    }
+
+    const sections = [];
+    sections.push('Bendros užduotys');
+    taskData.items.forEach((task, index) => {
+      const dueLabel = task.dueAt ? new Date(task.dueAt).toLocaleString('lt-LT') : '—';
+      const line = `${index + 1}. ${task.title} – ${task.sla.label} (iki ${dueLabel})`;
+      sections.push(line);
+    });
+
+    if (taskData.events.length) {
+      sections.push('');
+      sections.push('task_events');
+      taskData.events.forEach((event) => {
+        const timestamp = event.occurredAt ? new Date(event.occurredAt).toLocaleString('lt-LT') : '—';
+        sections.push(`• ${event.type} (${event.status}) – ${timestamp}`);
+      });
+    }
+
+    const commands = sections
+      .map((line, index) => `${index === 0 ? '' : 'T* ' }(${escapePdfText(line)}) Tj`)
+      .join('\n');
+
+    const content = `BT /F1 12 Tf 48 800 Td 14 TL ${commands} ET`;
+    const encoder = new TextEncoder();
+    const contentBytes = encoder.encode(content);
+
+    const objects = [];
+    const addObject = (body) => {
+      const object = `${objects.length + 1} 0 obj\n${body}\nendobj\n`;
+      objects.push(object);
+      return objects.length;
+    };
+
+    addObject('<< /Type /Catalog /Pages 2 0 R >>');
+    addObject('<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+    addObject('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>');
+    addObject(`<< /Length ${contentBytes.length} >>\nstream\n${content}\nendstream`);
+    addObject('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>');
+
+    const header = '%PDF-1.4\n';
+    const body = objects.join('');
+    let offset = header.length;
+    const xrefEntries = ['0000000000 65535 f \n'];
+
+    objects.forEach((object) => {
+      xrefEntries.push(`${String(offset).padStart(10, '0')} 00000 n \n`);
+      offset += object.length;
+    });
+
+    const xref = `xref\n0 ${objects.length + 1}\n${xrefEntries.join('')}`;
+    const trailer = `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${header.length + body.length}\n%%EOF`;
+    const pdfString = header + body + xref + trailer;
+    return encoder.encode(pdfString);
   }
 
   #aggregateSupabaseSnapshot(rows) {

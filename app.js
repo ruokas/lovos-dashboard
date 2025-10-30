@@ -13,9 +13,10 @@ import { NfcHandler } from './nfc/nfcHandler.js';
 import { ReportingService } from './reports/reportingService.js';
 import { SupabaseAuthManager } from './auth/supabaseAuth.js';
 import { t, texts } from './texts.js';
-import { TaskManager, TASK_STATUSES, TASK_CHANNEL_OPTIONS } from './models/taskData.js';
+import { TaskManager, TASK_STATUSES, TASK_CHANNEL_OPTIONS, TASK_PRIORITIES } from './models/taskData.js';
 import { loadData as loadCsvData, rowsToOccupancyEvents } from './data.js';
 import { clampFontSizeLevel, readStoredFontSizeLevel, storeFontSizeLevel, applyFontSizeLevelToDocument } from './utils/fontSize.js';
+import { materializeRecurringTasks } from './utils/taskScheduler.js';
 
 const HTML_ESCAPE_MAP = {
   '&': '&amp;',
@@ -58,6 +59,7 @@ export class BedManagementApp {
       bedDataManager: this.bedDataManager,
       notificationManager: this.notificationManager,
       settings: this.settingsManager.getSettings(),
+      taskManager: this.taskManager,
     });
     this.userInteractionLogger = new UserInteractionLogger({ document: sharedDocument, client: this.persistenceManager.client });
 
@@ -95,6 +97,7 @@ export class BedManagementApp {
     this.isInitialized = false;
     this.nfcHandler = null;
     this.realtimeChannel = null;
+    this.taskRealtimeChannel = null;
     this.usingCsvOccupancy = false;
     this.isSyncingCsvOccupancy = false;
   }
@@ -121,8 +124,11 @@ export class BedManagementApp {
       // Load saved data
       await this.loadSavedData();
 
+      // Sugeneruokite suplanuotas laboratorijos užduotis prieš paleidžiant signalus
+      materializeRecurringTasks({ taskManager: this.taskManager });
+
       // Mark current notifications as jau matytos, kad realaus laiko įvykiai neskambėtų du kartus
-      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), {
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
         suppressAlerts: true,
         fontSizeLevel: this.fontSizeLevel,
       });
@@ -188,6 +194,34 @@ export class BedManagementApp {
     }
 
     this.realtimeChannel = channel;
+
+    if (this.taskRealtimeChannel) {
+      try {
+        await this.taskRealtimeChannel.unsubscribe();
+      } catch (error) {
+        console.warn('Nepavyko atsisakyti seno užduočių realaus laiko kanalo:', error);
+      }
+    }
+
+    const taskChannel = client.channel('public:tasks');
+    taskChannel
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks' }, (payload) => {
+        const record = payload?.new ?? payload?.old;
+        if (!record) return;
+        void this.handleRealtimeTask(record, payload.eventType ?? payload.type ?? 'INSERT');
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'task_events' }, (payload) => {
+        const record = payload?.new ?? payload?.old;
+        if (!record) return;
+        void this.handleRealtimeTaskEvent(record, payload.eventType ?? payload.type ?? 'INSERT');
+      });
+
+    const taskStatus = await taskChannel.subscribe();
+    if (taskStatus === 'SUBSCRIBED') {
+      console.log('Prisijungta prie bendrų užduočių realaus laiko kanalo.');
+    }
+
+    this.taskRealtimeChannel = taskChannel;
   }
 
   async ensureAuthentication() {
@@ -243,6 +277,15 @@ export class BedManagementApp {
       this.realtimeChannel = null;
     }
 
+    if (this.taskRealtimeChannel) {
+      try {
+        await this.taskRealtimeChannel.unsubscribe();
+      } catch (error) {
+        console.warn('Nepavyko atsisakyti užduočių realaus laiko kanalo po atsijungimo:', error);
+      }
+      this.taskRealtimeChannel = null;
+    }
+
     this.stopAutoRefresh();
 
     if (this.isInitialized) {
@@ -276,7 +319,7 @@ export class BedManagementApp {
         return;
       }
 
-      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), {
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
         fontSizeLevel: this.fontSizeLevel,
       });
       await this.render();
@@ -314,7 +357,9 @@ export class BedManagementApp {
         return;
       }
 
-      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), {
+      materializeRecurringTasks({ taskManager: this.taskManager });
+
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
         fontSizeLevel: this.fontSizeLevel,
       });
       await this.render();
@@ -325,6 +370,126 @@ export class BedManagementApp {
       });
     } catch (error) {
       console.error('Klaida apdorojant realaus laiko užimtumo įvykį:', error);
+    }
+  }
+
+  async handleRealtimeTask(record, eventType = 'INSERT') {
+    try {
+      if (!record) {
+        return;
+      }
+
+      const taskId = record.id ?? record.task_id ?? record.taskId ?? null;
+
+      if ((eventType ?? '').toUpperCase() === 'DELETE') {
+        if (taskId) {
+          this.taskManager.removeTask(taskId);
+          materializeRecurringTasks({ taskManager: this.taskManager });
+          this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
+            fontSizeLevel: this.fontSizeLevel,
+          });
+          await this.render();
+        }
+        return;
+      }
+
+      const taskPayload = {
+        id: taskId ?? undefined,
+        title: record.title ?? record.name ?? record.summary ?? undefined,
+        type: record.type ?? record.category ?? 'logistics',
+        typeLabel: record.type_label ?? record.type ?? record.title ?? 'Logistika',
+        description: record.description ?? record.notes ?? '',
+        responsible: record.responsible ?? record.assignee ?? record.owner ?? '',
+        channel: record.channel ?? 'laboratory',
+        channelLabel: record.channel_label ?? record.channel ?? 'laboratorija',
+        priority: record.priority ?? TASK_PRIORITIES.MEDIUM,
+        dueAt: record.due_at ?? record.dueAt ?? record.deadline ?? null,
+        status: record.status ?? TASK_STATUSES.PLANNED,
+        recurrence: record.recurrence ?? 'none',
+        recurrenceLabel: record.recurrence_label ?? record.recurrence ?? 'none',
+        createdAt: record.created_at ?? record.inserted_at ?? null,
+        updatedAt: record.updated_at ?? record.modified_at ?? record.created_at ?? null,
+        metadata: record.metadata ?? record.meta ?? {},
+        source: 'realtime',
+      };
+
+      this.taskManager.upsertTask(taskPayload);
+      materializeRecurringTasks({ taskManager: this.taskManager });
+
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
+        fontSizeLevel: this.fontSizeLevel,
+      });
+      await this.render();
+
+      void this.userInteractionLogger.logInteraction('realtime_task_received', {
+        payload: { taskId: taskPayload.id, eventType },
+      });
+    } catch (error) {
+      console.error('Klaida apdorojant realaus laiko užduoties įrašą:', error);
+    }
+  }
+
+  async handleRealtimeTaskEvent(record, eventType = 'INSERT') {
+    try {
+      if (!record) {
+        return;
+      }
+
+      const taskId = record.task_id ?? record.taskId ?? record.id ?? null;
+      if (!taskId) {
+        return;
+      }
+
+      if ((eventType ?? '').toUpperCase() === 'DELETE') {
+        return;
+      }
+
+      const updates = {};
+      if (record.status) {
+        updates.status = record.status;
+      }
+      if (record.priority !== undefined && record.priority !== null) {
+        updates.priority = record.priority;
+      }
+      if (record.due_at ?? record.dueAt ?? record.deadline) {
+        updates.dueAt = record.due_at ?? record.dueAt ?? record.deadline;
+      }
+      if (record.responsible ?? record.assignee) {
+        updates.responsible = record.responsible ?? record.assignee;
+      }
+      if (record.channel ?? record.channel_label) {
+        updates.channel = record.channel ?? undefined;
+        updates.channelLabel = record.channel_label ?? record.channel ?? undefined;
+      }
+      if (record.description ?? record.notes) {
+        updates.description = record.description ?? record.notes;
+      }
+      if (record.metadata) {
+        updates.metadata = record.metadata;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        return;
+      }
+
+      if (this.taskManager.hasTask(taskId)) {
+        this.taskManager.updateTask(taskId, updates);
+      } else if (record.task && typeof record.task === 'object') {
+        this.taskManager.upsertTask({ id: taskId, ...record.task, ...updates });
+      }
+
+      materializeRecurringTasks({ taskManager: this.taskManager });
+
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
+        fontSizeLevel: this.fontSizeLevel,
+      });
+      await this.render();
+
+      void this.userInteractionLogger.logInteraction('realtime_task_event_received', {
+        payload: { taskId, eventType },
+      });
+    } catch (error) {
+      console.error('Klaida apdorojant realaus laiko užduoties įvykį:', error);
     }
   }
 
@@ -924,7 +1089,11 @@ export class BedManagementApp {
   async handleTaskCreated(taskPayload) {
     try {
       const savedTask = this.taskManager.addTask(taskPayload);
+      materializeRecurringTasks({ taskManager: this.taskManager });
       this.renderTaskList();
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
+        fontSizeLevel: this.fontSizeLevel,
+      });
       void this.userInteractionLogger.logInteraction('task_created', {
         taskId: savedTask.id,
         channel: savedTask.channel,
@@ -1276,6 +1445,36 @@ export class BedManagementApp {
     return statusMeta[status] ?? statusMeta[TASK_STATUSES.PLANNED];
   }
 
+  getTaskPriorityBadge(priority) {
+    const numeric = Number.isFinite(priority) ? priority : TASK_PRIORITIES.MEDIUM;
+    if (numeric <= TASK_PRIORITIES.CRITICAL) {
+      return {
+        label: t(texts.tasks.badges?.critical) || 'Kritinė',
+        classes: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-200',
+        icon: '🚨',
+      };
+    }
+    if (numeric <= TASK_PRIORITIES.HIGH) {
+      return {
+        label: t(texts.tasks.badges?.high) || 'Didelė svarba',
+        classes: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-100',
+        icon: '⚠️',
+      };
+    }
+    if (numeric <= TASK_PRIORITIES.MEDIUM) {
+      return {
+        label: t(texts.tasks.badges?.medium) || 'Vidutinė',
+        classes: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-100',
+        icon: '🔆',
+      };
+    }
+    return {
+      label: t(texts.tasks.badges?.low) || 'Žema',
+      classes: 'bg-slate-200 text-slate-700 dark:bg-slate-700/50 dark:text-slate-200',
+      icon: 'ℹ️',
+    };
+  }
+
   formatTaskDate(value) {
     if (!value) {
       return t(texts.ui.noData);
@@ -1290,11 +1489,12 @@ export class BedManagementApp {
   }
 
   isTaskOverdue(task) {
-    if (!task?.deadline) {
+    const dueAt = task?.dueAt ?? task?.deadline;
+    if (!dueAt) {
       return false;
     }
 
-    const deadline = new Date(task.deadline);
+    const deadline = new Date(dueAt);
     if (Number.isNaN(deadline.getTime())) {
       return false;
     }
@@ -1371,7 +1571,8 @@ export class BedManagementApp {
 
     listContainer.innerHTML = tasks.map((task) => {
       const statusMeta = this.getTaskStatusBadge(task.status);
-      const deadlineText = this.formatTaskDate(task.deadline);
+      const priorityMeta = this.getTaskPriorityBadge(task.priority);
+      const deadlineText = this.formatTaskDate(task.dueAt ?? task.deadline);
       const createdText = this.formatTaskDate(task.createdAt);
       const recurrenceText = task.recurrenceLabel || t(texts.tasks.recurrence?.none);
       const responsible = task.responsible || t(texts.ui.unknownUser);
@@ -1390,13 +1591,14 @@ export class BedManagementApp {
               <div class="flex flex-wrap items-center gap-2">
                 <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">${escapeHtml(task.typeLabel)}</span>
                 <span class="px-2 py-0.5 rounded-md text-xs font-medium ${statusMeta.classes}">${statusMeta.icon} ${escapeHtml(statusMeta.label)}</span>
+                <span class="px-2 py-0.5 rounded-md text-xs font-medium ${priorityMeta.classes}" title="${escapeHtml(t(texts.tasks.labels?.priority))}">${priorityMeta.icon} ${escapeHtml(priorityMeta.label)}</span>
                 ${overdueBadge}
               </div>
               <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">${escapeHtml(task.description)}</p>
             </div>
             <div class="text-xs text-slate-500 dark:text-slate-300 space-y-1 md:text-right md:w-52">
               <div>${escapeHtml(t(texts.tasks.labels.responsible))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(responsible)}</span></div>
-              <div>${escapeHtml(t(texts.tasks.labels.deadline))}: <span class="font-medium ${deadlineClass}">${escapeHtml(deadlineText)}</span></div>
+              <div>${escapeHtml(t(texts.tasks.labels.due))}: <span class="font-medium ${deadlineClass}">${escapeHtml(deadlineText)}</span></div>
               <div>${escapeHtml(t(texts.tasks.labels.recurrence))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(recurrenceText)}</span></div>
               <div>${escapeHtml(t(texts.tasks.labels.channel))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(task.channelLabel)}</span></div>
               <div>${escapeHtml(t(texts.tasks.labels.created))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(createdText)}</span></div>
@@ -1474,6 +1676,7 @@ export class BedManagementApp {
 
     this.notificationManager.renderNotificationDisplay(this.bedDataManager.getAllBeds(), {
       fontSizeLevel: this.fontSizeLevel,
+      tasks: this.taskManager.getTasks(),
     });
   }
 
@@ -1529,8 +1732,10 @@ export class BedManagementApp {
         await this.applyCsvOccupancyFallback();
       }
 
+      materializeRecurringTasks({ taskManager: this.taskManager });
+
       await this.render();
-      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), {
+      this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
         fontSizeLevel: this.fontSizeLevel,
       });
     } catch (error) {
@@ -1563,6 +1768,7 @@ export class BedManagementApp {
         try {
           await this.persistenceManager.uploadData(file);
           await this.loadSavedData();
+          materializeRecurringTasks({ taskManager: this.taskManager });
           await this.render();
           alert('Duomenys sėkmingai importuoti');
         } catch (error) {

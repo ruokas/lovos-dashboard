@@ -703,6 +703,91 @@
   animation: criticalPulse 1.5s ease-in-out infinite;
 }
 
+.notification-task-summary {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid rgba(148, 163, 184, 0.4);
+  display: grid;
+  gap: 0.75rem;
+}
+
+.dark .notification-task-summary {
+  border-top-color: rgba(148, 163, 184, 0.2);
+}
+
+.notification-task-summary__title {
+  color: rgb(30, 41, 59);
+}
+
+.dark .notification-task-summary__title {
+  color: rgb(226, 232, 240);
+}
+
+.notification-task__section {
+  border-radius: 0.75rem;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background-color: rgba(248, 250, 252, 0.8);
+  padding: 0.75rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.dark .notification-task__section {
+  border-color: rgba(148, 163, 184, 0.2);
+  background-color: rgba(15, 23, 42, 0.6);
+}
+
+.notification-task__section-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.notification-task__section-icon {
+  font-size: 1rem;
+}
+
+.notification-task__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.notification-task {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.notification-task__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.notification-task__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  color: rgb(71, 85, 105);
+}
+
+.dark .notification-task__meta {
+  color: rgb(148, 163, 184);
+}
+
+.notification-task__due {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.notification-task__due-separator {
+  opacity: 0.6;
+}
+
 @keyframes criticalPulse {
   0%, 100% {
     background-color: inherit;

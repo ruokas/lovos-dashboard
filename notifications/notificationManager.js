@@ -3,6 +3,7 @@
  */
 
 import { PRIORITY_LEVELS } from '../models/bedData.js';
+import { TASK_PRIORITIES, TASK_STATUSES, mergeRecurringTasksForDisplay } from '../models/taskData.js';
 import { clampFontSizeLevel, applyFontSizeClasses } from '../utils/fontSize.js';
 import { t, texts } from '../texts.js';
 
@@ -27,6 +28,8 @@ export class NotificationManager {
     this.notifications = [];
     this.lastNotificationIds = new Set();
     this.notificationTimestamps = new Map();
+    this.currentTasks = [];
+    this.lastCriticalTaskSnapshot = new Map();
     this.audioContext = null;
     this.soundEnabled = true;
     this.fontSizeLevel = clampFontSizeLevel(options.fontSizeLevel ?? 0);
@@ -54,7 +57,7 @@ export class NotificationManager {
   /**
    * Update notifications from bed data
    */
-  updateNotifications(beds, options = {}) {
+  updateNotifications(beds, tasks = [], options = {}) {
     const { suppressAlerts = false, fontSizeLevel } = options;
     if (typeof fontSizeLevel === 'number') {
       this.fontSizeLevel = clampFontSizeLevel(fontSizeLevel);
@@ -98,24 +101,30 @@ export class NotificationManager {
       }
     });
 
-    // Show new notifications
-    if (!suppressAlerts && newNotifications.length > 0) {
-      this.showNotifications(newNotifications);
+    const { normalizedTasks, hasCriticalTaskChange } = this.updateTaskAlerts(tasks);
+
+    // Show new notifications or task alerts
+    if (!suppressAlerts && (newNotifications.length > 0 || hasCriticalTaskChange)) {
+      this.showNotifications(newNotifications, { hasCriticalTaskChange, tasks: normalizedTasks });
     }
-    
+
     // Update notification display
-    this.renderNotificationDisplay(beds, { fontSizeLevel: this.fontSizeLevel });
+    this.renderNotificationDisplay(beds, {
+      fontSizeLevel: this.fontSizeLevel,
+      tasks: normalizedTasks,
+    });
   }
 
   /**
    * Show new notifications
    */
-  showNotifications(notifications) {
+  showNotifications(notifications, options = {}) {
     if (typeof window === 'undefined') return;
 
     // Play sound if enabled
-    if (this.soundEnabled && notifications.length > 0) {
-      this.playNotificationSound();
+    const shouldPlaySound = this.soundEnabled && (notifications.length > 0 || options.hasCriticalTaskChange);
+    if (shouldPlaySound) {
+      this.playNotificationSound({ hasCriticalTaskChange: options.hasCriticalTaskChange });
     }
 
     // Show browser notification if supported and enabled
@@ -124,15 +133,16 @@ export class NotificationManager {
     }
     
     // Show in-app notifications
-    this.showInAppNotifications(notifications);
+    const taskSummary = Array.isArray(options.tasks) ? options.tasks : this.currentTasks;
+    this.showInAppNotifications(notifications, { tasks: taskSummary, hasCriticalTaskChange: options.hasCriticalTaskChange });
   }
 
   /**
    * Play notification sound
    */
-  playNotificationSound() {
+  playNotificationSound(options = {}) {
     if (!this.audioContext) return;
-    
+
     try {
       const oscillator = this.audioContext.createOscillator();
       const gainNode = this.audioContext.createGain();
@@ -142,12 +152,26 @@ export class NotificationManager {
       
       oscillator.frequency.setValueAtTime(800, this.audioContext.currentTime);
       oscillator.frequency.setValueAtTime(600, this.audioContext.currentTime + 0.1);
-      
+
       gainNode.gain.setValueAtTime(0.3, this.audioContext.currentTime);
       gainNode.gain.exponentialRampToValueAtTime(0.01, this.audioContext.currentTime + 0.2);
-      
+
       oscillator.start(this.audioContext.currentTime);
       oscillator.stop(this.audioContext.currentTime + 0.2);
+
+      if (options.hasCriticalTaskChange) {
+        const taskOscillator = this.audioContext.createOscillator();
+        const taskGain = this.audioContext.createGain();
+        taskOscillator.connect(taskGain);
+        taskGain.connect(this.audioContext.destination);
+        const startTime = this.audioContext.currentTime + 0.22;
+        taskOscillator.frequency.setValueAtTime(950, startTime);
+        taskOscillator.frequency.exponentialRampToValueAtTime(700, startTime + 0.18);
+        taskGain.gain.setValueAtTime(0.25, startTime);
+        taskGain.gain.exponentialRampToValueAtTime(0.01, startTime + 0.2);
+        taskOscillator.start(startTime);
+        taskOscillator.stop(startTime + 0.22);
+      }
     } catch (error) {
       console.warn('Failed to play notification sound:', error);
     }
@@ -177,13 +201,13 @@ export class NotificationManager {
   /**
    * Show in-app notifications
    */
-  showInAppNotifications(notifications) {
+  showInAppNotifications(notifications, options = {}) {
     const alertContainer = document.getElementById('alerts');
     if (!alertContainer) return;
-    
+
     // Group notifications by priority
     const groupedNotifications = this.groupNotificationsByPriority(notifications);
-    
+
     // Create alert message
     const messages = [];
     if (groupedNotifications.high.length > 0) {
@@ -195,12 +219,29 @@ export class NotificationManager {
     if (groupedNotifications.low.length > 0) {
       messages.push(`ℹ️ Patikrinimai: ${groupedNotifications.low.length}`);
     }
-    
+
+    const tasks = Array.isArray(options.tasks) ? options.tasks : [];
+    const criticalTasks = tasks.filter((task) => task.priorityBucket === 'critical');
+    const overdueTasks = tasks.filter((task) => task.isOverdue);
+    if (criticalTasks.length > 0) {
+      messages.push(`🧪 Kritinės užduotys: ${criticalTasks.length}`);
+    }
+    if (overdueTasks.length > 0 && overdueTasks.length !== criticalTasks.length) {
+      messages.push(`⏰ Vėluoja: ${overdueTasks.length}`);
+    }
+
     if (messages.length > 0) {
       alertContainer.textContent = messages.join(' • ');
       alertContainer.classList.remove('hidden');
-      alertContainer.setAttribute('data-priority', groupedNotifications.high.length > 0 ? 'high' : 'medium');
-      
+      const hasHighBeds = groupedNotifications.high.length > 0;
+      const hasMediumBeds = groupedNotifications.medium.length > 0;
+      const hasCriticalTasks = criticalTasks.length > 0;
+      const hasOverdueTasks = overdueTasks.length > 0;
+      const priorityLevel = hasHighBeds || hasCriticalTasks
+        ? 'high'
+        : (hasMediumBeds || hasOverdueTasks ? 'medium' : 'low');
+      alertContainer.setAttribute('data-priority', priorityLevel);
+
       // Auto-hide after 10 seconds
       setTimeout(() => {
         alertContainer.classList.add('hidden');
@@ -224,6 +265,211 @@ export class NotificationManager {
     }, { high: [], medium: [], low: [] });
   }
 
+  updateTaskAlerts(tasks) {
+    if (!Array.isArray(tasks)) {
+      this.currentTasks = [];
+      this.lastCriticalTaskSnapshot.clear();
+      return { normalizedTasks: [], hasCriticalTaskChange: false };
+    }
+
+    const preparedTasks = mergeRecurringTasksForDisplay(tasks);
+
+    const normalizedTasks = preparedTasks
+      .map((task) => this.normaliseTaskForSummary(task))
+      .filter(Boolean)
+      .sort((a, b) => {
+        const bucketOrder = ['critical', 'high', 'medium', 'low', 'none'];
+        const bucketDiff = bucketOrder.indexOf(a.priorityBucket) - bucketOrder.indexOf(b.priorityBucket);
+        if (bucketDiff !== 0) {
+          return bucketDiff;
+        }
+        if (a.dueTimestamp !== b.dueTimestamp) {
+          if (a.dueTimestamp === null) return 1;
+          if (b.dueTimestamp === null) return -1;
+          return a.dueTimestamp - b.dueTimestamp;
+        }
+        return a.title.localeCompare(b.title, 'lt-LT');
+      });
+
+    const criticalTasks = normalizedTasks.filter((task) => task.priorityBucket === 'critical');
+    const snapshot = new Map(criticalTasks.map((task) => [task.id, `${task.priorityBucket}:${task.dueIso ?? 'none'}`]));
+    let hasCriticalTaskChange = false;
+    for (const [id, value] of snapshot.entries()) {
+      const previous = this.lastCriticalTaskSnapshot.get(id);
+      if (previous !== value) {
+        hasCriticalTaskChange = true;
+        break;
+      }
+    }
+
+    this.currentTasks = normalizedTasks;
+    this.lastCriticalTaskSnapshot = snapshot;
+    return { normalizedTasks, hasCriticalTaskChange };
+  }
+
+  normaliseTaskForSummary(task) {
+    if (!task || typeof task !== 'object') {
+      return null;
+    }
+
+    const now = new Date();
+    let generatedId = null;
+    if (typeof task.id === 'string' && task.id) {
+      generatedId = task.id;
+    } else if (typeof task.seriesId === 'string' && task.seriesId) {
+      generatedId = task.seriesId;
+    } else if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+      generatedId = crypto.randomUUID();
+    } else {
+      generatedId = `task-${Math.random().toString(36).slice(2, 11)}`;
+    }
+    const id = String(generatedId);
+    const title = task.title
+      ?? task.typeLabel
+      ?? task.type
+      ?? t(texts.tasks?.title) ?? 'Užduotis';
+    const description = typeof task.description === 'string' ? task.description : '';
+    const channel = task.channelLabel ?? task.channel ?? '';
+    const responsible = task.responsible ?? '';
+    const priority = Number.isFinite(task.priority) ? task.priority : TASK_PRIORITIES.MEDIUM;
+    const priorityBucket = this.getTaskPriorityBucket(priority);
+    const dueSource = task.dueAt ?? task.deadline ?? null;
+    const dueDate = dueSource ? new Date(dueSource) : null;
+    const dueValid = dueDate instanceof Date && !Number.isNaN(dueDate?.getTime?.());
+    const dueIso = dueValid ? dueDate.toISOString() : null;
+    const dueAbsolute = dueValid ? dueDate.toLocaleTimeString('lt-LT', { hour: '2-digit', minute: '2-digit' }) : null;
+    const dueRelative = dueValid ? this.formatRelativeTime(dueDate) : null;
+    const dueTimestamp = dueValid ? dueDate.getTime() : null;
+    const isCompleted = task.status === TASK_STATUSES.COMPLETED;
+    const isOverdue = Boolean(dueValid && !isCompleted && dueDate.getTime() < now.getTime());
+    const recurrenceLabel = typeof task.recurrenceLabel === 'string' ? task.recurrenceLabel : null;
+
+    return {
+      id,
+      title,
+      description,
+      channel,
+      responsible,
+      priority,
+      priorityBucket,
+      dueIso,
+      dueAbsolute,
+      dueRelative,
+      dueTimestamp,
+      isOverdue,
+      status: task.status ?? TASK_STATUSES.PLANNED,
+      source: task.source ?? 'local',
+      recurrenceLabel,
+    };
+  }
+
+  getTaskPriorityBucket(priority) {
+    if (priority <= TASK_PRIORITIES.CRITICAL) {
+      return 'critical';
+    }
+    if (priority <= TASK_PRIORITIES.HIGH) {
+      return 'high';
+    }
+    if (priority <= TASK_PRIORITIES.MEDIUM) {
+      return 'medium';
+    }
+    if (priority <= TASK_PRIORITIES.LOW) {
+      return 'low';
+    }
+    return 'none';
+  }
+
+  renderTaskSummary(tasks, options = {}) {
+    const level = typeof options.fontSizeLevel === 'number'
+      ? clampFontSizeLevel(options.fontSizeLevel)
+      : this.fontSizeLevel;
+
+    const taskList = Array.isArray(tasks) ? tasks : this.currentTasks;
+    if (!taskList.length) {
+      return '';
+    }
+
+    const groups = taskList.reduce((acc, task) => {
+      if (!acc[task.priorityBucket]) {
+        acc[task.priorityBucket] = [];
+      }
+      acc[task.priorityBucket].push(task);
+      return acc;
+    }, { critical: [], high: [], medium: [], low: [], none: [] });
+
+    const bucketMeta = {
+      critical: { icon: '🚨', label: t(texts.notifications?.taskBuckets?.critical) || 'Kritinės' },
+      high: { icon: '⚠️', label: t(texts.notifications?.taskBuckets?.high) || 'Didelė svarba' },
+      medium: { icon: '🔆', label: t(texts.notifications?.taskBuckets?.medium) || 'Vidutinė svarba' },
+      low: { icon: 'ℹ️', label: t(texts.notifications?.taskBuckets?.low) || 'Žema svarba' },
+      none: { icon: '📋', label: t(texts.notifications?.taskBuckets?.none) || 'Bendra' },
+    };
+
+    const bucketOrder = ['critical', 'high', 'medium', 'low', 'none'];
+    const sections = bucketOrder
+      .map((bucket) => {
+        const items = groups[bucket];
+        if (!items || items.length === 0) {
+          return '';
+        }
+
+        const header = bucketMeta[bucket];
+        const listItems = items.map((task) => {
+          const dueInfo = task.dueAbsolute
+            ? `<span class="notification-task__due ${task.isOverdue ? 'text-red-600 dark:text-red-300' : 'text-slate-600 dark:text-slate-300'} ${applyFontSizeClasses('text-xs font-medium', level)}"><time datetime="${escapeHtml(task.dueIso)}">${escapeHtml(task.dueAbsolute)}</time><span class="notification-task__due-separator" aria-hidden="true">•</span><span>${escapeHtml(task.dueRelative ?? '')}</span></span>`
+            : '';
+
+          const description = task.description
+            ? `<p class="notification-task__description ${applyFontSizeClasses('text-xs', level)}">${escapeHtml(task.description)}</p>`
+            : '';
+
+        const metaParts = [];
+        if (task.channel) {
+          metaParts.push(`<span class="notification-task__channel ${applyFontSizeClasses('text-[11px] font-medium uppercase tracking-wide', level)}">${escapeHtml(task.channel)}</span>`);
+        }
+        if (task.recurrenceLabel) {
+          metaParts.push(`<span class="notification-task__recurrence ${applyFontSizeClasses('text-[11px] font-medium text-slate-600 dark:text-slate-300', level)}">${escapeHtml(task.recurrenceLabel)}</span>`);
+        }
+        if (task.responsible) {
+          metaParts.push(`<span>${escapeHtml(task.responsible)}</span>`);
+        }
+        const metaMarkup = metaParts.length
+          ? `<div class="notification-task__meta ${applyFontSizeClasses('text-[11px]', level)}">${metaParts.join('<span class="mx-1 text-slate-400 dark:text-slate-500" aria-hidden="true">•</span>')}</div>`
+          : '';
+
+        return `
+          <li class="notification-task" data-bucket="${bucket}">
+            <div class="notification-task__header">
+              <span class="notification-task__title ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(task.title)}</span>
+              ${dueInfo}
+            </div>
+            ${description}
+            ${metaMarkup}
+          </li>
+        `;
+      }).join('');
+
+        return `
+          <section class="notification-task__section" data-bucket="${bucket}">
+            <header class="notification-task__section-header">
+              <span class="notification-task__section-icon" aria-hidden="true">${header.icon}</span>
+              <span class="notification-task__section-label ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(header.label)} (${items.length})</span>
+            </header>
+            <ul class="notification-task__list">${listItems}</ul>
+          </section>
+        `;
+      })
+      .filter(Boolean)
+      .join('');
+
+    return `
+      <div class="notification-task-summary">
+        <h3 class="notification-task-summary__title ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(t(texts.notifications?.taskSummaryTitle) || 'Bendros užduotys')}</h3>
+        ${sections}
+      </div>
+    `;
+  }
+
   /**
    * Render notification display in the UI
    */
@@ -234,6 +480,13 @@ export class NotificationManager {
     const level = typeof options.fontSizeLevel === 'number'
       ? clampFontSizeLevel(options.fontSizeLevel)
       : this.fontSizeLevel;
+
+    const taskSource = Array.isArray(options.tasks) ? options.tasks : this.currentTasks;
+    const hasNormalizedShape = Array.isArray(taskSource)
+      && taskSource.every((task) => task && typeof task === 'object' && 'priorityBucket' in task);
+    const summaryTasks = hasNormalizedShape
+      ? taskSource
+      : mergeRecurringTasksForDisplay(taskSource).map((task) => this.normaliseTaskForSummary(task)).filter(Boolean);
 
     const bedsWithNotifications = beds
       .filter(bed => bed.notifications.length > 0)
@@ -258,26 +511,19 @@ export class NotificationManager {
         };
       });
 
-    if (bedsWithNotifications.length === 0) {
-      notificationContainer.innerHTML = `
-        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-900/30 dark:text-emerald-100 ${applyFontSizeClasses('text-sm font-medium', level)}">
-          ${escapeHtml(t(texts.notifications.allClear))}
-        </div>
-      `;
-      return;
-    }
-
     bedsWithNotifications.sort((a, b) => {
       const aPriority = Math.min(...a.notifications.map(n => n.priority));
       const bPriority = Math.min(...b.notifications.map(n => n.priority));
       return aPriority - bPriority;
     });
 
-    const cards = bedsWithNotifications.map((bed) => {
-      const highestPriority = bed.notifications[0];
-      const cardVariant = this.getNotificationVariant(highestPriority.priority);
-      const occupancyVariant = bed.occupancyStatus === 'occupied' ? 'busy' : 'free';
-      const occupancyText = bed.occupancyStatus === 'occupied' ? 'Užimta' : 'Laisva';
+    const hasBedNotifications = bedsWithNotifications.length > 0;
+    const cards = hasBedNotifications
+      ? bedsWithNotifications.map((bed) => {
+        const highestPriority = bed.notifications[0];
+        const cardVariant = this.getNotificationVariant(highestPriority.priority);
+        const occupancyVariant = bed.occupancyStatus === 'occupied' ? 'busy' : 'free';
+        const occupancyText = bed.occupancyStatus === 'occupied' ? 'Užimta' : 'Laisva';
 
       const notifications = bed.notifications.map((notification) => {
         const issueVariant = this.getNotificationVariant(notification.priority);
@@ -301,7 +547,7 @@ export class NotificationManager {
         `;
       }).join('');
 
-      return `
+        return `
         <article class="notification-row" data-variant="${cardVariant}" data-bed-id="${escapeHtml(bed.bedId)}">
           <div class="notification-row__bed">
             <span class="notification-row__bed-label ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(t(texts.ui.bedLabel))}</span>
@@ -312,10 +558,25 @@ export class NotificationManager {
             ${notifications}
           </ul>
         </article>
-      `;
-    }).join('');
+        `;
+      }).join('')
+      : '';
 
-    notificationContainer.innerHTML = cards;
+    const taskSummaryMarkup = this.renderTaskSummary(summaryTasks, { fontSizeLevel: level });
+
+    if (!hasBedNotifications && !taskSummaryMarkup) {
+      notificationContainer.innerHTML = `
+        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-900/30 dark:text-emerald-100 ${applyFontSizeClasses('text-sm font-medium', level)}">
+          ${escapeHtml(t(texts.notifications.allClear))}
+        </div>
+      `;
+      return;
+    }
+
+    notificationContainer.innerHTML = [
+      hasBedNotifications ? cards : '',
+      taskSummaryMarkup,
+    ].filter(Boolean).join('');
   }
 
   getNotificationVariant(priority) {

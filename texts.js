@@ -56,6 +56,14 @@ export const texts = {
   },
   notifications: {
     allClear: { lt: '✅ Visos lovos tvarkingos', en: '✅ All beds are ready' },
+    taskSummaryTitle: { lt: 'Bendros užduotys', en: 'Shared tasks' },
+    taskBuckets: {
+      critical: { lt: 'Kritinės', en: 'Critical' },
+      high: { lt: 'Didelė svarba', en: 'High priority' },
+      medium: { lt: 'Vidutinė svarba', en: 'Medium priority' },
+      low: { lt: 'Žema svarba', en: 'Low priority' },
+      none: { lt: 'Bazinės', en: 'General' },
+    },
   },
   tasks: {
     title: { lt: 'Skyrių užduotys', en: 'Ward tasks' },
@@ -89,17 +97,23 @@ export const texts = {
     channels: {
       laboratory: { lt: 'Laboratorija', en: 'Laboratory' },
       ambulatory: { lt: 'Ambulatorija', en: 'Outpatient clinic' },
-      wards: { lt: 'Stacionaras / skyrius', en: 'Inpatient ward' },
+      wards: { lt: 'Skyrius', en: 'Ward' },
     },
     labels: {
       responsible: { lt: 'Atsakingas', en: 'Responsible' },
       deadline: { lt: 'Terminas', en: 'Deadline' },
+      due: { lt: 'Terminas', en: 'Due' },
+      priority: { lt: 'Prioritetas', en: 'Priority' },
       recurrence: { lt: 'Pasikartojimas', en: 'Recurrence' },
       created: { lt: 'Sukurta', en: 'Created' },
       channel: { lt: 'Kanalas', en: 'Channel' },
     },
     badges: {
       overdue: { lt: 'Vėluoja', en: 'Overdue' },
+      critical: { lt: 'Kritinė', en: 'Critical' },
+      high: { lt: 'Didelė svarba', en: 'High' },
+      medium: { lt: 'Vidutinė', en: 'Medium' },
+      low: { lt: 'Žema', en: 'Low' },
     },
   },
   forms: {
