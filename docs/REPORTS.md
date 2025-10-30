@@ -7,7 +7,7 @@
 Dashboardo KPI kortelės dabar naudoja `Supabase` agreguotus duomenis:
 
 - **Sutvarkytos lovos.** Skaičius iš `public.aggregated_bed_state`, rodo kiek lovų turi būseną „✅ Viskas tvarkinga“. Kortelėje papildomai matomas bendras lovų kiekis.
-- **Reikia dėmesio.** Sumuoja lovas, kurioms priskirtos problemos („🛏️ Netvarkinga lova“, „🧰 Trūksta priemonių“, „Other“). Rodomas ir aktyvių pranešimų skaičius pagal paskutinį įrašą Supabase.
+- **Reikia dėmesio.** Sumuoja lovas, kurioms priskirtos problemos („🛏️ Netvarkinga lova“, „🧰 Trūksta priemonių“, „Kita“). Rodomas ir aktyvių pranešimų skaičius pagal paskutinį įrašą Supabase.
 - **Užimtos lovos.** Grįsta laukeliu `occupancy_state` (`occupied`/`free`). Papildoma eilutė nurodo laisvų lovų skaičių.
 - **SLA pažeidimai (24h).** Naudojama materializuota peržiūra `public.daily_bed_metrics`. Kortelė rodo paskutinių 24 val. SLA pažeidimų skaičių ir vidutinį laiką (minutėmis) tarp būsenos pakeitimo ir artimiausio užimtumo įrašo.
 
