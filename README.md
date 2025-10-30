@@ -10,6 +10,7 @@ Palaipsniui migruojame į Supabase, todėl visas front-end veikia kaip ES moduli
 - **Užimtumo sekimas**: Sekti kada lovos tampa laisvos ar užimtos
 - **Automatiniai pranešimai**: Prioritetiniai pranešimai pagal problemų svarbą
 - **Vietiniai skaičiavimai**: Visi skaičiavimai vykdomi vietoje, nepriklausomai nuo išorinių duomenų šaltinių
+- **Užduočių planavimas**: Kurkite skyrių veiksmų užduotis, filtruokite jas pagal būseną/kanalą ir sekite terminus
 
 ### Pranešimų prioritetai
 1. **Netvarkinga lova** (aukščiausias prioritetas)
@@ -29,6 +30,7 @@ Palaipsniui migruojame į Supabase, todėl visas front-end veikia kaip ES moduli
 - SLA slenkstis
 - Automatinio atnaujinimo intervalas
 - Garso signalai ir pranešimai
+- Išvalyti vietinę talpyklą (ištrina formų, užduočių ir užimtumo saugyklą)
 
 ## Naudojimas
 
@@ -48,6 +50,19 @@ Palaipsniui migruojame į Supabase, todėl visas front-end veikia kaip ES moduli
 2. Pasirinkite lovą
 3. Pasirinkite būseną (Laisva/Užimta)
 4. Spustelėkite "Atnaujinti"
+
+### Nauja užduotis skyriui
+1. Spustelėkite "Nauja užduotis" (arba paspauskite **Ctrl+Shift+T**)
+2. Pasirinkite užduoties tipą ir kanalą (pvz., laboratorija, ambulatorija)
+3. Įveskite aprašymą, atsakingą asmenį/komandą ir, jei reikia, terminą
+4. Nurodykite pasikartojimo intervalą ("Nepasikartojanti" palikite, jei užduotis vienkartinė)
+5. Spustelėkite "Sukurti" – užduotis iškart atsiras sąraše su būsenos ženkleliu
+
+### Užduočių paieška ir filtravimas
+- Paieškos laukelyje įveskite raktažodį (tipas, atsakingas ar kanalas)
+- Filtras „Būsena“ leidžia atsijoti planuojamas, vykdomas, užbaigtas ar sustabdytas užduotis
+- Filtras „Kanalas“ leidžia fokusuotis tik į laboratoriją, ambulatoriją ar stacionarą
+- Tuščias sąrašas rodo pranešimą, kad pagal pasirinktus filtrus nėra įrašų
 
 ### Greitasis lovos atnaujinimas
 - **Kairiuoju pelės mygtuku** ant lovos → Pranešti apie būklę
@@ -70,11 +85,13 @@ Palaipsniui migruojame į Supabase, todėl visas front-end veikia kaip ES moduli
 
 ```
 ├── models/
-│   └── bedData.js          # Duomenų modeliai ir skaičiavimai
+│   ├── bedData.js          # Duomenų modeliai ir skaičiavimai
+│   └── taskData.js         # Užduočių modelis ir localStorage saugykla
 ├── settings/
 │   └── settingsManager.js  # Nustatymų valdymas
 ├── forms/
-│   └── bedStatusForm.js    # Formų sąsaja
+│   ├── bedStatusForm.js    # Lovos būklės forma
+│   └── taskForm.js         # Užduočių kūrimo modalas
 ├── notifications/
 │   └── notificationManager.js # Pranešimų sistema
 ├── persistence/
@@ -172,6 +189,7 @@ Visi duomenys saugomi naršyklės `localStorage` ir yra:
 - Eksportuojami JSON formatu
 - Importuojami iš JSON failų
 - Versijų kontrolės palaikymas
+- Mygtukas **Išvalyti vietinę talpyklą** nustatymuose ištrina lovų įrašus, užduotis ir sinchronizacijos metaduomenis
 
 ## Pranešimai
 

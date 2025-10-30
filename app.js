@@ -5,6 +5,7 @@
 import { BedDataManager, BED_LAYOUT, STATUS_OPTIONS } from './models/bedData.js';
 import { SettingsManager, SettingsUI } from './settings/settingsManager.js';
 import { BedStatusForm, OccupancyForm } from './forms/bedStatusForm.js';
+import { TaskForm } from './forms/taskForm.js';
 import { NotificationManager } from './notifications/notificationManager.js';
 import { DataPersistenceManager } from './persistence/dataPersistenceManager.js';
 import { UserInteractionLogger } from './analytics/userInteractionLogger.js';
@@ -12,6 +13,7 @@ import { NfcHandler } from './nfc/nfcHandler.js';
 import { ReportingService } from './reports/reportingService.js';
 import { SupabaseAuthManager } from './auth/supabaseAuth.js';
 import { t, texts } from './texts.js';
+import { TaskManager, TASK_STATUSES, TASK_CHANNEL_OPTIONS } from './models/taskData.js';
 import { loadData as loadCsvData, rowsToOccupancyEvents } from './data.js';
 import { clampFontSizeLevel, readStoredFontSizeLevel, storeFontSizeLevel, applyFontSizeLevelToDocument } from './utils/fontSize.js';
 
@@ -26,6 +28,7 @@ const HTML_ESCAPE_MAP = {
 const VIEW_MODE_STORAGE_KEY = 'bedViewMode';
 const BED_LIST_VISIBILITY_KEY = 'bedListVisible';
 const SEARCH_DEBOUNCE_MS = 150;
+const TASK_SEARCH_DEBOUNCE_MS = 200;
 
 function escapeHtml(value) {
   if (value === null || value === undefined) {
@@ -48,6 +51,7 @@ export class BedManagementApp {
     this.searchDebounceTimer = null;
     this.persistenceManager = new DataPersistenceManager({ document: this.document });
     this.notificationManager = new NotificationManager(this.settingsManager, { fontSizeLevel: this.fontSizeLevel });
+    this.taskManager = new TaskManager();
     const sharedDocument = this.document;
     this.reportingService = new ReportingService({
       client: this.persistenceManager.client,
@@ -56,6 +60,10 @@ export class BedManagementApp {
       settings: this.settingsManager.getSettings(),
     });
     this.userInteractionLogger = new UserInteractionLogger({ document: sharedDocument, client: this.persistenceManager.client });
+
+    this.taskFilters = { search: '', status: 'all', channel: 'all' };
+    this.taskSearchDebounceTimer = null;
+    this.boundTaskShortcutHandler = (event) => this.handleTaskShortcut(event);
 
     this.authManager = new SupabaseAuthManager({
       client: this.persistenceManager.client,
@@ -71,8 +79,17 @@ export class BedManagementApp {
     this.bedStatusForm = new BedStatusForm((formResponse) => this.handleFormResponse(formResponse), {
       logger: this.userInteractionLogger,
     });
+    this.taskForm = new TaskForm((taskPayload) => this.handleTaskCreated(taskPayload), {
+      logger: this.userInteractionLogger,
+    });
     this.occupancyForm = new OccupancyForm((occupancyData) => this.handleOccupancyData(occupancyData));
-    this.settingsUI = new SettingsUI(this.settingsManager, (settings) => this.handleSettingsChange(settings));
+    this.settingsUI = new SettingsUI(
+      this.settingsManager,
+      (settings) => this.handleSettingsChange(settings),
+      {
+        onClearLocalData: () => { void this.handleLocalDataClear(); },
+      },
+    );
 
     this.refreshInterval = null;
     this.isInitialized = false;
@@ -437,7 +454,18 @@ export class BedManagementApp {
    */
   setupEventListeners() {
     console.log('Setting up event listeners...');
-    
+
+    const addTaskBtn = document.getElementById('addTaskBtn');
+    if (addTaskBtn) {
+      console.log('Found add task button');
+      addTaskBtn.addEventListener('click', () => {
+        void this.userInteractionLogger.logInteraction('task_form_open_button', { trigger: 'toolbar' });
+        this.taskForm.show({ trigger: 'toolbar' });
+      });
+    } else {
+      console.log('Add task button not found');
+    }
+
     // Settings button
     const settingsBtn = document.getElementById('settingsBtn');
     if (settingsBtn) {
@@ -559,6 +587,53 @@ export class BedManagementApp {
         this.handleBedSearch(event.target.value ?? '');
       });
     }
+
+    const taskSearchLabel = document.querySelector('label[for="taskSearch"]');
+    const searchLabelText = t(texts.tasks.searchLabel);
+    if (taskSearchLabel) {
+      taskSearchLabel.textContent = searchLabelText;
+    }
+
+    const taskSearchInput = document.getElementById('taskSearch');
+    if (taskSearchInput) {
+      taskSearchInput.placeholder = t(texts.tasks.searchPlaceholder);
+      if (searchLabelText) {
+        taskSearchInput.setAttribute('aria-label', searchLabelText);
+      }
+      taskSearchInput.addEventListener('input', (event) => {
+        this.handleTaskSearch(event.target.value ?? '');
+      });
+    }
+
+    const taskStatusLabel = document.querySelector('label[for="taskStatusFilter"]');
+    if (taskStatusLabel) {
+      taskStatusLabel.textContent = t(texts.tasks.statusFilterLabel);
+    }
+
+    const taskChannelLabel = document.querySelector('label[for="taskChannelFilter"]');
+    if (taskChannelLabel) {
+      taskChannelLabel.textContent = t(texts.tasks.channelFilterLabel);
+    }
+
+    const taskStatusFilter = document.getElementById('taskStatusFilter');
+    if (taskStatusFilter) {
+      this.populateTaskStatusFilter(taskStatusFilter);
+      taskStatusFilter.value = this.taskFilters.status;
+      taskStatusFilter.addEventListener('change', (event) => {
+        this.handleTaskFilterChange('status', event.target.value ?? 'all');
+      });
+    }
+
+    const taskChannelFilter = document.getElementById('taskChannelFilter');
+    if (taskChannelFilter) {
+      this.populateTaskChannelFilter(taskChannelFilter);
+      taskChannelFilter.value = this.taskFilters.channel;
+      taskChannelFilter.addEventListener('change', (event) => {
+        this.handleTaskFilterChange('channel', event.target.value ?? 'all');
+      });
+    }
+
+    document.addEventListener('keydown', this.boundTaskShortcutHandler);
 
     document.querySelectorAll('[data-report-export]').forEach((button) => {
       const format = button.dataset.reportExport || 'json';
@@ -686,6 +761,75 @@ export class BedManagementApp {
     }, SEARCH_DEBOUNCE_MS);
   }
 
+  handleTaskSearch(value) {
+    const nextValue = typeof value === 'string' ? value.trim() : '';
+    if (this.taskSearchDebounceTimer) {
+      clearTimeout(this.taskSearchDebounceTimer);
+    }
+
+    this.taskSearchDebounceTimer = setTimeout(() => {
+      this.taskFilters.search = nextValue;
+      this.renderTaskList();
+    }, TASK_SEARCH_DEBOUNCE_MS);
+  }
+
+  populateTaskStatusFilter(selectElement) {
+    if (!selectElement) {
+      return;
+    }
+
+    const options = [
+      { value: 'all', label: t(texts.tasks.statusAll) },
+      { value: TASK_STATUSES.PLANNED, label: t(texts.tasks.status?.planned) },
+      { value: TASK_STATUSES.IN_PROGRESS, label: t(texts.tasks.status?.inProgress) },
+      { value: TASK_STATUSES.COMPLETED, label: t(texts.tasks.status?.completed) },
+      { value: TASK_STATUSES.BLOCKED, label: t(texts.tasks.status?.blocked) },
+    ];
+
+    selectElement.innerHTML = options
+      .map((option) => `<option value="${option.value}">${escapeHtml(option.label)}</option>`)
+      .join('');
+  }
+
+  populateTaskChannelFilter(selectElement) {
+    if (!selectElement) {
+      return;
+    }
+
+    const options = [
+      { value: 'all', label: t(texts.tasks.channelAll) },
+      ...TASK_CHANNEL_OPTIONS.map((option) => ({
+        value: option.value,
+        label: t(texts.tasks.channels?.[option.labelKey]) || option.value,
+      })),
+    ];
+
+    selectElement.innerHTML = options
+      .map((option) => `<option value="${option.value}">${escapeHtml(option.label)}</option>`)
+      .join('');
+  }
+
+  handleTaskFilterChange(key, value) {
+    if (!['status', 'channel'].includes(key)) {
+      return;
+    }
+    this.taskFilters[key] = value;
+    this.renderTaskList();
+  }
+
+  handleTaskShortcut(event) {
+    const isModifierPressed = event.ctrlKey || event.metaKey;
+    if (!isModifierPressed || !event.shiftKey) {
+      return;
+    }
+
+    if ((event.key || '').toLowerCase() === 't') {
+      event.preventDefault();
+      void this.userInteractionLogger.logInteraction('task_form_opened_shortcut', { trigger: 'shortcut' });
+      this.taskForm.show({ trigger: 'shortcut' });
+    }
+  }
+
   changeFontSize(delta) {
     const nextLevel = clampFontSizeLevel(this.fontSizeLevel + delta);
     if (nextLevel === this.fontSizeLevel) {
@@ -777,6 +921,23 @@ export class BedManagementApp {
     }
   }
 
+  async handleTaskCreated(taskPayload) {
+    try {
+      const savedTask = this.taskManager.addTask(taskPayload);
+      this.renderTaskList();
+      void this.userInteractionLogger.logInteraction('task_created', {
+        taskId: savedTask.id,
+        channel: savedTask.channel,
+        status: savedTask.status,
+      });
+      return savedTask;
+    } catch (error) {
+      console.error('Nepavyko sukurti užduoties:', error);
+      this.showError(t(texts.messages.taskSaveError));
+      return false;
+    }
+  }
+
   /**
    * Handle occupancy data submission
    */
@@ -839,6 +1000,7 @@ export class BedManagementApp {
       this.updateViewToggleButton();
       this.renderBedGrid();
       this.renderNotificationSummary();
+      this.renderTaskList();
       await this.updateLastSyncDisplay();
     } catch (error) {
       console.error('Failed to render UI:', error);
@@ -1087,6 +1249,164 @@ export class BedManagementApp {
     this.setupBedClickHandlers();
   }
 
+  getTaskStatusBadge(status) {
+    const statusMeta = {
+      [TASK_STATUSES.PLANNED]: {
+        label: t(texts.tasks.status?.planned) || TASK_STATUSES.PLANNED,
+        classes: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200',
+        icon: '🗓️',
+      },
+      [TASK_STATUSES.IN_PROGRESS]: {
+        label: t(texts.tasks.status?.inProgress) || TASK_STATUSES.IN_PROGRESS,
+        classes: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-100',
+        icon: '⚙️',
+      },
+      [TASK_STATUSES.COMPLETED]: {
+        label: t(texts.tasks.status?.completed) || TASK_STATUSES.COMPLETED,
+        classes: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-100',
+        icon: '✅',
+      },
+      [TASK_STATUSES.BLOCKED]: {
+        label: t(texts.tasks.status?.blocked) || TASK_STATUSES.BLOCKED,
+        classes: 'bg-rose-100 text-rose-800 dark:bg-rose-900/40 dark:text-rose-200',
+        icon: '⛔',
+      },
+    };
+
+    return statusMeta[status] ?? statusMeta[TASK_STATUSES.PLANNED];
+  }
+
+  formatTaskDate(value) {
+    if (!value) {
+      return t(texts.ui.noData);
+    }
+
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) {
+      return t(texts.ui.noData);
+    }
+
+    return parsed.toLocaleString('lt-LT');
+  }
+
+  isTaskOverdue(task) {
+    if (!task?.deadline) {
+      return false;
+    }
+
+    const deadline = new Date(task.deadline);
+    if (Number.isNaN(deadline.getTime())) {
+      return false;
+    }
+
+    if (task.status === TASK_STATUSES.COMPLETED) {
+      return false;
+    }
+
+    return deadline.getTime() < Date.now();
+  }
+
+  renderTaskList() {
+    const listContainer = document.getElementById('taskList');
+    if (!listContainer) {
+      return;
+    }
+
+    const addTaskBtn = document.getElementById('addTaskBtn');
+    if (addTaskBtn) {
+      const addLabel = t(texts.tasks.newButton) || 'Nauja užduotis';
+      addTaskBtn.textContent = addLabel;
+      addTaskBtn.setAttribute('aria-label', addLabel);
+      addTaskBtn.setAttribute('title', addLabel);
+    }
+
+    const heading = document.getElementById('taskListHeading');
+    if (heading) {
+      heading.textContent = t(texts.tasks.title);
+    }
+
+    const shortcutHint = document.getElementById('taskShortcutHint');
+    if (shortcutHint) {
+      shortcutHint.textContent = t(texts.tasks.shortcutHint);
+    }
+
+    const taskStatusLabel = document.querySelector('label[for="taskStatusFilter"]');
+    if (taskStatusLabel) {
+      taskStatusLabel.textContent = t(texts.tasks.statusFilterLabel);
+    }
+
+    const taskChannelLabel = document.querySelector('label[for="taskChannelFilter"]');
+    if (taskChannelLabel) {
+      taskChannelLabel.textContent = t(texts.tasks.channelFilterLabel);
+    }
+
+    const searchInput = document.getElementById('taskSearch');
+    if (searchInput) {
+      const placeholder = t(texts.tasks.searchPlaceholder);
+      if (searchInput.placeholder !== placeholder) {
+        searchInput.placeholder = placeholder;
+      }
+      if (searchInput.value !== this.taskFilters.search) {
+        searchInput.value = this.taskFilters.search;
+      }
+    }
+
+    const statusFilter = document.getElementById('taskStatusFilter');
+    if (statusFilter) {
+      this.populateTaskStatusFilter(statusFilter);
+      statusFilter.value = this.taskFilters.status;
+    }
+
+    const channelFilter = document.getElementById('taskChannelFilter');
+    if (channelFilter) {
+      this.populateTaskChannelFilter(channelFilter);
+      channelFilter.value = this.taskFilters.channel;
+    }
+
+    const tasks = this.taskManager.filterTasks(this.taskFilters);
+    if (!tasks.length) {
+      listContainer.innerHTML = `<p class="text-sm text-slate-500 dark:text-slate-300">${escapeHtml(t(texts.tasks.empty))}</p>`;
+      return;
+    }
+
+    listContainer.innerHTML = tasks.map((task) => {
+      const statusMeta = this.getTaskStatusBadge(task.status);
+      const deadlineText = this.formatTaskDate(task.deadline);
+      const createdText = this.formatTaskDate(task.createdAt);
+      const recurrenceText = task.recurrenceLabel || t(texts.tasks.recurrence?.none);
+      const responsible = task.responsible || t(texts.ui.unknownUser);
+      const isOverdue = this.isTaskOverdue(task);
+      const deadlineClass = isOverdue
+        ? 'text-red-600 dark:text-red-300'
+        : 'text-slate-700 dark:text-slate-100';
+      const overdueBadge = isOverdue
+        ? `<span class="px-2 py-0.5 text-[11px] font-semibold text-red-700 bg-red-100 dark:bg-red-900/40 dark:text-red-200 rounded-md">${escapeHtml(t(texts.tasks.badges.overdue))}</span>`
+        : '';
+
+      return `
+        <article class="border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/40 p-3 space-y-3" data-task-id="${escapeHtml(task.id)}" role="listitem">
+          <div class="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+            <div class="space-y-2 md:flex-1 md:pr-4">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-sm font-semibold text-slate-900 dark:text-slate-100">${escapeHtml(task.typeLabel)}</span>
+                <span class="px-2 py-0.5 rounded-md text-xs font-medium ${statusMeta.classes}">${statusMeta.icon} ${escapeHtml(statusMeta.label)}</span>
+                ${overdueBadge}
+              </div>
+              <p class="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-line">${escapeHtml(task.description)}</p>
+            </div>
+            <div class="text-xs text-slate-500 dark:text-slate-300 space-y-1 md:text-right md:w-52">
+              <div>${escapeHtml(t(texts.tasks.labels.responsible))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(responsible)}</span></div>
+              <div>${escapeHtml(t(texts.tasks.labels.deadline))}: <span class="font-medium ${deadlineClass}">${escapeHtml(deadlineText)}</span></div>
+              <div>${escapeHtml(t(texts.tasks.labels.recurrence))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(recurrenceText)}</span></div>
+              <div>${escapeHtml(t(texts.tasks.labels.channel))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(task.channelLabel)}</span></div>
+              <div>${escapeHtml(t(texts.tasks.labels.created))}: <span class="font-medium text-slate-700 dark:text-slate-100">${escapeHtml(createdText)}</span></div>
+            </div>
+          </div>
+        </article>
+      `;
+    }).join('');
+  }
+
   setReportingNotice(message, variant = 'info') {
     const noticeElement = document.getElementById('reportingNotice');
     if (!noticeElement) {
@@ -1254,6 +1574,62 @@ export class BedManagementApp {
     input.click();
   }
 
+  async handleLocalDataClear() {
+    await this.clearLocalStorageData();
+  }
+
+  async clearLocalStorageData(options = {}) {
+    const { silent = false, skipRender = false } = options;
+
+    const localKeys = [
+      'bed-management-form-responses',
+      'bed-management-occupancy-data',
+      'bed-management-last-sync',
+      'bed-management-data-version',
+      VIEW_MODE_STORAGE_KEY,
+      BED_LIST_VISIBILITY_KEY,
+      this.taskManager?.storageKey,
+    ].filter(Boolean);
+
+    if (typeof localStorage !== 'undefined') {
+      localKeys.forEach((key) => {
+        try {
+          localStorage.removeItem(key);
+        } catch (error) {
+          console.warn('Nepavyko pašalinti localStorage rakto:', key, error);
+        }
+      });
+    }
+
+    this.bedDataManager = new BedDataManager();
+    this.taskManager.clearAllTasks();
+    this.taskFilters = { search: '', status: 'all', channel: 'all' };
+    this.currentSearchTerm = '';
+
+    if (this.searchDebounceTimer) {
+      clearTimeout(this.searchDebounceTimer);
+      this.searchDebounceTimer = null;
+    }
+    if (this.taskSearchDebounceTimer) {
+      clearTimeout(this.taskSearchDebounceTimer);
+      this.taskSearchDebounceTimer = null;
+    }
+
+    this.isBedListVisible = false;
+    this.viewMode = 'list';
+    this.isGridView = false;
+
+    await this.loadSavedData();
+
+    if (!skipRender) {
+      await this.render();
+    }
+
+    if (!silent) {
+      alert('Vietinė talpykla išvalyta.');
+    }
+  }
+
   /**
    * Clear all data
    */
@@ -1261,7 +1637,7 @@ export class BedManagementApp {
     if (confirm('Ar tikrai norite ištrinti visus duomenis? Šis veiksmas negrįžtamas.')) {
       try {
         await this.persistenceManager.clearAllData();
-        this.bedDataManager = new BedDataManager();
+        await this.clearLocalStorageData({ silent: true, skipRender: true });
         await this.render();
         alert('Visi duomenys ištrinti');
       } catch (error) {
@@ -1294,6 +1670,7 @@ export class BedManagementApp {
     if (this.refreshInterval) {
       clearInterval(this.refreshInterval);
     }
+    document.removeEventListener('keydown', this.boundTaskShortcutHandler);
     this.isInitialized = false;
   }
 }
