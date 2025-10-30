@@ -15,7 +15,8 @@ create table if not exists public.task_templates (
   updated_at timestamptz not null default now()
 );
 
-create trigger if not exists set_timestamp_task_templates
+drop trigger if exists set_timestamp_task_templates on public.task_templates;
+create trigger set_timestamp_task_templates
 before update on public.task_templates
 for each row
 execute procedure public.set_current_timestamp_updated_at();
@@ -35,7 +36,8 @@ create table if not exists public.tasks (
   updated_at timestamptz not null default now()
 );
 
-create trigger if not exists set_timestamp_tasks
+drop trigger if exists set_timestamp_tasks on public.tasks;
+create trigger set_timestamp_tasks
 before update on public.tasks
 for each row
 execute procedure public.set_current_timestamp_updated_at();
