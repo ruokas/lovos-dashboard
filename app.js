@@ -186,7 +186,7 @@ export class BedManagementApp {
         if (!payload?.new) return;
         void this.handleRealtimeStatusEvent(payload.new, payload.eventType ?? payload.type ?? 'INSERT');
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'occupancy_events' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ed_board' }, (payload) => {
         if (!payload?.new) return;
         void this.handleRealtimeOccupancyEvent(payload.new, payload.eventType ?? payload.type ?? 'INSERT');
       });
@@ -338,25 +338,16 @@ export class BedManagementApp {
 
   async handleRealtimeOccupancyEvent(record, eventType = 'INSERT') {
     try {
-      const bedLabel = await this.persistenceManager.getBedLabelById(record.bed_id);
-      if (!bedLabel) {
+      const mapped = this.persistenceManager.mapBoardRecordToOccupancy(record);
+      if (!mapped?.bedId) {
         console.warn('Gautas realaus laiko užimtumo įvykis su nežinoma lova:', record);
         return;
       }
 
-      const isNew = this.bedDataManager.addOccupancyData({
-        id: record.id,
-        timestamp: record.created_at,
-        bedId: bedLabel,
-        status: record.occupancy_state,
-        patientCode: record.patient_code ?? null,
-        expectedUntil: record.expected_until ?? null,
-        notes: record.notes ?? null,
-        createdBy: record.created_by ?? null,
-        metadata: record.metadata ?? {},
-      }, { allowUpdate: eventType === 'UPDATE' });
+      const allowUpdate = eventType === 'UPDATE' || eventType === 'UPSERT';
+      const isNew = this.bedDataManager.addOccupancyData(mapped, { allowUpdate });
 
-      if (!isNew && eventType !== 'UPDATE') {
+      if (!isNew && !allowUpdate) {
         return;
       }
 
@@ -368,8 +359,8 @@ export class BedManagementApp {
       await this.render();
 
       void this.userInteractionLogger.logInteraction('realtime_occupancy_event_received', {
-        bedLabel,
-        payload: { status: record.occupancy_state },
+        bedLabel: mapped.bedId,
+        payload: { status: mapped.status },
       });
     } catch (error) {
       console.error('Klaida apdorojant realaus laiko užimtumo įvykį:', error);

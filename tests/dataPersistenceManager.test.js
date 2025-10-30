@@ -68,30 +68,30 @@ function createSupabaseMock() {
     data: [
       {
         id: 'occupancy-1',
-        bed_id: 'bed-uuid-1',
-        occupancy_state: 'occupied',
-        patient_code: null,
-        expected_until: null,
-        notes: null,
-        created_by: 'nurse@example.com',
-        metadata: {},
-        created_at: '2024-01-01T09:00:00.000Z',
-        beds: { label: 'IT1' },
+        vieta: 'IT1',
+        busena: 'Užimta',
+        pacientas: 'P123',
+        komentaras: 'Pastaba',
+        slaugytojas: 'nurse@example.com',
+        padejejas: 'assistant@example.com',
+        gydytojas: null,
+        kat: 2,
+        updated_at: '2024-01-01T09:00:00.000Z',
       },
     ],
     error: null,
   }));
   const occupancySelect = vi.fn(() => ({ order: occupancySelectOrder }));
 
-  const occupancyInsertSelect = vi.fn(async () => ({
+  const boardUpsertSelect = vi.fn(async () => ({
     data: [
-      { id: 'occupancy-1', created_at: '2024-01-01T09:00:00.000Z' },
+      { vieta: 'IT1', updated_at: '2024-01-01T09:00:00.000Z' },
     ],
     error: null,
   }));
-  const occupancyInsert = vi.fn(() => ({ select: occupancyInsertSelect }));
+  const boardUpsert = vi.fn(() => ({ select: boardUpsertSelect }));
 
-  const aggregatedSelect = vi.fn(async (columns) => ({
+  const aggregatedSelect = vi.fn(async () => ({
     data: [
       {
         bed_id: 'bed-uuid-1',
@@ -102,19 +102,20 @@ function createSupabaseMock() {
         status_reported_by: 'nurse@example.com',
         status_metadata: { description: 'Pastaba' },
         status_created_at: '2024-01-01T10:00:00.000Z',
-        occupancy_state: 'occupied',
+        occupancy_state: 'Užimta',
         patient_code: 'P123',
-        expected_until: '2024-01-01T12:00:00.000Z',
-        occupancy_notes: null,
+        expected_until: null,
+        occupancy_notes: 'Pastaba',
         occupancy_created_by: 'nurse@example.com',
-        occupancy_metadata: {},
+        occupancy_metadata: { nurse: 'nurse@example.com' },
         occupancy_created_at: '2024-01-01T09:00:00.000Z',
       },
     ],
     error: null,
   }));
 
-  const deleteBuilder = { neq: vi.fn(async () => ({ error: null })) };
+  const statusDeleteBuilder = { neq: vi.fn(async () => ({ error: null })) };
+  const boardDeleteBuilder = { select: vi.fn(async () => ({ error: null })) };
 
   const from = vi.fn((table) => {
     switch (table) {
@@ -124,13 +125,13 @@ function createSupabaseMock() {
         return {
           insert: statusInsert,
           select: statusSelect,
-          delete: () => deleteBuilder,
+          delete: () => statusDeleteBuilder,
         };
-      case 'occupancy_events':
+      case 'ed_board':
         return {
-          insert: occupancyInsert,
+          upsert: boardUpsert,
           select: occupancySelect,
-          delete: () => deleteBuilder,
+          delete: () => boardDeleteBuilder,
         };
       case 'aggregated_bed_state':
         return {
@@ -148,9 +149,11 @@ function createSupabaseMock() {
       statusInsert,
       statusInsertSelect,
       statusSelectOrder,
-      occupancyInsert,
-      occupancyInsertSelect,
+      boardUpsert,
+      boardUpsertSelect,
       occupancySelectOrder,
+      statusDeleteBuilder,
+      boardDeleteBuilder,
       aggregatedSelect,
     },
   };
@@ -211,11 +214,17 @@ describe('DataPersistenceManager with Supabase', () => {
         timestamp: '2024-01-01T09:00:00.000Z',
         bedId: 'IT1',
         status: 'occupied',
-        patientCode: null,
+        patientCode: 'P123',
         expectedUntil: null,
-        notes: null,
+        notes: 'Pastaba',
         createdBy: 'nurse@example.com',
-        metadata: {},
+        metadata: {
+          source: 'ed_board',
+          nurse: 'nurse@example.com',
+          assistant: 'assistant@example.com',
+          rawStatus: 'Užimta',
+          kat: 2,
+        },
       },
     ]);
   });
@@ -236,11 +245,15 @@ describe('DataPersistenceManager with Supabase', () => {
         statusMetadata: { description: 'Pastaba' },
         occupancyState: 'occupied',
         patientCode: 'P123',
-        expectedUntil: '2024-01-01T12:00:00.000Z',
-        occupancyNotes: null,
+        expectedUntil: null,
+        occupancyNotes: 'Pastaba',
         occupancyCreatedBy: 'nurse@example.com',
         occupancyCreatedAt: '2024-01-01T09:00:00.000Z',
-        occupancyMetadata: {},
+        occupancyMetadata: {
+          nurse: 'nurse@example.com',
+          source: 'ed_board',
+          rawStatus: 'Užimta',
+        },
       },
     ]);
     expect(manager.lastSyncCache).toBe('2024-01-01T10:00:00.000Z');
@@ -336,7 +349,7 @@ describe('DataPersistenceManager with Supabase', () => {
     expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[2][0]).toContain('occupancy_metadata:metadata');
     expect(aggregated).toHaveLength(1);
     expect(aggregated[0].statusMetadata).toEqual({});
-    expect(aggregated[0].occupancyMetadata).toEqual({ legacy: true });
+    expect(aggregated[0].occupancyMetadata).toEqual({ legacy: true, source: 'ed_board' });
     expect(
       warnSpy.mock.calls.some(([message]) =>
         message.includes('status_metadata') && message.includes('tęsiama be šios informacijos'),
@@ -400,7 +413,7 @@ describe('DataPersistenceManager with Supabase', () => {
     expect(supabaseMock.__mocks.aggregatedSelect.mock.calls[2][0]).not.toContain('occupancy_metadata');
 
     expect(aggregated).toHaveLength(1);
-    expect(aggregated[0].occupancyMetadata).toEqual({});
+    expect(aggregated[0].occupancyMetadata).toEqual({ source: 'ed_board' });
 
     expect(
       warnSpy.mock.calls.some(([message]) => message.includes('occupancy_metadata')),

@@ -3,7 +3,7 @@
 
 alter table if exists public.beds enable row level security;
 alter table if exists public.bed_status_events enable row level security;
-alter table if exists public.occupancy_events enable row level security;
+alter table if exists public.ed_board enable row level security;
 alter table if exists public.user_interactions enable row level security;
 alter table if exists public.nfc_tags enable row level security;
 
@@ -12,12 +12,13 @@ drop policy if exists "Allow authenticated select beds" on public.beds;
 drop policy if exists "Allow authenticated select nfc_tags" on public.nfc_tags;
 drop policy if exists "Allow authenticated insert bed_status_events" on public.bed_status_events;
 drop policy if exists "Allow authenticated select bed_status_events" on public.bed_status_events;
-drop policy if exists "Allow authenticated insert occupancy_events" on public.occupancy_events;
-drop policy if exists "Allow authenticated select occupancy_events" on public.occupancy_events;
+drop policy if exists "Allow authenticated insert ed_board" on public.ed_board;
+drop policy if exists "Allow authenticated update ed_board" on public.ed_board;
+drop policy if exists "Allow authenticated select ed_board" on public.ed_board;
+drop policy if exists "Allow auditor select ed_board" on public.ed_board;
 drop policy if exists "Allow authenticated insert user_interactions" on public.user_interactions;
 drop policy if exists "Allow auditor select user_interactions" on public.user_interactions;
 drop policy if exists "Allow auditor select bed_status_events" on public.bed_status_events;
-drop policy if exists "Allow auditor select occupancy_events" on public.occupancy_events;
 drop policy if exists "Allow admin manage beds" on public.beds;
 
 -- Lovų matomumas visiems autentikuotiems naudotojams.
@@ -47,15 +48,22 @@ for select
 to authenticated
 using (true);
 
--- Užimtumo įvykių politika.
-create policy "Allow authenticated insert occupancy_events"
-on public.occupancy_events
+-- ed_board lentelės politika (duomenis pildo Apps Script, bet naudotojai gali matyti ir koreguoti prireikus).
+create policy "Allow authenticated insert ed_board"
+on public.ed_board
 for insert
 to authenticated
-with check (auth.email() = created_by);
+with check (true);
 
-create policy "Allow authenticated select occupancy_events"
-on public.occupancy_events
+create policy "Allow authenticated update ed_board"
+on public.ed_board
+for update
+to authenticated
+using (true)
+with check (true);
+
+create policy "Allow authenticated select ed_board"
+on public.ed_board
 for select
 to authenticated
 using (true);
@@ -83,8 +91,8 @@ for select
 to authenticated
 using ((auth.jwt() -> 'user_metadata' ->> 'role') in ('auditor', 'admin'));
 
-create policy "Allow auditor select occupancy_events"
-on public.occupancy_events
+create policy "Allow auditor select ed_board"
+on public.ed_board
 for select
 to authenticated
 using ((auth.jwt() -> 'user_metadata' ->> 'role') in ('auditor', 'admin'));
