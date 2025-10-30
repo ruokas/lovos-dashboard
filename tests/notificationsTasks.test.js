@@ -51,7 +51,7 @@ describe('NotificationManager su bendromis užduotimis', () => {
     delete global.Notification;
   });
 
-  it('išskiria kritines užduotis ir įjungia garso signalą', () => {
+  it('bendras užduotis rodo kaip korteles ir įjungia garso signalą', () => {
     const criticalTask = {
       id: 'task-1',
       title: 'Laboratoriniai mėginiai',
@@ -59,21 +59,27 @@ describe('NotificationManager su bendromis užduotimis', () => {
       priority: 1,
       dueAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
       status: 'planned',
-      zone: 'laboratory',
-      zoneLabel: 'Laboratorija',
-      channel: 'laboratory',
-      channelLabel: 'Laboratorija',
+      zone: 'general',
+      zoneLabel: 'Bendras',
+      channel: 'general',
+      channelLabel: 'Bendras',
+      type: 'general',
+      typeLabel: 'Bendra užduotis',
       responsible: 'Kurjeris',
-      metadata: { patient: { reference: 'Petraitis / A123' } },
+      metadata: {
+        general: true,
+        patient: { reference: 'Petraitis / A123' },
+      },
     };
 
     notificationManager.updateNotifications([], [criticalTask]);
 
     expect(notificationManager.playNotificationSound).toHaveBeenCalledWith(expect.objectContaining({ hasCriticalTaskChange: true }));
 
-    const summary = document.querySelector('.notification-task-summary');
-    expect(summary).not.toBeNull();
-    expect(summary.textContent).toContain('Laboratoriniai mėginiai');
+    const taskCard = document.querySelector('.notification-row[data-type="task"]');
+    expect(taskCard).not.toBeNull();
+    expect(taskCard.textContent).toContain('Laboratoriniai mėginiai');
+    expect(document.querySelector('.notification-task-summary')).toBeNull();
 
     const alerts = document.getElementById('alerts');
     expect(alerts.classList.contains('hidden')).toBe(false);
@@ -108,5 +114,8 @@ describe('NotificationManager su bendromis užduotimis', () => {
     expect(items).toHaveLength(2);
     const overdue = items.find((item) => item.textContent.includes('Skubi laboratorija'));
     expect(overdue.textContent).toMatch(/Prieš/);
+
+    const taskCards = document.querySelectorAll('.notification-row[data-type="task"]');
+    expect(taskCards.length).toBe(0);
   });
 });

@@ -324,12 +324,18 @@ export class NotificationManager {
       generatedId = `task-${Math.random().toString(36).slice(2, 11)}`;
     }
     const id = String(generatedId);
+    const typeValue = typeof task.type === 'string' ? task.type : (task.metadata?.type ?? 'task');
+    const typeLabel = typeof task.typeLabel === 'string'
+      ? task.typeLabel
+      : (task.metadata?.typeLabel ?? typeValue);
     const title = task.title
-      ?? task.typeLabel
-      ?? task.type
+      ?? typeLabel
+      ?? typeValue
       ?? t(texts.tasks?.title) ?? 'Užduotis';
     const description = typeof task.description === 'string' ? task.description : '';
     const zone = task.zoneLabel ?? task.channelLabel ?? task.zone ?? task.channel ?? '';
+    const zoneKey = typeof task.zone === 'string' ? task.zone : '';
+    const channelKey = typeof task.channel === 'string' ? task.channel : '';
     const responsible = task.responsible ?? '';
     const priority = Number.isFinite(task.priority) ? task.priority : TASK_PRIORITIES.MEDIUM;
     const priorityBucket = this.getTaskPriorityBucket(priority);
@@ -360,6 +366,12 @@ export class NotificationManager {
       status: task.status ?? TASK_STATUSES.PLANNED,
       source: task.source ?? 'local',
       recurrenceLabel,
+      priority,
+      priorityValue: priority,
+      type: typeValue,
+      typeLabel,
+      zoneKey,
+      channelKey,
       metadata: task.metadata ? { ...task.metadata } : {},
     };
   }
@@ -499,8 +511,12 @@ export class NotificationManager {
       ? taskSource
       : mergeRecurringTasksForDisplay(taskSource).map((task) => this.normaliseTaskForSummary(task)).filter(Boolean);
 
+    const generalTasks = summaryTasks.filter((task) => this.isGeneralTask(task));
+    const generalTaskIdSet = new Set(generalTasks.map((task) => task.id));
+    const otherTasks = summaryTasks.filter((task) => !generalTaskIdSet.has(task.id));
+
     const bedsWithNotifications = beds
-      .filter(bed => bed.notifications.length > 0)
+      .filter((bed) => bed.notifications.length > 0)
       .map((bed) => {
         const sortedNotifications = [...bed.notifications]
           .sort((a, b) => a.priority - b.priority)
@@ -522,60 +538,36 @@ export class NotificationManager {
         };
       });
 
-    bedsWithNotifications.sort((a, b) => {
-      const aPriority = Math.min(...a.notifications.map(n => n.priority));
-      const bPriority = Math.min(...b.notifications.map(n => n.priority));
-      return aPriority - bPriority;
+    const bedEntries = bedsWithNotifications.map((bed, index) => ({
+      type: 'bed',
+      priorityWeight: Math.min(...bed.notifications.map((notification) => notification.priority)),
+      timeWeight: this.getBedOldestTimestamp(bed.notifications),
+      markup: this.renderBedCard(bed, { fontSizeLevel: level }),
+      index,
+    }));
+
+    const generalTaskEntries = generalTasks.map((task, index) => ({
+      type: 'task',
+      priorityWeight: this.getTaskPriorityWeight(task),
+      timeWeight: Number.isFinite(task.dueTimestamp) ? task.dueTimestamp : Number.POSITIVE_INFINITY,
+      markup: this.renderGeneralTaskCard(task, { fontSizeLevel: level }),
+      index,
+    }));
+
+    const combinedEntries = [...bedEntries, ...generalTaskEntries].sort((a, b) => {
+      if (a.priorityWeight !== b.priorityWeight) {
+        return a.priorityWeight - b.priorityWeight;
+      }
+      if (a.timeWeight !== b.timeWeight) {
+        return a.timeWeight - b.timeWeight;
+      }
+      return a.index - b.index;
     });
 
-    const hasBedNotifications = bedsWithNotifications.length > 0;
-    const cards = hasBedNotifications
-      ? bedsWithNotifications.map((bed) => {
-        const highestPriority = bed.notifications[0];
-        const cardVariant = this.getNotificationVariant(highestPriority.priority);
-        const occupancyVariant = bed.occupancyStatus === 'occupied' ? 'busy' : 'free';
-        const occupancyText = bed.occupancyStatus === 'occupied' ? 'Užimta' : 'Laisva';
+    const streamMarkup = combinedEntries.map((entry) => entry.markup).join('');
+    const taskSummaryMarkup = this.renderTaskSummary(otherTasks, { fontSizeLevel: level });
 
-      const notifications = bed.notifications.map((notification) => {
-        const issueVariant = this.getNotificationVariant(notification.priority);
-        const { title, body } = this.parseNotificationMessage(notification.message);
-        const timeInfo = notification.timestamp ? this.formatTimestamp(notification.timestamp) : null;
-        const issueTitle = title || 'Pranešimas';
-        const metaMarkup = timeInfo
-          ? `<span class="notification-row__issue-meta ${applyFontSizeClasses('text-sm font-medium', level)}"><time datetime="${escapeHtml(timeInfo.iso)}">${escapeHtml(timeInfo.absolute)}</time><span class="notification-row__meta-separator" aria-hidden="true">•</span><span>${escapeHtml(timeInfo.relative)}</span></span>`
-          : '';
-        return `
-          <li class="notification-row__issue" data-variant="${issueVariant}">
-            <span class="notification-row__dot" aria-hidden="true"></span>
-            <div class="notification-row__issue-content">
-              <p class="notification-row__issue-title ${applyFontSizeClasses('text-base font-semibold', level)}">
-                <span>${escapeHtml(issueTitle)}</span>
-                ${metaMarkup}
-              </p>
-              ${body ? `<p class="notification-row__issue-body ${applyFontSizeClasses('text-sm', level)}">${escapeHtml(body)}</p>` : ''}
-            </div>
-          </li>
-        `;
-      }).join('');
-
-        return `
-        <article class="notification-row" data-variant="${cardVariant}" data-bed-id="${escapeHtml(bed.bedId)}">
-          <div class="notification-row__bed">
-            <span class="notification-row__bed-label ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(t(texts.ui.bedLabel))}</span>
-            <span class="notification-row__bed-id ${applyFontSizeClasses('text-2xl font-bold', level)}">${escapeHtml(bed.bedId)}</span>
-          </div>
-          <span class="notification-row__occupancy notification-row__occupancy--${occupancyVariant} ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(occupancyText)}</span>
-          <ul class="notification-row__issues">
-            ${notifications}
-          </ul>
-        </article>
-        `;
-      }).join('')
-      : '';
-
-    const taskSummaryMarkup = this.renderTaskSummary(summaryTasks, { fontSizeLevel: level });
-
-    if (!hasBedNotifications && !taskSummaryMarkup) {
+    if (!streamMarkup && !taskSummaryMarkup) {
       notificationContainer.innerHTML = `
         <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-emerald-700 dark:border-emerald-500/50 dark:bg-emerald-900/30 dark:text-emerald-100 ${applyFontSizeClasses('text-sm font-medium', level)}">
           ${escapeHtml(t(texts.notifications.allClear))}
@@ -585,9 +577,297 @@ export class NotificationManager {
     }
 
     notificationContainer.innerHTML = [
-      hasBedNotifications ? cards : '',
+      streamMarkup,
       taskSummaryMarkup,
     ].filter(Boolean).join('');
+  }
+
+  renderBedCard(bed, options = {}) {
+    if (!bed || !Array.isArray(bed.notifications) || bed.notifications.length === 0) {
+      return '';
+    }
+
+    const level = typeof options.fontSizeLevel === 'number'
+      ? clampFontSizeLevel(options.fontSizeLevel)
+      : this.fontSizeLevel;
+
+    const highestPriority = bed.notifications[0];
+    const cardVariant = this.getNotificationVariant(highestPriority.priority);
+    const occupancyVariant = bed.occupancyStatus === 'occupied' ? 'busy' : 'free';
+    const occupancyText = bed.occupancyStatus === 'occupied' ? 'Užimta' : 'Laisva';
+
+    const notifications = bed.notifications.map((notification) => {
+      const issueVariant = this.getNotificationVariant(notification.priority);
+      const { title, body } = this.parseNotificationMessage(notification.message);
+      const timeInfo = notification.timestamp ? this.formatTimestamp(notification.timestamp) : null;
+      const issueTitle = title || 'Pranešimas';
+      const timeParts = [];
+      if (timeInfo?.absolute) {
+        timeParts.push(`<time datetime="${escapeHtml(timeInfo.iso)}">${escapeHtml(timeInfo.absolute)}</time>`);
+      }
+      if (timeInfo?.relative) {
+        timeParts.push(`<span>${escapeHtml(timeInfo.relative)}</span>`);
+      }
+      const metaMarkup = timeParts.length
+        ? `<span class="notification-row__issue-meta ${applyFontSizeClasses('text-sm font-medium', level)}">${timeParts.join('<span class=\"notification-row__meta-separator\" aria-hidden=\"true\">•</span>')}</span>`
+        : '';
+
+      return `
+        <li class="notification-row__issue" data-variant="${issueVariant}">
+          <span class="notification-row__dot" aria-hidden="true"></span>
+          <div class="notification-row__issue-content">
+            <p class="notification-row__issue-title ${applyFontSizeClasses('text-base font-semibold', level)}">
+              <span>${escapeHtml(issueTitle)}</span>
+              ${metaMarkup}
+            </p>
+            ${body ? `<p class="notification-row__issue-body ${applyFontSizeClasses('text-sm', level)}">${escapeHtml(body)}</p>` : ''}
+          </div>
+        </li>
+      `;
+    }).join('');
+
+    return `
+      <article class="notification-row" data-variant="${cardVariant}" data-bed-id="${escapeHtml(bed.bedId)}">
+        <div class="notification-row__bed">
+          <span class="notification-row__bed-label ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(t(texts.ui.bedLabel))}</span>
+          <span class="notification-row__bed-id ${applyFontSizeClasses('text-2xl font-bold', level)}">${escapeHtml(bed.bedId)}</span>
+        </div>
+        <span class="notification-row__occupancy notification-row__occupancy--${occupancyVariant} ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(occupancyText)}</span>
+        <ul class="notification-row__issues">
+          ${notifications}
+        </ul>
+      </article>
+    `;
+  }
+
+  renderGeneralTaskCard(task, options = {}) {
+    if (!task || typeof task !== 'object') {
+      return '';
+    }
+
+    const level = typeof options.fontSizeLevel === 'number'
+      ? clampFontSizeLevel(options.fontSizeLevel)
+      : this.fontSizeLevel;
+
+    const taskTitle = typeof task.title === 'string' && task.title.trim()
+      ? task.title.trim()
+      : (typeof task.typeLabel === 'string' && task.typeLabel.trim() ? task.typeLabel.trim() : t(texts.tasks?.title) ?? 'Užduotis');
+    const cardVariant = this.getTaskCardVariant(task.priorityBucket);
+    const statusVariant = this.getTaskStatusBadgeVariant(task.status);
+    const statusLabel = this.getTaskStatusLabel(task.status);
+    const headerLabel = typeof task.typeLabel === 'string' && task.typeLabel.trim()
+      ? task.typeLabel.trim()
+      : (t(texts.notifications?.taskSummaryTitle) || 'Bendra užduotis');
+
+    const patientReference = this.buildPatientReference(task.metadata?.patient);
+    const zoneLabel = typeof task.zone === 'string' ? task.zone : '';
+    const defaultHeaderId = typeof taskTitle === 'string' ? taskTitle : (t(texts.common?.dash) || '—');
+    const headerId = patientReference
+      || (zoneLabel && zoneLabel.toLowerCase() !== 'general' ? zoneLabel : defaultHeaderId);
+
+    const dueParts = [];
+    if (task.dueIso && task.dueAbsolute) {
+      dueParts.push(`<time datetime="${escapeHtml(task.dueIso)}">${escapeHtml(task.dueAbsolute)}</time>`);
+    }
+    if (task.dueRelative) {
+      dueParts.push(`<span>${escapeHtml(task.dueRelative)}</span>`);
+    }
+    const overdueClass = task.isOverdue ? 'text-red-600 dark:text-red-300' : '';
+    const dueMarkup = dueParts.length
+      ? `<span class="notification-row__issue-meta ${overdueClass} ${applyFontSizeClasses('text-sm font-medium', level)}">${dueParts.join('<span class=\"notification-row__meta-separator\" aria-hidden=\"true\">•</span>')}</span>`
+      : '';
+
+    const descriptionMarkup = task.description
+      ? `<p class="notification-row__issue-body ${applyFontSizeClasses('text-sm', level)}">${escapeHtml(task.description)}</p>`
+      : '';
+
+    const metaParts = [];
+    if (patientReference) {
+      metaParts.push(`<span>${escapeHtml(patientReference)}</span>`);
+    }
+    if (zoneLabel && zoneLabel.toLowerCase() !== 'general') {
+      metaParts.push(`<span>${escapeHtml(zoneLabel)}</span>`);
+    }
+    if (task.responsible) {
+      metaParts.push(`<span>${escapeHtml(task.responsible)}</span>`);
+    }
+    if (task.recurrenceLabel && task.recurrenceLabel !== 'none') {
+      metaParts.push(`<span>${escapeHtml(task.recurrenceLabel)}</span>`);
+    }
+    const metaMarkup = metaParts.length
+      ? `<div class="notification-task__meta ${applyFontSizeClasses('text-[11px]', level)}">${metaParts.join('<span class=\"notification-task__due-separator\" aria-hidden=\"true\">•</span>')}</div>`
+      : '';
+
+    return `
+      <article class="notification-row" data-type="task" data-variant="${cardVariant}" data-task-id="${escapeHtml(task.id)}">
+        <div class="notification-row__bed">
+          <span class="notification-row__bed-label ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(headerLabel)}</span>
+          <span class="notification-row__bed-id ${applyFontSizeClasses('text-2xl font-bold', level)}">${escapeHtml(headerId)}</span>
+        </div>
+        <span class="notification-row__occupancy notification-row__occupancy--${statusVariant} ${applyFontSizeClasses('text-sm font-semibold', level)}">${escapeHtml(statusLabel)}</span>
+        <ul class="notification-row__issues">
+          <li class="notification-row__issue" data-variant="${cardVariant}">
+            <span class="notification-row__dot" aria-hidden="true"></span>
+            <div class="notification-row__issue-content">
+              <p class="notification-row__issue-title ${applyFontSizeClasses('text-base font-semibold', level)}">
+                <span>${escapeHtml(taskTitle)}</span>
+                ${dueMarkup}
+              </p>
+              ${descriptionMarkup}
+              ${metaMarkup}
+            </div>
+          </li>
+        </ul>
+      </article>
+    `;
+  }
+
+  getBedOldestTimestamp(notifications = []) {
+    if (!Array.isArray(notifications) || notifications.length === 0) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const timestamps = notifications
+      .map((notification) => {
+        if (notification?.timestamp instanceof Date) {
+          return notification.timestamp.getTime();
+        }
+        if (notification?.timestamp) {
+          const value = new Date(notification.timestamp).getTime();
+          return Number.isNaN(value) ? null : value;
+        }
+        return null;
+      })
+      .filter((value) => Number.isFinite(value));
+
+    if (!timestamps.length) {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    return Math.min(...timestamps);
+  }
+
+  getTaskPriorityWeight(task) {
+    if (!task || typeof task !== 'object') {
+      return TASK_PRIORITIES.MEDIUM;
+    }
+
+    if (Number.isFinite(task.priorityValue)) {
+      return task.priorityValue;
+    }
+
+    if (Number.isFinite(task.priority)) {
+      return task.priority;
+    }
+
+    switch (task.priorityBucket) {
+      case 'critical':
+        return TASK_PRIORITIES.CRITICAL;
+      case 'high':
+        return TASK_PRIORITIES.HIGH;
+      case 'low':
+        return TASK_PRIORITIES.LOW;
+      case 'none':
+        return TASK_PRIORITIES.LOW + 1;
+      case 'medium':
+      default:
+        return TASK_PRIORITIES.MEDIUM;
+    }
+  }
+
+  getTaskCardVariant(priorityBucket) {
+    switch (priorityBucket) {
+      case 'critical':
+        return 'critical';
+      case 'high':
+        return 'warning';
+      case 'medium':
+        return 'caution';
+      case 'low':
+        return 'info';
+      default:
+        return 'neutral';
+    }
+  }
+
+  getTaskStatusBadgeVariant(status) {
+    switch (status) {
+      case TASK_STATUSES.COMPLETED:
+        return 'completed';
+      case TASK_STATUSES.IN_PROGRESS:
+        return 'in-progress';
+      case TASK_STATUSES.BLOCKED:
+        return 'blocked';
+      case TASK_STATUSES.PLANNED:
+      default:
+        return 'planned';
+    }
+  }
+
+  getTaskStatusLabel(status) {
+    const statusKey = typeof status === 'string' ? status : TASK_STATUSES.PLANNED;
+    const label = t(texts.tasks?.status?.[statusKey]);
+    if (label) {
+      return label;
+    }
+    switch (statusKey) {
+      case TASK_STATUSES.COMPLETED:
+        return 'Užbaigta';
+      case TASK_STATUSES.IN_PROGRESS:
+        return 'Vykdoma';
+      case TASK_STATUSES.BLOCKED:
+        return 'Sustabdyta';
+      case TASK_STATUSES.PLANNED:
+      default:
+        return 'Planuojama';
+    }
+  }
+
+  buildPatientReference(patientMeta) {
+    if (!patientMeta || typeof patientMeta !== 'object') {
+      return '';
+    }
+
+    const candidates = [
+      patientMeta.reference,
+      patientMeta.surname,
+      patientMeta.chartNumber,
+      patientMeta.room,
+    ];
+
+    const values = candidates
+      .map((value) => (typeof value === 'string' ? value.trim() : ''))
+      .filter((value, index, array) => value && array.indexOf(value) === index);
+
+    return values.join(' / ');
+  }
+
+  isGeneralTask(task) {
+    if (!task || typeof task !== 'object') {
+      return false;
+    }
+
+    const typeKey = typeof task.type === 'string' ? task.type.toLowerCase() : '';
+    const zoneKey = typeof task.zoneKey === 'string' ? task.zoneKey.toLowerCase() : '';
+    const channelKey = typeof task.channelKey === 'string' ? task.channelKey.toLowerCase() : '';
+
+    if (typeKey === 'general' || zoneKey === 'general' || channelKey === 'general') {
+      return true;
+    }
+
+    if (task.metadata && typeof task.metadata === 'object') {
+      if (task.metadata.general === true || task.metadata.isGeneral === true) {
+        return true;
+      }
+      const scopeKey = typeof task.metadata.taskScope === 'string'
+        ? task.metadata.taskScope.toLowerCase()
+        : '';
+      if (scopeKey === 'general' || scopeKey === 'shared') {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   getNotificationVariant(priority) {

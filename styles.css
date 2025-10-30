@@ -470,6 +470,13 @@
   flex: 0 0 auto;
 }
 
+.notification-row[data-type="task"] .notification-row__bed {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  min-width: 12rem;
+}
+
 #notificationSummary .notification-row__bed-label {
   color: #64748b;
   letter-spacing: 0.08em;
@@ -480,6 +487,16 @@
 #notificationSummary .notification-row__bed-id {
   color: #0f172a;
   font-size: calc(1.75rem * var(--app-font-scale, 1));
+}
+
+#notificationSummary .notification-row[data-type="task"] .notification-row__bed-id {
+  font-size: calc(1.3rem * var(--app-font-scale, 1));
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+#notificationSummary .notification-row[data-type="task"] .notification-row__bed-label {
+  letter-spacing: 0.06em;
 }
 
 #notificationSummary .notification-row__occupancy {
@@ -504,6 +521,26 @@
   color: #15803d;
 }
 
+.notification-row__occupancy--planned {
+  background: #e0f2fe;
+  color: #0369a1;
+}
+
+.notification-row__occupancy--in-progress {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.notification-row__occupancy--blocked {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.notification-row__occupancy--completed {
+  background: #dcfce7;
+  color: #047857;
+}
+
 .notification-row__issues {
   list-style: none;
   margin: 0;
@@ -514,11 +551,20 @@
   flex: 1 1 12rem;
 }
 
+.notification-row[data-type="task"] .notification-row__issues {
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
 .notification-row__issue {
   display: flex;
   align-items: flex-start;
   gap: var(--space-2);
   min-width: 12rem;
+}
+
+.notification-row[data-type="task"] .notification-row__issue {
+  min-width: 100%;
 }
 
 .notification-row__dot {
@@ -619,6 +665,26 @@
 
 .dark #notificationSummary .notification-row__occupancy--free {
   background: rgba(34, 197, 94, 0.2);
+  color: #bbf7d0;
+}
+
+.dark #notificationSummary .notification-row__occupancy--planned {
+  background: rgba(14, 165, 233, 0.2);
+  color: #bae6fd;
+}
+
+.dark #notificationSummary .notification-row__occupancy--in-progress {
+  background: rgba(217, 119, 6, 0.25);
+  color: #fcd34d;
+}
+
+.dark #notificationSummary .notification-row__occupancy--blocked {
+  background: rgba(220, 38, 38, 0.25);
+  color: #fecaca;
+}
+
+.dark #notificationSummary .notification-row__occupancy--completed {
+  background: rgba(34, 197, 94, 0.25);
   color: #bbf7d0;
 }
 
