@@ -13,7 +13,7 @@ import { ReportingService } from './reports/reportingService.js';
 import { SupabaseAuthManager } from './auth/supabaseAuth.js';
 import { t, texts } from './texts.js';
 import { loadData as loadCsvData, rowsToOccupancyEvents } from './data.js';
-import { clampFontSizeLevel, readStoredFontSizeLevel, storeFontSizeLevel, applyFontSizeClasses } from './utils/fontSize.js';
+import { clampFontSizeLevel, readStoredFontSizeLevel, storeFontSizeLevel, applyFontSizeClasses, applyFontSizeLevelToDocument } from './utils/fontSize.js';
 
 const HTML_ESCAPE_MAP = {
   '&': '&amp;',
@@ -38,15 +38,17 @@ export class BedManagementApp {
   constructor() {
     this.bedDataManager = new BedDataManager();
     this.settingsManager = new SettingsManager();
+    this.document = typeof document !== 'undefined' ? document : undefined;
     this.fontSizeLevel = readStoredFontSizeLevel();
+    applyFontSizeLevelToDocument(this.fontSizeLevel, this.document);
     this.viewMode = this.readViewMode();
     this.isGridView = this.viewMode === 'grid';
     this.isBedListVisible = this.readBedListVisibility();
     this.currentSearchTerm = '';
     this.searchDebounceTimer = null;
-    this.persistenceManager = new DataPersistenceManager({ document: typeof document !== 'undefined' ? document : undefined });
+    this.persistenceManager = new DataPersistenceManager({ document: this.document });
     this.notificationManager = new NotificationManager(this.settingsManager, { fontSizeLevel: this.fontSizeLevel });
-    const sharedDocument = typeof document !== 'undefined' ? document : undefined;
+    const sharedDocument = this.document;
     this.reportingService = new ReportingService({
       client: this.persistenceManager.client,
       bedDataManager: this.bedDataManager,
@@ -690,6 +692,7 @@ export class BedManagementApp {
       return;
     }
     this.fontSizeLevel = storeFontSizeLevel(nextLevel);
+    applyFontSizeLevelToDocument(this.fontSizeLevel, this.document);
     this.notificationManager.setFontSizeLevel?.(this.fontSizeLevel);
     this.renderNotificationSummary();
     this.renderBedGrid();

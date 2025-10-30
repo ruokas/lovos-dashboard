@@ -1,4 +1,5 @@
 const FONT_SIZE_CLASSES = ['text-xs', 'text-sm', 'text-base', 'text-lg', 'text-xl', 'text-2xl', 'text-3xl', 'text-4xl'];
+const FONT_SCALE_FACTORS = [1, 1.125, 1.25, 1.375];
 
 export const FONT_SIZE_STORAGE_KEY = 'notificationFontSize';
 export const MIN_FONT_SIZE_LEVEL = 0;
@@ -12,6 +13,33 @@ function getDefaultStorage() {
     return globalThis.localStorage;
   }
   return undefined;
+}
+
+function getDefaultDocument() {
+  if (typeof document !== 'undefined') {
+    return document;
+  }
+  if (typeof globalThis !== 'undefined' && globalThis.document) {
+    return globalThis.document;
+  }
+  return undefined;
+}
+
+export function getFontScale(level) {
+  const clamped = clampFontSizeLevel(level);
+  return FONT_SCALE_FACTORS[clamped] ?? FONT_SCALE_FACTORS[0] ?? 1;
+}
+
+export function applyFontSizeLevelToDocument(level, doc = getDefaultDocument()) {
+  const clamped = clampFontSizeLevel(level);
+  const scale = getFontScale(clamped);
+  const targetDocument = doc;
+  if (!targetDocument?.documentElement) {
+    return clamped;
+  }
+  targetDocument.documentElement.setAttribute('data-font-size-level', String(clamped));
+  targetDocument.documentElement.style.setProperty('--app-font-scale', String(scale));
+  return clamped;
 }
 
 export function clampFontSizeLevel(level) {
