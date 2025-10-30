@@ -28,3 +28,11 @@ export function getSupabaseClient(doc) {
 export function resetSupabaseClient() {
   client = undefined;
 }
+
+/**
+ * Leidžia testuose ar kitose vietose injekuoti paruoštą Supabase klientą.
+ */
+export function setSupabaseClient(customClient) {
+  client = customClient ?? undefined;
+  return client;
+}

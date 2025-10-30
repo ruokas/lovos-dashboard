@@ -1,4 +1,5 @@
 import { BED_LAYOUT, STATUS_OPTIONS, PRIORITY_LEVELS } from '../models/bedData.js';
+import { TaskData, TaskTemplate, TASK_STATUS } from '../models/taskData.js';
 import { getSupabaseClient } from './supabaseClient.js';
 import { getLastSupabaseUpdate } from './syncMetadataService.js';
 import { parseSupabaseTimestamp } from '../utils/time.js';
@@ -8,10 +9,13 @@ const LOCAL_STORAGE_KEYS = {
   occupancyData: 'bed-management-occupancy-data',
   lastSync: 'bed-management-last-sync',
   version: 'bed-management-data-version',
+  tasks: 'bed-management-tasks',
+  taskTemplates: 'bed-management-task-templates',
 };
 
-const DATA_VERSION = '2.0.0';
+const DATA_VERSION = '2.1.0';
 const MAX_LOCAL_ITEMS = 10000;
+const MAX_LOCAL_TASK_ITEMS = 500;
 
 const STATUS_PRIORITY_MAP = new Map([
   [STATUS_OPTIONS.MESSY_BED, PRIORITY_LEVELS.MESSY_BED],
@@ -42,6 +46,24 @@ function saveLocalArray(key, value) {
   } catch (error) {
     console.error('Nepavyko įrašyti localStorage:', error);
   }
+}
+
+function normalizeTaskHistoryEntry({
+  type,
+  status,
+  description,
+  createdAt,
+  createdBy,
+  metadata,
+}) {
+  return {
+    type: type ?? 'updated',
+    status: status ?? null,
+    description: description ?? null,
+    createdAt: normalizeIsoTimestamp(createdAt ?? new Date().toISOString()),
+    createdBy: createdBy ?? null,
+    metadata: { ...(metadata ?? {}) },
+  };
 }
 
 function normalizeIsoTimestamp(value) {
@@ -221,6 +243,280 @@ export class DataPersistenceManager {
     }
 
     const createdAt = data?.[0]?.created_at ?? occupancyData.timestamp ?? new Date().toISOString();
+    this.lastSyncCache = createdAt;
+    return true;
+  }
+
+  async loadTaskTemplates() {
+    if (!this.#isSupabaseAvailable()) {
+      return createLocalArray(LOCAL_STORAGE_KEYS.taskTemplates)
+        .map((item) => new TaskTemplate(item));
+    }
+
+    const { data, error } = await this.client
+      .from('task_templates')
+      .select(`
+        id,
+        category,
+        description,
+        priority,
+        status,
+        due_at,
+        recurrence,
+        assigned_to,
+        metadata,
+        task_events (
+          id,
+          event_type,
+          status,
+          notes,
+          created_by,
+          metadata,
+          created_at
+        )
+      `)
+      .order('priority', { ascending: true })
+      .order('due_at', { ascending: true, nullsFirst: true });
+
+    if (error) {
+      throw new Error(`Nepavyko gauti užduočių šablonų iš nuotolinės paslaugos: ${error.message}`);
+    }
+
+    return (data ?? []).map((row) => TaskTemplate.fromSupabase(row));
+  }
+
+  async loadTasks() {
+    if (!this.#isSupabaseAvailable()) {
+      return createLocalArray(LOCAL_STORAGE_KEYS.tasks)
+        .map((item) => new TaskData(item));
+    }
+
+    const { data, error } = await this.client
+      .from('tasks')
+      .select(`
+        id,
+        template_id,
+        category,
+        description,
+        priority,
+        status,
+        due_at,
+        recurrence,
+        assigned_to,
+        metadata,
+        task_templates (
+          id,
+          category,
+          description,
+          priority,
+          status,
+          due_at,
+          recurrence,
+          assigned_to,
+          metadata
+        ),
+        task_events (
+          id,
+          event_type,
+          status,
+          notes,
+          created_by,
+          metadata,
+          created_at
+        )
+      `)
+      .order('due_at', { ascending: true, nullsFirst: true });
+
+    if (error) {
+      throw new Error(`Nepavyko gauti užduočių iš nuotolinės paslaugos: ${error.message}`);
+    }
+
+    const tasks = (data ?? []).map((row) => TaskData.fromSupabase(row));
+
+    let latest = null;
+    tasks.forEach((task) => {
+      task.history.forEach((event) => {
+        latest = pickLatestTimestamp(latest, event.createdAt);
+      });
+    });
+
+    if (latest) {
+      this.lastSyncCache = latest;
+    }
+
+    return tasks;
+  }
+
+  async saveTask(taskLike, options = {}) {
+    if (!taskLike) {
+      throw new Error('Užduoties duomenys negali būti tušti');
+    }
+
+    const task = taskLike instanceof TaskData ? taskLike : new TaskData(taskLike);
+    const eventType = options.eventType ?? (task.id ? 'updated' : 'created');
+    const eventTimestamp = normalizeIsoTimestamp(options.eventTimestamp ?? new Date().toISOString())
+      ?? new Date().toISOString();
+    const eventNotes = options.notes ?? null;
+    const eventCreatedBy = options.createdBy ?? task.assignedTo ?? null;
+    const eventMetadata = {
+      source: options.source ?? 'task_manager',
+      ...(options.metadata ?? {}),
+    };
+
+    if (!this.#isSupabaseAvailable()) {
+      const tasks = createLocalArray(LOCAL_STORAGE_KEYS.tasks);
+      const taskId = task.id ?? `local-task-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`;
+      const storedTask = new TaskData({
+        ...task.toJSON(),
+        id: taskId,
+        history: [
+          ...task.history,
+          normalizeTaskHistoryEntry({
+            type: eventType,
+            status: task.status,
+            description: eventNotes,
+            createdAt: eventTimestamp,
+            createdBy: eventCreatedBy,
+            metadata: eventMetadata,
+          }),
+        ],
+      });
+
+      const index = tasks.findIndex((existing) => existing?.id === taskId);
+      const payload = storedTask.toJSON();
+      if (index >= 0) {
+        tasks[index] = payload;
+      } else {
+        tasks.push(payload);
+      }
+
+      if (tasks.length > MAX_LOCAL_TASK_ITEMS) {
+        tasks.splice(0, tasks.length - MAX_LOCAL_TASK_ITEMS);
+      }
+
+      saveLocalArray(LOCAL_STORAGE_KEYS.tasks, tasks);
+      this.#updateLocalLastSync(eventTimestamp);
+      this.lastSyncCache = eventTimestamp;
+      return taskId;
+    }
+
+    const taskPayload = {
+      id: task.id ?? undefined,
+      template_id: task.templateId ?? task.metadata?.template?.id ?? null,
+      category: task.category,
+      description: task.description,
+      priority: task.priority ?? 0,
+      status: task.status ?? TASK_STATUS.PENDING,
+      due_at: task.dueAt ?? null,
+      recurrence: task.recurrence ?? null,
+      assigned_to: task.assignedTo ?? null,
+      metadata: { ...(task.metadata ?? {}) },
+    };
+
+    const upsert = this.client
+      .from('tasks')
+      .upsert([taskPayload], { onConflict: 'id', defaultToNull: false })
+      .select('id');
+
+    const { data, error } = await upsert;
+    if (error) {
+      throw new Error(`Nepavyko išsaugoti užduoties nuotolinėje paslaugoje: ${error.message}`);
+    }
+
+    const savedId = data?.[0]?.id ?? task.id;
+
+    const eventPayload = {
+      task_id: savedId,
+      event_type: eventType,
+      status: task.status ?? TASK_STATUS.PENDING,
+      notes: eventNotes,
+      created_by: eventCreatedBy,
+      metadata: eventMetadata,
+      created_at: eventTimestamp,
+    };
+
+    const { data: eventData, error: eventError } = await this.client
+      .from('task_events')
+      .insert([eventPayload])
+      .select('created_at');
+
+    if (eventError) {
+      throw new Error(`Nepavyko įrašyti užduoties istorijos: ${eventError.message}`);
+    }
+
+    const createdAt = eventData?.[0]?.created_at ?? eventTimestamp;
+    this.lastSyncCache = createdAt;
+    return savedId;
+  }
+
+  async completeTask(taskId, options = {}) {
+    if (!taskId) {
+      throw new Error('Nenurodytas užduoties identifikatorius');
+    }
+
+    const timestamp = normalizeIsoTimestamp(options.completedAt ?? new Date().toISOString())
+      ?? new Date().toISOString();
+
+    if (!this.#isSupabaseAvailable()) {
+      const tasks = createLocalArray(LOCAL_STORAGE_KEYS.tasks);
+      const index = tasks.findIndex((item) => item?.id === taskId);
+      if (index === -1) {
+        return false;
+      }
+
+      const existing = new TaskData(tasks[index]);
+      const updated = new TaskData({
+        ...existing.toJSON(),
+        status: TASK_STATUS.COMPLETED,
+        history: [
+          ...existing.history,
+          normalizeTaskHistoryEntry({
+            type: 'completed',
+            status: TASK_STATUS.COMPLETED,
+            description: options.notes ?? null,
+            createdAt: timestamp,
+            createdBy: options.completedBy ?? null,
+            metadata: { source: 'task_manager', ...(options.metadata ?? {}) },
+          }),
+        ],
+      });
+
+      tasks[index] = updated.toJSON();
+      saveLocalArray(LOCAL_STORAGE_KEYS.tasks, tasks);
+      this.#updateLocalLastSync(timestamp);
+      this.lastSyncCache = timestamp;
+      return true;
+    }
+
+    const { error } = await this.client
+      .from('tasks')
+      .update({ status: TASK_STATUS.COMPLETED })
+      .eq('id', taskId);
+
+    if (error) {
+      throw new Error(`Nepavyko užbaigti užduoties nuotolinėje paslaugoje: ${error.message}`);
+    }
+
+    const eventPayload = {
+      task_id: taskId,
+      event_type: 'completed',
+      status: TASK_STATUS.COMPLETED,
+      notes: options.notes ?? null,
+      created_by: options.completedBy ?? null,
+      metadata: { source: 'task_manager', ...(options.metadata ?? {}) },
+      created_at: timestamp,
+    };
+
+    const { data, error: eventError } = await this.client
+      .from('task_events')
+      .insert([eventPayload])
+      .select('created_at');
+
+    if (eventError) {
+      throw new Error(`Nepavyko įrašyti užduoties užbaigimo įvykių: ${eventError.message}`);
+    }
+
+    const createdAt = data?.[0]?.created_at ?? timestamp;
     this.lastSyncCache = createdAt;
     return true;
   }
@@ -557,9 +853,11 @@ export class DataPersistenceManager {
   }
 
   async exportData() {
-    const [formResponses, occupancyData, lastSync] = await Promise.all([
+    const [formResponses, occupancyData, tasks, taskTemplates, lastSync] = await Promise.all([
       this.loadFormResponses(),
       this.loadOccupancyData(),
+      this.loadTasks(),
+      this.loadTaskTemplates(),
       this.getLastSync(),
     ]);
 
@@ -569,6 +867,10 @@ export class DataPersistenceManager {
         exportTimestamp: new Date().toISOString(),
         formResponses,
         occupancyData,
+        tasks: tasks.map((task) => (task instanceof TaskData ? task.toJSON() : task)),
+        taskTemplates: taskTemplates.map((template) => (
+          template instanceof TaskTemplate ? template.toJSON() : template
+        )),
         lastSync,
       },
       null,
@@ -599,9 +901,14 @@ export class DataPersistenceManager {
       throw new Error('Importuojamas failas neatitinka struktūros');
     }
 
+    const tasks = Array.isArray(data.tasks) ? data.tasks : [];
+    const taskTemplates = Array.isArray(data.taskTemplates) ? data.taskTemplates : [];
+
     if (!this.#isSupabaseAvailable()) {
       saveLocalArray(LOCAL_STORAGE_KEYS.formResponses, data.formResponses);
       saveLocalArray(LOCAL_STORAGE_KEYS.occupancyData, data.occupancyData);
+      saveLocalArray(LOCAL_STORAGE_KEYS.tasks, tasks);
+      saveLocalArray(LOCAL_STORAGE_KEYS.taskTemplates, taskTemplates);
       if (data.lastSync) {
         this.#updateLocalLastSync(data.lastSync);
         this.lastSyncCache = data.lastSync;
@@ -665,6 +972,81 @@ export class DataPersistenceManager {
       }
     }
 
+    const now = new Date().toISOString();
+
+    if (taskTemplates.length > 0) {
+      const templatePayload = taskTemplates.map((template) => ({
+        id: template.id ?? undefined,
+        category: template.category ?? 'general',
+        description: template.description ?? '',
+        priority: template.priority ?? 0,
+        status: template.status ?? 'active',
+        due_at: template.dueAt ?? null,
+        recurrence: template.recurrence ?? null,
+        assigned_to: template.assignedTo ?? null,
+        metadata: { ...(template.metadata ?? {}), importedAt: now },
+      }));
+
+      const { error: templateError } = await this.client
+        .from('task_templates')
+        .upsert(templatePayload, { onConflict: 'id', defaultToNull: false });
+
+      if (templateError) {
+        throw new Error(`Nepavyko importuoti užduočių šablonų: ${templateError.message}`);
+      }
+    }
+
+    if (tasks.length > 0) {
+      const taskPayload = tasks.map((task) => ({
+        id: task.id ?? undefined,
+        template_id: task.templateId ?? task.metadata?.template?.id ?? null,
+        category: task.category ?? 'general',
+        description: task.description ?? '',
+        priority: task.priority ?? 0,
+        status: task.status ?? TASK_STATUS.PENDING,
+        due_at: task.dueAt ?? null,
+        recurrence: task.recurrence ?? null,
+        assigned_to: task.assignedTo ?? null,
+        metadata: { ...(task.metadata ?? {}), importedAt: now },
+      }));
+
+      const { error: taskError } = await this.client
+        .from('tasks')
+        .upsert(taskPayload, { onConflict: 'id', defaultToNull: false });
+
+      if (taskError) {
+        throw new Error(`Nepavyko importuoti užduočių: ${taskError.message}`);
+      }
+
+      const taskEvents = tasks
+        .flatMap((task) => {
+          if (!Array.isArray(task.history) || !task.id) {
+            return [];
+          }
+          return task.history.map((event) => ({
+            id: event.id ?? undefined,
+            task_id: task.id,
+            event_type: event.type ?? 'updated',
+            status: event.status ?? task.status ?? TASK_STATUS.PENDING,
+            notes: event.description ?? null,
+            created_by: event.createdBy ?? null,
+            metadata: { ...(event.metadata ?? {}), importedAt: now },
+            created_at: event.createdAt ?? now,
+          }));
+        })
+        .filter((event) => event.task_id);
+
+      if (taskEvents.length > 0) {
+        const { error: eventError } = await this.client
+          .from('task_events')
+          .insert(taskEvents);
+
+        if (eventError) {
+          throw new Error(`Nepavyko importuoti užduočių įvykių: ${eventError.message}`);
+        }
+      }
+    }
+
     this.lastSyncCache = data.lastSync ?? new Date().toISOString();
     return true;
   }
@@ -697,6 +1079,33 @@ export class DataPersistenceManager {
 
     if (deleteOccupancy.error) {
       throw new Error(`Nepavyko išvalyti užimtumo nuotolinėje paslaugoje: ${deleteOccupancy.error.message}`);
+    }
+
+    const deleteTaskEvents = await this.client
+      .from('task_events')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteTaskEvents.error) {
+      throw new Error(`Nepavyko išvalyti užduočių įvykių nuotolinėje paslaugoje: ${deleteTaskEvents.error.message}`);
+    }
+
+    const deleteTasks = await this.client
+      .from('tasks')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteTasks.error) {
+      throw new Error(`Nepavyko išvalyti užduočių nuotolinėje paslaugoje: ${deleteTasks.error.message}`);
+    }
+
+    const deleteTemplates = await this.client
+      .from('task_templates')
+      .delete()
+      .neq('id', '00000000-0000-0000-0000-000000000000');
+
+    if (deleteTemplates.error) {
+      throw new Error(`Nepavyko išvalyti užduočių šablonų nuotolinėje paslaugoje: ${deleteTemplates.error.message}`);
     }
 
     this.lastSyncCache = null;
