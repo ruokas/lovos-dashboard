@@ -125,37 +125,33 @@ describe('NotificationManager su bendromis užduotimis', () => {
     expect(highlight.textContent).toContain('Stebėjimo zona');
   });
 
-  it('grupuoja užduotis pagal prioritetą ir SLA', () => {
-    const tasks = [
-      {
-        id: 'task-crit',
-        title: 'Skubi laboratorija',
-        priority: 1,
-        dueAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
-        status: 'inProgress',
-        zone: 'laboratory',
-        channel: 'laboratory',
-      },
-      {
-        id: 'task-medium',
-        title: 'Komunikacijos užduotis',
-        priority: 3,
-        dueAt: new Date(Date.now() + 3 * 60 * 60 * 1000).toISOString(),
-        status: 'planned',
-        zone: 'communication',
-        channel: 'communication',
-      },
-    ];
+  it('pasikartojančios užduotys įtraukiamos į srautą, kai ateina terminas', () => {
+    const dueTask = {
+      id: 'task-crit',
+      title: 'Skubi laboratorija',
+      priority: 1,
+      dueAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
+      status: 'inProgress',
+      zone: 'laboratory',
+      channel: 'laboratory',
+    };
+    const upcomingTask = {
+      id: 'task-upcoming',
+      title: 'Komunikacijos užduotis',
+      priority: 3,
+      dueAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      status: 'planned',
+      zone: 'communication',
+      channel: 'communication',
+    };
 
-    notificationManager.updateNotifications([], tasks, { suppressAlerts: true });
+    notificationManager.updateNotifications([], [dueTask, upcomingTask], { suppressAlerts: true });
 
-    const items = [...document.querySelectorAll('.notification-task')];
-    expect(items).toHaveLength(2);
-    const overdue = items.find((item) => item.textContent.includes('Skubi laboratorija'));
-    expect(overdue.textContent).toMatch(/Prieš/);
-
-    const taskCards = document.querySelectorAll('.notification-row[data-type="task"]');
-    expect(taskCards.length).toBe(0);
+    const taskCards = [...document.querySelectorAll('.notification-row[data-type="task"]')];
+    expect(taskCards).toHaveLength(1);
+    expect(taskCards[0].textContent).toContain('Skubi laboratorija');
+    expect(taskCards[0].textContent).toMatch(/Prieš/);
+    expect(document.body.textContent).not.toContain('Komunikacijos užduotis');
   });
 
   it('leidžia pažymėti užduotį atlikta tiesiai iš kortelės', () => {
