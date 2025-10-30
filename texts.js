@@ -76,6 +76,8 @@ export const texts = {
     statusAll: { lt: 'Visos būsenos', en: 'All statuses' },
     zoneAll: { lt: 'Visos zonos', en: 'All zones' },
     newButton: { lt: 'Nauja užduotis', en: 'New task' },
+    completeAction: { lt: 'Pažymėti kaip atliktą', en: 'Mark as completed' },
+    completedLabel: { lt: 'Užduotis atlikta', en: 'Task completed' },
     status: {
       planned: { lt: 'Planuojama', en: 'Planned' },
       inProgress: { lt: 'Vykdoma', en: 'In progress' },
