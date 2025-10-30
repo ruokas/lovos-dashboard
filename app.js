@@ -838,28 +838,31 @@ export class BedManagementApp {
         }
 
         const taskElement = actionButton.closest('[data-task-id]');
-        const taskId = actionButton.dataset.taskId || taskElement?.dataset.taskId;
-        const seriesId = taskElement?.dataset.seriesId;
-        if (!taskId) {
+        const requestedTaskId = actionButton.dataset.taskId || taskElement?.dataset.taskId || '';
+        const seriesId = actionButton.dataset.seriesId || taskElement?.dataset.seriesId || '';
+
+        const targetTask = this.resolveTaskCompletionCandidate(requestedTaskId, seriesId);
+        if (!targetTask) {
+          const identifier = requestedTaskId || seriesId || '(nežinoma)';
+          console.warn('Nepavyko rasti užduoties pažymėti kaip užbaigtos:', identifier);
           return;
         }
 
-        const currentTask =
-          this.taskManager
-            .getTasks()
-            .find((item) => item.id === taskId || (seriesId && item.metadata?.recurringSourceTaskIds?.includes(taskId)));
-        const metadata = { ...(currentTask?.metadata ?? {}), completedAt: new Date().toISOString() };
-        const updatedTask = this.taskManager.updateTask(taskId, {
+        const metadata = { ...(targetTask.metadata ?? {}), completedAt: new Date().toISOString() };
+        const updatedTask = this.taskManager.updateTask(targetTask.id, {
           status: TASK_STATUSES.COMPLETED,
           metadata,
         });
 
         if (!updatedTask) {
-          console.warn('Nepavyko rasti užduoties pažymėti kaip užbaigtos:', taskId);
+          console.warn('Nepavyko atnaujinti užduoties:', targetTask.id);
           return;
         }
 
-        void this.userInteractionLogger.logInteraction('task_mark_completed', { taskId, seriesId });
+        void this.userInteractionLogger.logInteraction('task_mark_completed', {
+          taskId: targetTask.id,
+          seriesId: targetTask.seriesId || seriesId || null,
+        });
 
         this.notificationManager.updateNotifications(this.bedDataManager.getAllBeds(), this.taskManager.getTasks(), {
           fontSizeLevel: this.fontSizeLevel,
@@ -1652,6 +1655,7 @@ export class BedManagementApp {
     }
 
     const tasks = this.taskManager.filterTasks(this.taskFilters);
+    const allTasks = this.taskManager.getTasks();
     if (!tasks.length) {
       listContainer.innerHTML = `<p class="text-sm text-slate-500 dark:text-slate-300">${escapeHtml(t(texts.tasks.empty))}</p>`;
       return;
@@ -1669,8 +1673,17 @@ export class BedManagementApp {
       const recurringSourceIds = Array.isArray(task.metadata?.recurringSourceTaskIds)
         ? task.metadata.recurringSourceTaskIds.filter((value) => typeof value === 'string' && value.trim())
         : [];
-      const completionTargetId = recurringSourceIds[0] ?? task.id;
-      const seriesAttribute = recurringSourceIds.length ? ` data-series-id="${escapeHtml(task.id)}"` : '';
+      const normalizedSeriesId = typeof task.seriesId === 'string' && task.seriesId.trim()
+        ? task.seriesId.trim()
+        : (recurringSourceIds.length ? task.id : '');
+      const preferredTargetId = recurringSourceIds[0] ?? (normalizedSeriesId ? null : task.id);
+      const completionTarget = this.resolveTaskCompletionCandidate(preferredTargetId, normalizedSeriesId, allTasks);
+      const completionTargetId = completionTarget?.id
+        ?? (typeof preferredTargetId === 'string' && preferredTargetId ? preferredTargetId : task.id);
+      const hasCompletionTarget = typeof completionTargetId === 'string' && completionTargetId.trim().length > 0;
+      const seriesAttribute = normalizedSeriesId
+        ? ` data-series-id="${escapeHtml(normalizedSeriesId)}"`
+        : '';
       const patientReference = [
         typeof patientMeta.reference === 'string' ? patientMeta.reference.trim() : '',
         typeof patientMeta.surname === 'string' ? patientMeta.surname.trim() : '',
@@ -1701,11 +1714,13 @@ export class BedManagementApp {
             <span aria-hidden="true">✅</span>
             <span>${escapeHtml(t(texts.tasks.completedLabel) || 'Užduotis atlikta')}</span>
           </div>`
-        : `<div class="flex justify-end">
-            <button type="button" class="task-complete-btn px-3 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900 rounded-md transition-colors" data-action="complete-task" data-task-id="${escapeHtml(completionTargetId)}">
-              ${escapeHtml(t(texts.tasks.completeAction) || 'Pažymėti kaip atliktą')}
-            </button>
-          </div>`;
+        : hasCompletionTarget
+          ? `<div class="flex justify-end">
+              <button type="button" class="task-complete-btn px-3 py-1 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-900 rounded-md transition-colors" data-action="complete-task" data-task-id="${escapeHtml(completionTargetId)}"${seriesAttribute}>
+                ${escapeHtml(t(texts.tasks.completeAction) || 'Pažymėti kaip atliktą')}
+              </button>
+            </div>`
+          : '';
 
       return `
         <article class="border border-slate-200 dark:border-slate-700 rounded-lg bg-white dark:bg-slate-900/40 p-3 space-y-3" data-task-id="${escapeHtml(completionTargetId)}"${seriesAttribute} role="listitem">
@@ -1735,6 +1750,69 @@ export class BedManagementApp {
         </article>
       `;
     }).join('');
+  }
+
+  getTaskDueTimestamp(task) {
+    if (!task || typeof task !== 'object') {
+      return Number.POSITIVE_INFINITY;
+    }
+
+    const dueValue = task.dueAt ?? task.deadline ?? null;
+    if (typeof dueValue === 'string' && dueValue.trim()) {
+      const dueDate = new Date(dueValue);
+      if (!Number.isNaN(dueDate.getTime())) {
+        return dueDate.getTime();
+      }
+    }
+
+    const createdValue = typeof task.createdAt === 'string' ? task.createdAt : null;
+    if (createdValue) {
+      const createdDate = new Date(createdValue);
+      if (!Number.isNaN(createdDate.getTime())) {
+        return createdDate.getTime();
+      }
+    }
+
+    return Number.POSITIVE_INFINITY;
+  }
+
+  compareTaskDueTimes(a, b) {
+    const aTime = this.getTaskDueTimestamp(a);
+    const bTime = this.getTaskDueTimestamp(b);
+    if (aTime === bTime) {
+      return 0;
+    }
+    return aTime - bTime;
+  }
+
+  resolveTaskCompletionCandidate(preferredId, seriesId, tasksSource) {
+    const tasks = Array.isArray(tasksSource) ? tasksSource : this.taskManager.getTasks();
+    const normalisedPreferred = typeof preferredId === 'string' && preferredId.trim() ? preferredId.trim() : null;
+    if (normalisedPreferred) {
+      const directCandidate = tasks.find((item) => item.id === normalisedPreferred);
+      if (directCandidate && directCandidate.status !== TASK_STATUSES.COMPLETED) {
+        return directCandidate;
+      }
+    }
+
+    const normalisedSeries = typeof seriesId === 'string' && seriesId.trim() ? seriesId.trim() : null;
+    if (!normalisedSeries) {
+      return normalisedPreferred
+        ? tasks.find((item) => item.id === normalisedPreferred) ?? null
+        : null;
+    }
+
+    const seriesTasks = tasks
+      .filter((item) => item.seriesId === normalisedSeries)
+      .sort((a, b) => this.compareTaskDueTimes(a, b));
+
+    if (!seriesTasks.length) {
+      return normalisedPreferred
+        ? tasks.find((item) => item.id === normalisedPreferred) ?? null
+        : null;
+    }
+
+    return seriesTasks.find((item) => item.status !== TASK_STATUSES.COMPLETED) ?? seriesTasks[0];
   }
 
   setReportingNotice(message, variant = 'info') {
