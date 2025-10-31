@@ -32,9 +32,94 @@ function toNumber(value, fallback = 0) {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function normalizeString(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  return String(value)
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '');
+}
+
+function parseOccupancyFlag(value) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) {
+      return null;
+    }
+    return value !== 0;
+  }
+
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  if (['1', 't', 'true', 'y', 'yes', 'occupied', 'uzimta', 'uzimtas'].includes(normalized)) {
+    return true;
+  }
+
+  if (
+    [
+      '0',
+      'f',
+      'false',
+      'n',
+      'no',
+      'free',
+      'laisva',
+      'laisvas',
+      'laisvi',
+      'laisvos',
+      'available',
+      'neuzimta',
+      'neuzimtas',
+      'neuzimt',
+    ].includes(normalized)
+  ) {
+    return false;
+  }
+
+  return null;
+}
+
 function normalizeOccupancyState(value) {
-  if (!value) return 'unknown';
-  return String(value).toLowerCase();
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return 'unknown';
+  }
+
+  if (['cleaning', 'tvarkoma', 'valoma', 'dezinfekuojama', 'plaunama'].some((alias) => normalized.includes(alias))) {
+    return 'cleaning';
+  }
+
+  if (['reserved', 'rezervuota', 'rezervuotas', 'rezerv'].some((alias) => normalized.includes(alias))) {
+    return 'reserved';
+  }
+
+  if (['occupied', 'uzimta', 'uzimtas', 'pacio', 'pacient', '1', 'true', 't', 'yes'].some((alias) => normalized.includes(alias))) {
+    return 'occupied';
+  }
+
+  if (
+    ['free', 'laisva', 'laisvas', 'laisvi', 'laisvos', 'available', 'neuzimta', 'neuzimtas', '0', 'false', 'f', 'no'].some(
+      (alias) => normalized.includes(alias),
+    )
+  ) {
+    return 'free';
+  }
+
+  return normalized;
 }
 
 function safeDate(value) {
@@ -178,7 +263,7 @@ export class ReportingService {
     try {
       const { data, error } = await this.client
         .from('aggregated_bed_state')
-        .select('bed_id,status,priority,occupancy_state,status_created_at,occupancy_created_at');
+        .select('bed_id,status,priority,occupancy_state,occupancy,status_created_at,occupancy_created_at');
 
       if (error) {
         throw error;
@@ -680,7 +765,13 @@ export class ReportingService {
       totals.totalBeds += 1;
       const status = row.status ?? STATUS_OPTIONS.CLEAN;
       const priority = row.priority ?? null;
-      const occupancyState = normalizeOccupancyState(row.occupancy_state);
+      const occupancyFlag = parseOccupancyFlag(row.occupancy ?? row.is_occupied ?? row.occupancy_state);
+      const occupancyState = (() => {
+        if (typeof occupancyFlag === 'boolean') {
+          return occupancyFlag ? 'occupied' : 'free';
+        }
+        return normalizeOccupancyState(row.occupancy_state);
+      })();
       const statusAt = safeDate(row.status_created_at);
       const occupancyAt = safeDate(row.occupancy_created_at);
 
