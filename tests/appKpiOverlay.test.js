@@ -49,5 +49,38 @@ describe('BedManagementApp KPI overlay', () => {
     const notice = document.getElementById('reportingNotice');
     expect(notice?.textContent).toBe('Supabase KPI duomenys nepilni – rodome CSV pagrįstą suvestinę.');
   });
+
+  it('rodo ką tik atlaisvintų lovų skaičių "Reikia sutvarkyti" kortelėje', async () => {
+    const app = new BedManagementApp();
+
+    vi.spyOn(app.reportingService, 'fetchKpiSnapshot').mockResolvedValue({
+      source: 'supabase',
+      generatedAt: new Date('2024-02-01T00:00:00Z').toISOString(),
+      totals: {
+        totalBeds: 10,
+        cleanBeds: 4,
+        occupiedBeds: 5,
+        recentlyFreedBeds: 3,
+        attentionBeds: 7,
+      },
+    });
+
+    vi.spyOn(app.bedDataManager, 'getStatistics').mockReturnValue({
+      totalBeds: 10,
+      cleanBeds: 4,
+      messyBeds: 0,
+      missingEquipment: 0,
+      otherProblems: 0,
+      occupiedBeds: 5,
+      freeBeds: 5,
+      bedsNeedingCheck: 0,
+      recentlyFreedBeds: 3,
+    });
+
+    await app.renderKPIs();
+
+    const cleaningCard = document.querySelector('[data-variant="attention"] .kpi-card__value');
+    expect(cleaningCard?.textContent).toBe('3');
+  });
 });
 
