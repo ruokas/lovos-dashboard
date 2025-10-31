@@ -2,7 +2,7 @@ module.exports = {
   darkMode: 'class',
   content: [
     './index.html',
-    './audit.html',
+    './admin.html',
     './app.js',
     './theme.js',
     './analytics/**/*.js',

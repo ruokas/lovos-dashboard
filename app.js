@@ -761,17 +761,17 @@ export class BedManagementApp {
       bedListBtn.setAttribute('aria-expanded', this.isBedListVisible ? 'true' : 'false');
     }
 
-    const auditLogBtn = document.getElementById('auditLogBtn');
-    if (auditLogBtn) {
-      auditLogBtn.addEventListener('click', (event) => {
+    const adminBtn = document.getElementById('adminBtn');
+    if (adminBtn) {
+      adminBtn.addEventListener('click', (event) => {
         event.preventDefault();
-        this.openAuditLogPage();
+        this.openAdminPage();
       });
-      auditLogBtn.setAttribute('aria-haspopup', 'false');
-      auditLogBtn.setAttribute('title', t(texts.ui.showAuditLog));
-      auditLogBtn.setAttribute('aria-label', t(texts.ui.showAuditLog));
+      adminBtn.setAttribute('aria-haspopup', 'false');
+      adminBtn.setAttribute('title', 'Administravimas');
+      adminBtn.setAttribute('aria-label', 'Administravimas');
     } else {
-      console.log('Audit log button not found');
+      console.log('Admin button not found');
     }
 
     const fontSizeUpBtn = document.getElementById('fontSizeBtn');
@@ -916,21 +916,21 @@ export class BedManagementApp {
     this.setupBedClickHandlers();
   }
 
-  openAuditLogPage() {
+  openAdminPage() {
     if (typeof window === 'undefined') {
-      console.info('Veiksmų žurnalo puslapis pasiekiamas tik naršyklėje.');
+      console.info('Administravimo puslapis pasiekiamas tik naršyklėje.');
       return;
     }
 
     try {
-      const targetUrl = new URL('./audit.html', window.location.href);
-      void this.userInteractionLogger.logInteraction('audit_log_page_open', {
+      const targetUrl = new URL('./admin.html', window.location.href);
+      void this.userInteractionLogger.logInteraction('admin_page_open', {
         target: targetUrl.pathname,
       });
       window.location.href = targetUrl.toString();
     } catch (error) {
-      console.error('Failed to open audit log page:', error);
-      this.showError('Nepavyko atidaryti veiksmų žurnalo puslapio.');
+      console.error('Failed to open admin page:', error);
+      this.showError('Nepavyko atidaryti administravimo puslapio.');
     }
   }
 
