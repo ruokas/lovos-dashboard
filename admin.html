@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="lt" data-supabase-url="https://kizginrwtbrqjxafxtbi.supabase.co" data-supabase-key="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtpemdpbnJ3dGJycWp4YWZ4dGJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA1MDAzMTcsImV4cCI6MjA3NjA3NjMxN30.xgh4zcBMuYqjDJ_PaL3UHuK62z1DxW_uFrPk52y1tcs">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Administravimas</title>
+    <script type="importmap">
+      {
+        "imports": {
+          "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@2?bundle"
+        }
+      }
+    </script>
+    <link rel="stylesheet" href="dist/tailwind.css" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body class="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
+    <div id="loader" class="hidden fixed inset-0 bg-black/25 flex items-center justify-center z-50" aria-hidden="true">
+      <div class="animate-spin h-8 w-8 border-4 border-white border-t-transparent rounded-full"></div>
+    </div>
+
+    <div class="min-h-screen flex flex-col">
+      <header class="bg-teal-700 text-white px-4 md:px-8 py-4 shadow-md">
+        <div class="max-w-6xl mx-auto flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <p class="text-xs uppercase tracking-wide opacity-80">Valdymo priemonės</p>
+            <h1 class="text-2xl font-semibold">Administravimas</h1>
+            <p class="text-sm opacity-90">Stebėkite žurnalą ir tvarkykite užduotis vienoje vietoje.</p>
+          </div>
+          <nav class="flex items-center gap-2">
+            <a href="index.html" class="inline-flex items-center gap-1 px-3 py-2 text-sm font-medium bg-white/10 hover:bg-white/20 rounded-md transition-colors" aria-label="Grįžti į valdymo skydelį">
+              <span aria-hidden="true">←</span>
+              <span>Atgal į skydelį</span>
+            </a>
+            <button id="refreshAdminBtn" type="button" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium bg-white/10 hover:bg-white/20 rounded-md transition-colors" title="Perkrauti administravimo duomenis">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+              </svg>
+              <span>Perkrauti</span>
+            </button>
+          </nav>
+        </div>
+      </header>
+
+      <main class="flex-1 w-full max-w-6xl mx-auto px-4 md:px-8 py-6 space-y-6">
+        <section id="adminStatus" class="hidden border border-amber-300 bg-amber-50 text-amber-900 dark:bg-amber-900/40 dark:text-amber-100 rounded-md px-4 py-3 text-sm" role="alert"></section>
+
+        <section id="adminContent" class="space-y-8 hidden" aria-live="polite">
+          <section class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+            <div class="p-5 space-y-4">
+              <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+                <div>
+                  <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100">Užduočių valdymas</h2>
+                  <p class="text-sm text-slate-600 dark:text-slate-300">Keiskite prioritetus, terminus ir pasikartojimus. Pakeitimai automatiškai sinchronizuojami su Supabase.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button id="refreshTasksBtn" type="button" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium bg-teal-600 text-white rounded-md hover:bg-teal-700 transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                    </svg>
+                    <span>Atnaujinti užduotis</span>
+                  </button>
+                </div>
+              </div>
+              <div id="taskAdminStatus" class="hidden text-sm rounded-md border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 px-4 py-3"></div>
+              <div class="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                <div class="max-h-[28rem] overflow-auto">
+                  <table class="min-w-full text-sm">
+                    <thead class="bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 uppercase text-xs">
+                      <tr>
+                        <th scope="col" class="text-left px-4 py-2">Užduotis</th>
+                        <th scope="col" class="text-left px-4 py-2">Prioritetas</th>
+                        <th scope="col" class="text-left px-4 py-2">Terminas</th>
+                        <th scope="col" class="text-left px-4 py-2">Pasikartojimas</th>
+                        <th scope="col" class="text-left px-4 py-2">Veiksmai</th>
+                      </tr>
+                    </thead>
+                    <tbody id="taskAdminTable" class="divide-y divide-slate-200 dark:divide-slate-800"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="space-y-6" id="auditSection">
+            <div class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+              <div class="p-5">
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">Veiksmų filtrai</h2>
+                <div class="grid gap-4 md:grid-cols-4" id="filtersContainer">
+                  <label class="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                    <span>Kas atliko</span>
+                    <select id="filter-performer" class="rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"></select>
+                  </label>
+                  <label class="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                    <span>Veiksmo tipas</span>
+                    <select id="filter-type" class="rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"></select>
+                  </label>
+                  <label class="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                    <span>Lova</span>
+                    <select id="filter-bed" class="rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"></select>
+                  </label>
+                  <label class="flex flex-col gap-1 text-sm font-medium text-slate-600 dark:text-slate-300">
+                    <span>Paieška</span>
+                    <input id="filter-search" type="search" class="rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500" placeholder="Ieškoti pagal komentarus" />
+                  </label>
+                </div>
+              </div>
+            </div>
+
+            <div class="grid gap-4 md:grid-cols-2">
+              <article class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5">
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Filtruotų įrašų skaičius</h3>
+                <p id="stat-total" class="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-2">0</p>
+              </article>
+              <article class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 p-5">
+                <h3 class="text-sm font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Vidutinis laikas tarp veiksmų</h3>
+                <p id="stat-average" class="text-3xl font-bold text-slate-900 dark:text-slate-100 mt-2">–</p>
+              </article>
+            </div>
+
+            <section class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+              <div class="p-5">
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">Vidurkiai pagal veiksmų tipą</h2>
+                <div class="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                  <div class="max-h-72 overflow-auto">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 uppercase text-xs">
+                        <tr>
+                          <th scope="col" class="text-left px-4 py-2">Veiksmo tipas</th>
+                          <th scope="col" class="text-left px-4 py-2">Įrašai</th>
+                          <th scope="col" class="text-left px-4 py-2">Vid. tarpas</th>
+                        </tr>
+                      </thead>
+                      <tbody id="table-action-stats" class="divide-y divide-slate-200 dark:divide-slate-800"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+              <div class="p-5">
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">Vidurkiai pagal lovą</h2>
+                <div class="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                  <div class="max-h-72 overflow-auto">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 uppercase text-xs">
+                        <tr>
+                          <th scope="col" class="text-left px-4 py-2">Lova</th>
+                          <th scope="col" class="text-left px-4 py-2">Įrašai</th>
+                          <th scope="col" class="text-left px-4 py-2">Vid. tarpas</th>
+                        </tr>
+                      </thead>
+                      <tbody id="table-bed-stats" class="divide-y divide-slate-200 dark:divide-slate-800"></tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800">
+              <div class="p-5">
+                <h2 class="text-lg font-semibold text-slate-900 dark:text-slate-100 mb-4">Veiksmų istorija</h2>
+                <div class="overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+                  <div class="max-h-[28rem] overflow-auto">
+                    <table class="min-w-full text-sm">
+                      <thead class="bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-300 uppercase text-xs">
+                        <tr>
+                          <th scope="col" class="text-left px-4 py-2">Laikas</th>
+                          <th scope="col" class="text-left px-4 py-2">Veiksmas</th>
+                          <th scope="col" class="text-left px-4 py-2">Lova</th>
+                          <th scope="col" class="text-left px-4 py-2">Kas atliko</th>
+                          <th scope="col" class="text-left px-4 py-2">Detalės</th>
+                        </tr>
+                      </thead>
+                      <tbody id="table-rows" class="divide-y divide-slate-200 dark:divide-slate-800"></tbody>
+                    </table>
+                  </div>
+                </div>
+                <p id="table-status" class="text-sm text-slate-500 dark:text-slate-400 mt-3"></p>
+              </div>
+            </section>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <script type="module">
+      async function bootAdminPage() {
+        try {
+          const module = await import('./reports/adminPage.js');
+          if (typeof module.initAdminPage === 'function') {
+            module.initAdminPage();
+          }
+        } catch (error) {
+          console.error('Nepavyko įkelti administravimo modulio.', error);
+          const status = document.getElementById('adminStatus');
+          if (status) {
+            status.textContent = 'Nepavyko įkelti administravimo įrankių. Patikrinkite interneto ryšį ir bandykite dar kartą.';
+            status.dataset.tone = 'error';
+            status.classList.remove('hidden');
+          }
+        }
+      }
+
+      bootAdminPage();
+    </script>
+  </body>
+</html>
