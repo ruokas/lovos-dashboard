@@ -110,6 +110,15 @@ function hasText(value) {
   return normalizeString(value) !== '';
 }
 
+function sanitizeBedLabel(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const label = value.toString().trim();
+  return label.length > 0 ? label : null;
+}
+
 function normalizeOccupancyFlag(value) {
   if (typeof value === 'boolean') {
     return value;
@@ -323,6 +332,25 @@ export class DataPersistenceManager {
       return;
     }
 
+    this.bedLabelToId.clear();
+    this.bedIdToLabel.clear();
+
+    const layout = [];
+    const seen = new Set();
+
+    const registerLabel = (label, id = null) => {
+      const sanitized = sanitizeBedLabel(label);
+      if (!sanitized || seen.has(sanitized)) {
+        return;
+      }
+      if (id) {
+        this.bedLabelToId.set(sanitized, id);
+        this.bedIdToLabel.set(id, sanitized);
+      }
+      layout.push(sanitized);
+      seen.add(sanitized);
+    };
+
     const fromBeds = this.client.from('beds');
     const selectBuilder = typeof fromBeds?.select === 'function'
       ? fromBeds.select('id, label')
@@ -352,31 +380,37 @@ export class DataPersistenceManager {
       throw new Error(`Nepavyko gauti lovų sąrašo iš nuotolinės paslaugos: ${error.message}`);
     }
 
-    const layout = [];
-    const seen = new Set();
     data.forEach(({ id, label }) => {
-      if (!id || !label) return;
-      const sanitizedLabel = label.toString().trim();
-      if (!sanitizedLabel || seen.has(sanitizedLabel)) {
-        return;
-      }
-      this.bedLabelToId.set(label, id);
-      this.bedIdToLabel.set(id, label);
-      layout.push(sanitizedLabel);
-      seen.add(sanitizedLabel);
+      registerLabel(label, id);
     });
 
-    if (layout.length === 0) {
-      this.remoteBedLayout = [];
-    } else {
-      this.remoteBedLayout = layout;
+    try {
+      const boardQuery = this.client.from('ed_board');
+      if (boardQuery && typeof boardQuery.select === 'function') {
+        const boardResult = await boardQuery.select('vieta');
+        if (boardResult?.error) {
+          console.info('Nepavyko papildyti lovų sąrašo iš ed_board lentelės:', boardResult.error);
+        } else {
+          const boardData = Array.isArray(boardResult?.data) ? boardResult.data : [];
+          boardData.forEach((row) => {
+            registerLabel(row?.vieta ?? row?.label ?? null);
+          });
+        }
+      }
+    } catch (error) {
+      console.info('Nepavyko papildyti lovų sąrašo iš ed_board lentelės:', error);
     }
+
+    DEFAULT_BED_LAYOUT.forEach((bedId) => registerLabel(bedId));
+
+    this.remoteBedLayout = layout;
     this.bedsLoaded = true;
   }
 
   async #resolveBedId(label) {
     await this.#ensureBedsLoaded();
-    const bedId = this.bedLabelToId.get(label);
+    const sanitized = sanitizeBedLabel(label);
+    const bedId = sanitized ? this.bedLabelToId.get(sanitized) : null;
     if (!bedId) {
       throw new Error(`Nuotolinė paslauga nerado lovos pagal pavadinimą: ${label}`);
     }

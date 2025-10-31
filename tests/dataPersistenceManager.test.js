@@ -82,7 +82,20 @@ function createSupabaseMock() {
     ],
     error: null,
   }));
-  const occupancySelect = vi.fn(() => ({ order: occupancySelectOrder }));
+  const boardLayoutSelect = vi.fn(async () => ({
+    data: [
+      { vieta: 'IT1' },
+      { vieta: 'P1' },
+      { vieta: 'S5' },
+    ],
+    error: null,
+  }));
+  const occupancySelect = vi.fn((columns) => {
+    if (columns === 'vieta') {
+      return boardLayoutSelect;
+    }
+    return { order: occupancySelectOrder };
+  });
 
   const boardUpsertSelect = vi.fn(async () => ({
     data: [
@@ -154,6 +167,7 @@ function createSupabaseMock() {
       boardUpsert,
       boardUpsertSelect,
       occupancySelectOrder,
+      boardLayoutSelect,
       statusDeleteBuilder,
       boardDeleteBuilder,
       aggregatedSelect,
@@ -168,6 +182,14 @@ describe('DataPersistenceManager with Supabase', () => {
   beforeEach(() => {
     supabaseMock = createSupabaseMock();
     manager = new DataPersistenceManager({ client: supabaseMock });
+  });
+
+  it('papildo lovų sąrašą ed_board reikšmėmis ir atsarginiu maketu', async () => {
+    const layout = await manager.loadBedLayout();
+
+    expect(layout).toContain('IT1');
+    expect(layout).toContain('P1');
+    expect(layout).toContain('S5');
   });
 
   it('išsaugo lovos būseną per Supabase', async () => {
@@ -798,6 +820,11 @@ describe('DataPersistenceManager with Supabase', () => {
         if (table === 'beds') {
           return {
             select: vi.fn(async () => ({ data: [{ id: 'bed-uuid-1', label: 'IT1' }], error: null })),
+          };
+        }
+        if (table === 'ed_board') {
+          return {
+            select: vi.fn(async () => ({ data: [], error: null })),
           };
         }
         if (table === 'bed_status_events') {
