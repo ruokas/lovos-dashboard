@@ -1345,6 +1345,7 @@ export class BedManagementApp {
       }
 
       const totalsForAttention = (totals.messyBeds ?? 0) + (totals.missingEquipment ?? 0) + (totals.otherProblems ?? 0);
+      const recentlyFreedForCleaning = totals.recentlyFreedBeds ?? totals.attentionBeds ?? totalsForAttention;
       const totalBeds = toFiniteNumber(totals.totalBeds);
       const occupiedBeds = toFiniteNumber(totals.occupiedBeds);
 
@@ -1398,7 +1399,7 @@ export class BedManagementApp {
         },
         {
           label: 'Reikia sutvarkyti',
-          value: totals.attentionBeds ?? totalsForAttention,
+          value: recentlyFreedForCleaning,
           variant: 'attention',
           total: totalBeds,
           direction: 'negative',
