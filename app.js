@@ -2,7 +2,7 @@
  * Main application controller for bed cleanliness management system
  */
 
-import { BedDataManager, BED_LAYOUT, STATUS_OPTIONS } from './models/bedData.js';
+import { BedDataManager, DEFAULT_BED_LAYOUT, STATUS_OPTIONS } from './models/bedData.js';
 import { SettingsManager, SettingsUI } from './settings/settingsManager.js';
 import { BedStatusForm, OccupancyForm } from './forms/bedStatusForm.js';
 import { TaskForm } from './forms/taskForm.js';
@@ -40,7 +40,7 @@ function escapeHtml(value) {
 
 export class BedManagementApp {
   constructor() {
-    this.bedDataManager = new BedDataManager();
+    this.bedDataManager = new BedDataManager({ bedLayout: DEFAULT_BED_LAYOUT });
     this.settingsManager = new SettingsManager();
     this.document = typeof document !== 'undefined' ? document : undefined;
     this.fontSizeLevel = readStoredFontSizeLevel();
@@ -81,13 +81,17 @@ export class BedManagementApp {
     this.supabaseConfig = { url: '', anonKey: '' };
     this.isAuthenticated = false;
 
+    const initialBedLayout = this.bedDataManager.getBedLayout();
     this.bedStatusForm = new BedStatusForm((formResponse) => this.handleFormResponse(formResponse), {
       logger: this.userInteractionLogger,
+      bedLayout: initialBedLayout,
     });
     this.taskForm = new TaskForm((taskPayload) => this.handleTaskCreated(taskPayload), {
       logger: this.userInteractionLogger,
     });
-    this.occupancyForm = new OccupancyForm((occupancyData) => this.handleOccupancyData(occupancyData));
+    this.occupancyForm = new OccupancyForm((occupancyData) => this.handleOccupancyData(occupancyData), {
+      bedLayout: initialBedLayout,
+    });
     this.settingsUI = new SettingsUI(
       this.settingsManager,
       (settings) => this.handleSettingsChange(settings),
@@ -103,6 +107,34 @@ export class BedManagementApp {
     this.taskRealtimeChannel = null;
     this.usingCsvOccupancy = false;
     this.isSyncingCsvOccupancy = false;
+  }
+
+  syncFormsWithLayout() {
+    const layout = this.bedDataManager.getBedLayout();
+    if (this.bedStatusForm?.setBedLayout) {
+      this.bedStatusForm.setBedLayout(layout);
+    }
+    if (this.occupancyForm?.setBedLayout) {
+      this.occupancyForm.setBedLayout(layout);
+    }
+  }
+
+  async loadRemoteBedLayout() {
+    if (typeof this.persistenceManager?.loadBedLayout !== 'function') {
+      this.syncFormsWithLayout();
+      return;
+    }
+
+    try {
+      const remoteLayout = await this.persistenceManager.loadBedLayout();
+      if (Array.isArray(remoteLayout) && remoteLayout.length > 0) {
+        this.bedDataManager.setBedLayout(remoteLayout);
+      }
+    } catch (error) {
+      console.warn('Nepavyko gauti lovų sąrašo iš nuotolinės paslaugos:', error);
+    } finally {
+      this.syncFormsWithLayout();
+    }
   }
 
   /**
@@ -123,6 +155,8 @@ export class BedManagementApp {
         const authResult = await this.ensureAuthentication();
         this.isAuthenticated = authResult?.status === 'authenticated';
       }
+
+      await this.loadRemoteBedLayout();
 
       // Load saved data
       await this.loadSavedData();
@@ -186,7 +220,7 @@ export class BedManagementApp {
         if (!payload?.new) return;
         void this.handleRealtimeStatusEvent(payload.new, payload.eventType ?? payload.type ?? 'INSERT');
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'occupancy_events' }, (payload) => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ed_board' }, (payload) => {
         if (!payload?.new) return;
         void this.handleRealtimeOccupancyEvent(payload.new, payload.eventType ?? payload.type ?? 'INSERT');
       });
@@ -338,25 +372,16 @@ export class BedManagementApp {
 
   async handleRealtimeOccupancyEvent(record, eventType = 'INSERT') {
     try {
-      const bedLabel = await this.persistenceManager.getBedLabelById(record.bed_id);
-      if (!bedLabel) {
+      const mapped = this.persistenceManager.mapBoardRecordToOccupancy(record);
+      if (!mapped?.bedId) {
         console.warn('Gautas realaus laiko užimtumo įvykis su nežinoma lova:', record);
         return;
       }
 
-      const isNew = this.bedDataManager.addOccupancyData({
-        id: record.id,
-        timestamp: record.created_at,
-        bedId: bedLabel,
-        status: record.occupancy_state,
-        patientCode: record.patient_code ?? null,
-        expectedUntil: record.expected_until ?? null,
-        notes: record.notes ?? null,
-        createdBy: record.created_by ?? null,
-        metadata: record.metadata ?? {},
-      }, { allowUpdate: eventType === 'UPDATE' });
+      const allowUpdate = eventType === 'UPDATE' || eventType === 'UPSERT';
+      const isNew = this.bedDataManager.addOccupancyData(mapped, { allowUpdate });
 
-      if (!isNew && eventType !== 'UPDATE') {
+      if (!isNew && !allowUpdate) {
         return;
       }
 
@@ -368,8 +393,8 @@ export class BedManagementApp {
       await this.render();
 
       void this.userInteractionLogger.logInteraction('realtime_occupancy_event_received', {
-        bedLabel,
-        payload: { status: record.occupancy_state },
+        bedLabel: mapped.bedId,
+        payload: { status: mapped.status },
       });
     } catch (error) {
       console.error('Klaida apdorojant realaus laiko užimtumo įvykį:', error);
@@ -563,6 +588,8 @@ export class BedManagementApp {
       } else {
         this.usingCsvOccupancy = false;
       }
+
+      this.syncFormsWithLayout();
 
       console.log(`Loaded ${formResponses.length} form responses and ${occupancyData.length} occupancy records`);
     } catch (error) {
@@ -1257,6 +1284,7 @@ export class BedManagementApp {
    * Render the main UI
    */
   async render() {
+    this.syncFormsWithLayout();
     try {
       await this.renderKPIs();
       this.applyBedListVisibility();
@@ -1435,7 +1463,8 @@ export class BedManagementApp {
     const bedMap = new Map(beds.map((bed) => [bed.bedId, bed]));
     const baseClasses = ['custom-scrollbar', 'max-h-64', 'overflow-y-auto'];
 
-    const filteredBedIds = BED_LAYOUT.filter((bedId) => {
+    const layout = this.bedDataManager.getBedLayout();
+    const filteredBedIds = layout.filter((bedId) => {
       if (!this.currentSearchTerm) return true;
       return bedId.toLowerCase().includes(this.currentSearchTerm);
     });

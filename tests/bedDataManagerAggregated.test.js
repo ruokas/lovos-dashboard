@@ -15,6 +15,7 @@ describe('BedDataManager.applyAggregatedState', () => {
         statusReportedBy: 'nurse@example.com',
         statusCreatedAt: statusTimestamp,
         occupancyState: 'occupied',
+        occupancy: true,
         occupancyCreatedAt: occupancyTimestamp,
       },
     ]);
@@ -47,5 +48,97 @@ describe('BedDataManager.applyAggregatedState', () => {
     expect(bed.occupancyStatus).toBe('free');
     expect(bed.lastFreedTime).toBeNull();
     expect(bed.notifications).toHaveLength(0);
+  });
+
+  it('kai lentelėje nėra būsenos, užimtumą nustato pagal occupancy lauką', () => {
+    const manager = new BedDataManager();
+
+    manager.applyAggregatedState([
+      {
+        bedId: '1',
+        occupancyState: null,
+        occupancyCreatedAt: '2024-02-01T08:15:00.000Z',
+        occupancy: true,
+        patientCode: '',
+        occupancyCreatedBy: 'slaugytoja@example.com',
+      },
+    ]);
+
+    const bed = manager.beds.get('1');
+    expect(bed.occupancyStatus).toBe('occupied');
+    expect(bed.currentPatientCode).toBeNull();
+    expect(bed.occupancyAssignedNurse).toBe('slaugytoja@example.com');
+  });
+
+  it('kai occupancy reikšmė false, lova laikoma laisva net jei pacientas nenuvalytas', () => {
+    const manager = new BedDataManager();
+
+    manager.applyAggregatedState([
+      {
+        bedId: '3',
+        occupancyState: null,
+        occupancyCreatedAt: '2024-02-02T10:00:00.000Z',
+        occupancy: false,
+        patientCode: 'PAC-OLD',
+        occupancyCreatedBy: 'nurse.beta@example.com',
+      },
+    ]);
+
+    const bed = manager.beds.get('3');
+    expect(bed.occupancyStatus).toBe('free');
+    expect(bed.currentPatientCode).toBeNull();
+    expect(bed.occupancyAssignedNurse).toBe('nurse.beta@example.com');
+  });
+
+  it('išsaugo atsakingą slaugytoją ir laisvina lovą kai pacientas pašalintas', () => {
+    const manager = new BedDataManager();
+
+    manager.applyAggregatedState([
+      {
+        bedId: '2',
+        occupancyState: 'occupied',
+        occupancyCreatedAt: '2024-02-01T06:00:00.000Z',
+        patientCode: 'PX-9',
+        occupancyCreatedBy: 'nurse.one@example.com',
+      },
+      {
+        bedId: '2',
+        occupancyState: null,
+        occupancyCreatedAt: '2024-02-01T08:00:00.000Z',
+        patientCode: '',
+        occupancyCreatedBy: 'nurse.two@example.com',
+      },
+    ]);
+
+    const bed = manager.beds.get('2');
+    expect(bed.occupancyStatus).toBe('free');
+    expect(bed.occupancyAssignedNurse).toBe('nurse.two@example.com');
+    expect(bed.currentPatientCode).toBeNull();
+  });
+
+  it('interpretuoja TRUE/FALSE reikšmes kaip užimtumo būsenas', () => {
+    const manager = new BedDataManager();
+
+    manager.applyAggregatedState([
+      {
+        bedId: '4',
+        occupancyState: 'TRUE',
+        occupancyCreatedAt: '2024-02-05T11:00:00.000Z',
+        occupancy: 'true',
+        occupancyCreatedBy: 'nurse.gamma@example.com',
+      },
+      {
+        bedId: '4',
+        occupancyState: 'FALSE',
+        occupancyCreatedAt: '2024-02-05T13:00:00.000Z',
+        occupancy: 'false',
+        occupancyCreatedBy: 'nurse.gamma@example.com',
+      },
+    ]);
+
+    const bed = manager.beds.get('4');
+    expect(bed.occupancyStatus).toBe('free');
+    expect(bed.lastOccupiedTime?.toISOString()).toBe('2024-02-05T11:00:00.000Z');
+    expect(bed.lastFreedTime?.toISOString()).toBe('2024-02-05T13:00:00.000Z');
   });
 });

@@ -489,6 +489,12 @@
   font-size: calc(1.75rem * var(--app-font-scale, 1));
 }
 
+#notificationSummary .notification-row__nurse {
+  display: block;
+  color: #475569;
+  letter-spacing: 0.04em;
+}
+
 #notificationSummary .notification-row[data-type="task"] .notification-row__bed-id {
   font-size: calc(1.3rem * var(--app-font-scale, 1));
   line-height: 1.3;
@@ -787,6 +793,10 @@
 .dark #notificationSummary .notification-row__bed-id,
 .dark #notificationSummary .notification-row__issue-title {
   color: #f8fafc;
+}
+
+.dark #notificationSummary .notification-row__nurse {
+  color: #cbd5f5;
 }
 
 .dark #notificationSummary .notification-row__occupancy--busy {

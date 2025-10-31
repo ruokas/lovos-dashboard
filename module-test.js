@@ -5,7 +5,7 @@ console.log('Testing direct module import...');
 import('./models/bedData.js')
   .then(module => {
     console.log('Successfully imported bedData module:', module);
-    console.log('BED_LAYOUT:', module.BED_LAYOUT);
+    console.log('DEFAULT_BED_LAYOUT:', module.DEFAULT_BED_LAYOUT);
     console.log('STATUS_OPTIONS:', module.STATUS_OPTIONS);
   })
   .catch(error => {

@@ -70,11 +70,14 @@ class FakeSupabaseClient {
       getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'test-token' } }, error: null }),
     };
     this.supabaseUrl = 'https://example.supabase.co';
+    this.lastAggregatedQuery = null;
   }
 
   from(table) {
     if (table === 'aggregated_bed_state') {
-      return new FakeQuery(this.responses.aggregated);
+      const query = new FakeQuery(this.responses.aggregated);
+      this.lastAggregatedQuery = query;
+      return query;
     }
     if (table === 'daily_bed_metrics') {
       return new FakeQuery(this.responses.daily);
@@ -128,6 +131,7 @@ describe('ReportingService', () => {
             status: STATUS_OPTIONS.CLEAN,
             priority: 1,
             occupancy_state: 'occupied',
+            occupancy: true,
             status_created_at: oneHourAgo,
             occupancy_created_at: oneHourAgo,
           },
@@ -136,6 +140,7 @@ describe('ReportingService', () => {
             status: STATUS_OPTIONS.MESSY_BED,
             priority: 2,
             occupancy_state: 'free',
+            occupancy: false,
             status_created_at: oneHourAgo,
             occupancy_created_at: thirtyMinutesAgo,
           },
@@ -150,11 +155,52 @@ describe('ReportingService', () => {
 
     const snapshot = await service.fetchKpiSnapshot();
     expect(snapshot.source).toBe('supabase');
+    expect(client.lastAggregatedQuery?.selectArgs).toContain('occupancy');
     expect(snapshot.totals.totalBeds).toBe(2);
     expect(snapshot.totals.cleanBeds).toBe(1);
     expect(snapshot.totals.attentionBeds).toBe(1);
     expect(snapshot.totals.recentlyFreedBeds).toBe(1);
     expect(snapshot.notifications.total).toBe(2);
+  });
+
+  it('remiasi boolean occupancy kai tekstas neaiškus', async () => {
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000).toISOString();
+
+    const client = new FakeSupabaseClient({
+      aggregated: {
+        data: [
+          {
+            bed_id: 'P1',
+            status: STATUS_OPTIONS.CLEAN,
+            priority: null,
+            occupancy_state: '???',
+            occupancy: true,
+            status_created_at: oneHourAgo,
+            occupancy_created_at: oneHourAgo,
+          },
+          {
+            bed_id: 'P2',
+            status: STATUS_OPTIONS.CLEAN,
+            priority: null,
+            occupancy_state: 'laisva',
+            occupancy: false,
+            status_created_at: oneHourAgo,
+            occupancy_created_at: oneHourAgo,
+          },
+        ],
+      },
+    });
+
+    const service = new ReportingService({
+      client,
+      bedDataManager: { settings: { ...DEFAULT_SETTINGS, checkIntervalOccupied: 1, recentlyFreedThreshold: 1 } },
+    });
+
+    const snapshot = await service.fetchKpiSnapshot();
+    expect(snapshot.totals.totalBeds).toBe(2);
+    expect(snapshot.totals.occupiedBeds).toBe(1);
+    expect(snapshot.totals.freeBeds).toBe(1);
   });
 
   it('gauna dienos metrikas iš Supabase', async () => {

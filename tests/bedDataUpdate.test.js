@@ -13,6 +13,38 @@ describe('BedData.updateOccupancy', () => {
     expect(bed.lastOccupiedTime?.toISOString()).toBe(timestamp);
   });
 
+  it('naudoja occupancy reikšmę kai statusas nepateiktas', () => {
+    const bed = new BedData('4');
+    const timestamp = '2024-01-02T11:30:00.000Z';
+
+    bed.updateOccupancy({
+      status: '',
+      occupancy: true,
+      timestamp,
+      patientCode: '',
+    });
+
+    expect(bed.occupancyStatus).toBe('occupied');
+    expect(bed.currentPatientCode).toBeNull();
+    expect(bed.lastOccupiedTime?.toISOString()).toBe(timestamp);
+  });
+
+  it('occupancy reikšmė false anuliuoja paciento kodą', () => {
+    const bed = new BedData('5');
+    const timestamp = '2024-01-02T12:00:00.000Z';
+
+    bed.updateOccupancy({
+      status: 'occupied',
+      occupancy: false,
+      patientCode: 'LEGACY',
+      timestamp,
+    });
+
+    expect(bed.occupancyStatus).toBe('free');
+    expect(bed.currentPatientCode).toBeNull();
+    expect(bed.lastFreedTime?.toISOString()).toBe(timestamp);
+  });
+
   it('atnaujina laisvos lovos laiką ir būseną', () => {
     const bed = new BedData('2');
     bed.occupancyStatus = 'occupied';
@@ -29,6 +61,34 @@ describe('BedData.updateOccupancy', () => {
     const timestamp = '2024-01-01T13:15:00.000Z';
 
     bed.updateOccupancy({ status: 'cleaning', timestamp });
+
+    expect(bed.occupancyStatus).toBe('cleaning');
+    expect(bed.lastFreedTime?.toISOString()).toBe(timestamp);
+  });
+
+  it('occupancy reikšmė true perrašo neapibrėžtą tekstinį statusą', () => {
+    const bed = new BedData('6');
+    const timestamp = '2024-01-03T10:00:00.000Z';
+
+    bed.updateOccupancy({
+      status: 'Lova tikrinama',
+      occupancy: true,
+      timestamp,
+    });
+
+    expect(bed.occupancyStatus).toBe('occupied');
+    expect(bed.lastOccupiedTime?.toISOString()).toBe(timestamp);
+  });
+
+  it('palieka cleaning būseną, jei lenta taip pažymi, nepaisant occupancy flag', () => {
+    const bed = new BedData('7');
+    const timestamp = '2024-01-03T11:00:00.000Z';
+
+    bed.updateOccupancy({
+      status: 'Lovą valo',
+      occupancy: true,
+      timestamp,
+    });
 
     expect(bed.occupancyStatus).toBe('cleaning');
     expect(bed.lastFreedTime?.toISOString()).toBe(timestamp);

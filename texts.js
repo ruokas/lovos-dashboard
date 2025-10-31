@@ -56,6 +56,7 @@ export const texts = {
   },
   notifications: {
     allClear: { lt: '✅ Visos lovos tvarkingos', en: '✅ All beds are ready' },
+    nurseLabel: { lt: 'Slaugytoja', en: 'Nurse' },
   },
   tasks: {
     title: { lt: 'Skyrių užduotys', en: 'Ward tasks' },

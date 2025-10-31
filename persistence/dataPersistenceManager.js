@@ -1,4 +1,4 @@
-import { BED_LAYOUT, STATUS_OPTIONS, PRIORITY_LEVELS } from '../models/bedData.js';
+import { DEFAULT_BED_LAYOUT, STATUS_OPTIONS, PRIORITY_LEVELS } from '../models/bedData.js';
 import { getSupabaseClient } from './supabaseClient.js';
 import { getLastSupabaseUpdate } from './syncMetadataService.js';
 import { parseSupabaseTimestamp } from '../utils/time.js';
@@ -18,6 +18,208 @@ const STATUS_PRIORITY_MAP = new Map([
   [STATUS_OPTIONS.MISSING_EQUIPMENT, PRIORITY_LEVELS.MISSING_EQUIPMENT],
   [STATUS_OPTIONS.OTHER, PRIORITY_LEVELS.OTHER_PROBLEM],
 ]);
+
+const BOARD_STATUS_ALIASES = new Map([
+  [
+    'free',
+    [
+      'laisva',
+      'laisvas',
+      'laisvi',
+      'laivas',
+      'laisvos',
+      'laisv',
+      'neuzimta',
+      'neužimta',
+      'neuzimtas',
+      'neuzimt',
+      'available',
+      'free',
+      'false',
+      '0',
+      'f',
+      'no',
+    ],
+  ],
+  [
+    'occupied',
+    [
+      'uzimta',
+      'užimta',
+      'uzimtas',
+      'užimtas',
+      'uzimtu',
+      'užimtu',
+      'occupied',
+      'pacio',
+      'pacientas',
+      'pacient',
+      'užim',
+      'true',
+      '1',
+      't',
+      'yes',
+    ],
+  ],
+  [
+    'cleaning',
+    [
+      'tvarkoma',
+      'tvarkomas',
+      'tvarko',
+      'valoma',
+      'valomas',
+      'valo',
+      'dezinfekuojama',
+      'dezinfek',
+      'cleaning',
+      'plaunama',
+      'plauna',
+    ],
+  ],
+  ['reserved', ['rezervuota', 'rezervuotas', 'rezerv', 'reserved']],
+]);
+
+const BOARD_STATUS_DEFAULTS = {
+  free: 'Laisva',
+  occupied: 'Užimta',
+  cleaning: 'Tvarkoma',
+  reserved: 'Rezervuota',
+};
+
+const BOARD_METADATA_KEYS = [
+  ['nurse', ['slaugytojas']],
+  ['assistant', ['padejejas', 'padėjėjas']],
+  ['doctor', ['gydytojas']],
+  ['kat', ['kat']],
+];
+
+function normalizeString(value) {
+  if (!value) {
+    return '';
+  }
+  return value
+    .toString()
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/\p{Diacritic}/gu, '');
+}
+
+function hasText(value) {
+  return normalizeString(value) !== '';
+}
+
+function sanitizeBedLabel(value) {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  const label = value.toString().trim();
+  return label.length > 0 ? label : null;
+}
+
+function normalizeOccupancyFlag(value) {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) {
+      return null;
+    }
+    return value !== 0;
+  }
+
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  if (['1', 't', 'true', 'y', 'yes', 'occupied', 'uzimta', 'uzimtas'].includes(normalized)) {
+    return true;
+  }
+
+  if (
+    [
+      '0',
+      'f',
+      'false',
+      'n',
+      'no',
+      'free',
+      'laisva',
+      'laisvas',
+      'laisvi',
+      'laisvos',
+      'available',
+      'neuzimta',
+      'neuzimtas',
+      'neuzimt',
+    ].includes(normalized)
+  ) {
+    return false;
+  }
+
+  return null;
+}
+
+function deriveOccupancyStatus({ occupancyValue, patientValue }) {
+  const normalizedFlag = normalizeOccupancyFlag(occupancyValue);
+  if (normalizedFlag === true) {
+    return 'occupied';
+  }
+  if (normalizedFlag === false) {
+    return 'free';
+  }
+  return hasText(patientValue) ? 'occupied' : 'free';
+}
+
+function statusToOccupancyFlag(status) {
+  const normalized = normalizeBoardStatus(status);
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === 'occupied') {
+    return true;
+  }
+  if (normalized === 'free') {
+    return false;
+  }
+  return null;
+}
+
+function normalizeBoardStatus(value) {
+  const normalized = normalizeString(value);
+  if (!normalized) {
+    return null;
+  }
+
+  for (const [target, aliases] of BOARD_STATUS_ALIASES.entries()) {
+    if (aliases.some((alias) => normalized.includes(alias))) {
+      return target;
+    }
+  }
+
+  return value ?? null;
+}
+
+function denormalizeBoardStatus(status) {
+  if (!status) {
+    return null;
+  }
+
+  const normalized = normalizeBoardStatus(status);
+  if (normalized && BOARD_STATUS_DEFAULTS[normalized]) {
+    return BOARD_STATUS_DEFAULTS[normalized];
+  }
+
+  return status;
+}
 
 function calculatePriority(status) {
   return STATUS_PRIORITY_MAP.get(status) ?? 0;
@@ -61,6 +263,45 @@ function pickLatestTimestamp(existing, candidate) {
   return candidateDate > currentDate ? candidateDate.toISOString() : currentDate.toISOString();
 }
 
+function buildOccupancyMetadata(record) {
+  const entries = [['source', 'ed_board']];
+
+  BOARD_METADATA_KEYS.forEach(([key, columns]) => {
+    const value = ([]).concat(columns).reduce((acc, columnName) => {
+      if (acc !== undefined && acc !== null && acc !== '') {
+        return acc;
+      }
+      return record?.[columnName];
+    }, null);
+
+    if (value !== null && value !== undefined && value !== '') {
+      entries.push([key, value]);
+    }
+  });
+
+  const rawStatus = hasText(record?.busena)
+    ? record.busena
+    : hasText(record?.occupancy_state)
+      ? record.occupancy_state
+      : null;
+  if (rawStatus) {
+    entries.push(['rawStatus', rawStatus]);
+  }
+
+  const occupancyFlag = normalizeOccupancyFlag(
+    record?.occupancy
+      ?? record?.occupied
+      ?? record?.is_occupied
+      ?? record?.isOccupied
+      ?? null,
+  );
+  if (occupancyFlag !== null) {
+    entries.push(['occupancy', occupancyFlag]);
+  }
+
+  return Object.fromEntries(entries);
+}
+
 export class DataPersistenceManager {
   constructor(options = {}) {
     this.document = options.document;
@@ -69,6 +310,7 @@ export class DataPersistenceManager {
     this.bedLabelToId = new Map();
     this.bedIdToLabel = new Map();
     this.bedsLoaded = false;
+    this.remoteBedLayout = [];
     this.lastSyncCache = null;
   }
 
@@ -90,26 +332,85 @@ export class DataPersistenceManager {
       return;
     }
 
-    const { data, error } = await this.client
-      .from('beds')
-      .select('id, label');
+    this.bedLabelToId.clear();
+    this.bedIdToLabel.clear();
+
+    const layout = [];
+    const seen = new Set();
+
+    const registerLabel = (label, id = null) => {
+      const sanitized = sanitizeBedLabel(label);
+      if (!sanitized || seen.has(sanitized)) {
+        return;
+      }
+      if (id) {
+        this.bedLabelToId.set(sanitized, id);
+        this.bedIdToLabel.set(id, sanitized);
+      }
+      layout.push(sanitized);
+      seen.add(sanitized);
+    };
+
+    const fromBeds = this.client.from('beds');
+    const selectBuilder = typeof fromBeds?.select === 'function'
+      ? fromBeds.select('id, label')
+      : null;
+
+    if (!selectBuilder) {
+      throw new Error('Nuotolinės paslaugos kliento objektas nepalaiko lovų užklausos.');
+    }
+
+    let response;
+    if (typeof selectBuilder.order === 'function') {
+      response = await selectBuilder.order('label', { ascending: true });
+    } else {
+      response = await selectBuilder;
+      if (!response.error && Array.isArray(response.data)) {
+        response.data.sort((a, b) => {
+          const left = (a?.label ?? '').toString();
+          const right = (b?.label ?? '').toString();
+          return left.localeCompare(right, 'lt', { numeric: true, sensitivity: 'base' });
+        });
+      }
+    }
+
+    const { data, error } = response;
 
     if (error) {
       throw new Error(`Nepavyko gauti lovų sąrašo iš nuotolinės paslaugos: ${error.message}`);
     }
 
     data.forEach(({ id, label }) => {
-      if (!id || !label) return;
-      this.bedLabelToId.set(label, id);
-      this.bedIdToLabel.set(id, label);
+      registerLabel(label, id);
     });
 
+    try {
+      const boardQuery = this.client.from('ed_board');
+      if (boardQuery && typeof boardQuery.select === 'function') {
+        const boardResult = await boardQuery.select('vieta');
+        if (boardResult?.error) {
+          console.info('Nepavyko papildyti lovų sąrašo iš ed_board lentelės:', boardResult.error);
+        } else {
+          const boardData = Array.isArray(boardResult?.data) ? boardResult.data : [];
+          boardData.forEach((row) => {
+            registerLabel(row?.vieta ?? row?.label ?? null);
+          });
+        }
+      }
+    } catch (error) {
+      console.info('Nepavyko papildyti lovų sąrašo iš ed_board lentelės:', error);
+    }
+
+    DEFAULT_BED_LAYOUT.forEach((bedId) => registerLabel(bedId));
+
+    this.remoteBedLayout = layout;
     this.bedsLoaded = true;
   }
 
   async #resolveBedId(label) {
     await this.#ensureBedsLoaded();
-    const bedId = this.bedLabelToId.get(label);
+    const sanitized = sanitizeBedLabel(label);
+    const bedId = sanitized ? this.bedLabelToId.get(sanitized) : null;
     if (!bedId) {
       throw new Error(`Nuotolinė paslauga nerado lovos pagal pavadinimą: ${label}`);
     }
@@ -123,6 +424,173 @@ export class DataPersistenceManager {
   async getBedLabelById(id) {
     await this.#ensureBedsLoaded();
     return this.#resolveBedLabel(id) ?? null;
+  }
+
+  async loadBedLayout(options = {}) {
+    if (!this.#isSupabaseAvailable()) {
+      return [];
+    }
+
+    if (options.forceRefresh) {
+      this.bedsLoaded = false;
+      this.bedLabelToId.clear();
+      this.bedIdToLabel.clear();
+      this.remoteBedLayout = [];
+    }
+
+    await this.#ensureBedsLoaded();
+    return [...this.remoteBedLayout];
+  }
+
+  getCachedBedLayout() {
+    return [...this.remoteBedLayout];
+  }
+
+  getEffectiveBedLayout() {
+    return this.remoteBedLayout.length > 0
+      ? [...this.remoteBedLayout]
+      : [...DEFAULT_BED_LAYOUT];
+  }
+
+  #mapBoardRecordToOccupancy(record) {
+    if (!record) {
+      return null;
+    }
+
+    const rawTimestamp = record.updated_at ?? record.created_at ?? record.timestamp ?? null;
+    const timestamp = normalizeIsoTimestamp(rawTimestamp) ?? new Date().toISOString();
+
+    const bedLabel = record.vieta ?? record.label ?? this.#resolveBedLabel(record.bed_id) ?? null;
+    const patientCode = record.pacientas ?? record.patient_code ?? null;
+    const occupancyFlag = normalizeOccupancyFlag(
+      record.occupancy ?? record.occupied ?? record.is_occupied ?? record.isOccupied ?? null,
+    );
+    const primaryStatus = hasText(record.busena)
+      ? record.busena
+      : hasText(record.occupancy_state)
+        ? record.occupancy_state
+        : null;
+    const normalizedStatus = normalizeBoardStatus(primaryStatus);
+    const derivedStatus = deriveOccupancyStatus({
+      occupancyValue: occupancyFlag,
+      patientValue: patientCode,
+    });
+    const finalStatus = (() => {
+      if (normalizedStatus === 'cleaning' || normalizedStatus === 'reserved') {
+        return normalizedStatus;
+      }
+      if (typeof occupancyFlag === 'boolean') {
+        return occupancyFlag ? 'occupied' : 'free';
+      }
+      if (normalizedStatus) {
+        return normalizedStatus;
+      }
+      return derivedStatus ?? null;
+    })();
+
+    const metadata = {
+      ...(record.metadata ?? {}),
+      ...buildOccupancyMetadata(record),
+    };
+    if (occupancyFlag !== null && metadata.occupancy === undefined) {
+      metadata.occupancy = occupancyFlag;
+    }
+
+    return {
+      id:
+        record.id
+        ?? `${bedLabel ?? record.vieta ?? 'unknown'}-${timestamp}`,
+      timestamp,
+      bedId: bedLabel ?? record.vieta ?? 'Nežinoma lova',
+      status: finalStatus,
+      patientCode,
+      occupancy: occupancyFlag,
+      expectedUntil: record.expected_until ?? null,
+      notes: record.komentaras ?? record.notes ?? null,
+      createdBy:
+        record.slaugytojas
+        ?? record.created_by
+        ?? record.metadata?.created_by
+        ?? null,
+      metadata,
+    };
+  }
+
+  mapBoardRecordToOccupancy(record) {
+    return this.#mapBoardRecordToOccupancy(record);
+  }
+
+  #normalizeOccupancyInput(occupancyData) {
+    if (!occupancyData) {
+      return null;
+    }
+
+    const metadata = { ...(occupancyData.metadata ?? {}) };
+    const patientCode = occupancyData.patientCode ?? null;
+    const occupancyInputFlag = normalizeOccupancyFlag(
+      occupancyData.occupancy
+        ?? metadata.occupancy
+        ?? occupancyData.isOccupied
+        ?? metadata.isOccupied
+        ?? null,
+    );
+    const derivedStatus = deriveOccupancyStatus({
+      occupancyValue: occupancyInputFlag,
+      patientValue: patientCode,
+    });
+    const status = occupancyData.status ?? derivedStatus ?? null;
+    const occupancyFlag =
+      occupancyInputFlag ?? statusToOccupancyFlag(status) ?? (hasText(patientCode) ? true : null);
+
+    if (occupancyFlag !== null && metadata.occupancy === undefined) {
+      metadata.occupancy = occupancyFlag;
+    }
+
+    return {
+      ...occupancyData,
+      status,
+      patientCode,
+      occupancy: occupancyFlag,
+      metadata,
+    };
+  }
+
+  #buildBoardPayload(occupancyData) {
+    if (!occupancyData?.bedId) {
+      throw new Error('Trūksta lovos identifikatoriaus (vieta) ed_board įrašui.');
+    }
+
+    const normalized = this.#normalizeOccupancyInput(occupancyData);
+    const metadata = { ...(normalized.metadata ?? {}) };
+    const timestamp = normalized.timestamp ?? new Date().toISOString();
+    const patientCode = normalized.patientCode ?? null;
+    const status = normalized.status ?? null;
+    const denormalizedStatus = status ? denormalizeBoardStatus(status) ?? status : null;
+    const occupancyFlag = normalized.occupancy ?? null;
+
+    const payload = {
+      vieta: normalized.bedId,
+      busena: denormalizedStatus,
+      pacientas: patientCode,
+      occupancy: occupancyFlag,
+      komentaras: normalized.notes ?? null,
+      slaugytojas:
+        normalized.createdBy
+        ?? normalized.email
+        ?? metadata.nurse
+        ?? null,
+      padejejas: metadata.assistant ?? null,
+      gydytojas: metadata.doctor ?? null,
+      kat: metadata.kat ?? null,
+      updated_at: timestamp,
+    };
+
+    if (payload.kat !== null && payload.kat !== undefined) {
+      const numericKat = Number(payload.kat);
+      payload.kat = Number.isFinite(numericKat) ? numericKat : null;
+    }
+
+    return payload;
   }
 
   #updateLocalLastSync(timestamp) {
@@ -182,45 +650,46 @@ export class DataPersistenceManager {
   async saveOccupancyData(occupancyData) {
     if (!occupancyData) return false;
 
+    const normalizedOccupancy = this.#normalizeOccupancyInput(occupancyData);
+    if (!normalizedOccupancy) {
+      return false;
+    }
+
     if (!this.#isSupabaseAvailable()) {
       const records = createLocalArray(LOCAL_STORAGE_KEYS.occupancyData);
-      records.push(occupancyData);
+      records.push(normalizedOccupancy);
       if (records.length > MAX_LOCAL_ITEMS) {
         records.splice(0, records.length - MAX_LOCAL_ITEMS);
       }
       saveLocalArray(LOCAL_STORAGE_KEYS.occupancyData, records);
-      this.#updateLocalLastSync(occupancyData.timestamp);
-      this.lastSyncCache = occupancyData.timestamp;
+      const latestTimestamp = normalizedOccupancy.timestamp ?? new Date().toISOString();
+      this.#updateLocalLastSync(latestTimestamp);
+      this.lastSyncCache = latestTimestamp;
       return true;
     }
 
     await this.#ensureBedsLoaded();
-    const bedId = await this.#resolveBedId(occupancyData.bedId);
 
-    const payload = {
-      bed_id: bedId,
-      occupancy_state: occupancyData.status,
-      patient_code: occupancyData.patientCode ?? null,
-      expected_until: occupancyData.expectedUntil ?? null,
-      notes: occupancyData.notes ?? null,
-      created_by: occupancyData.createdBy ?? occupancyData.email ?? null,
+    const payload = this.#buildBoardPayload({
+      ...normalizedOccupancy,
       metadata: {
+        ...(normalizedOccupancy.metadata ?? {}),
         source: 'web_form',
-        originalTimestamp: occupancyData.timestamp,
+        originalTimestamp: normalizedOccupancy.timestamp,
       },
-      created_at: occupancyData.timestamp,
-    };
+    });
 
-    const { data, error } = await this.client
-      .from('occupancy_events')
-      .insert([payload])
-      .select('id, created_at');
+    const query = this.client
+      .from('ed_board')
+      .upsert([payload], { onConflict: 'vieta' });
+
+    const { data, error } = await query.select('vieta, updated_at');
 
     if (error) {
       throw new Error(`Nepavyko išsaugoti lovos užimtumo nuotolinėje paslaugoje: ${error.message}`);
     }
 
-    const createdAt = data?.[0]?.created_at ?? occupancyData.timestamp ?? new Date().toISOString();
+    const createdAt = data?.[0]?.updated_at ?? normalizedOccupancy.timestamp ?? new Date().toISOString();
     this.lastSyncCache = createdAt;
     return true;
   }
@@ -245,6 +714,12 @@ export class DataPersistenceManager {
       },
       { key: 'status_metadata', select: 'status_metadata', optional: true },
       { key: 'status_created_at', select: 'status_created_at' },
+      {
+        key: 'occupancy',
+        select: 'occupancy',
+        optional: true,
+        fallbacks: ['occupancy_flag', 'is_occupied'],
+      },
       { key: 'occupancy_state', select: 'occupancy_state' },
       { key: 'patient_code', select: 'patient_code' },
       { key: 'expected_until', select: 'expected_until' },
@@ -379,6 +854,56 @@ export class DataPersistenceManager {
 
         const statusCreatedAt = normalizeIsoTimestamp(row.status_created_at);
         const occupancyCreatedAt = normalizeIsoTimestamp(row.occupancy_created_at);
+        const occupancyFlag = normalizeOccupancyFlag(
+          row.occupancy
+            ?? row.occupancy_flag
+            ?? row.is_occupied
+            ?? row.occupied
+            ?? row.occupancy_state
+            ?? null,
+        );
+        const hasBoardInfo = Boolean(
+          occupancyCreatedAt
+          || hasText(row.patient_code)
+          || hasText(row.occupancy_notes)
+          || typeof occupancyFlag === 'boolean'
+          || (row.occupancy_metadata && Object.keys(row.occupancy_metadata).length > 0),
+        );
+        const rawOccupancy = hasText(row.occupancy_state) ? row.occupancy_state : null;
+        const normalizedOccupancy = normalizeBoardStatus(rawOccupancy);
+        const derivedOccupancy = hasBoardInfo
+          ? deriveOccupancyStatus({ occupancyValue: occupancyFlag, patientValue: row.patient_code })
+          : null;
+        const occupancyState = (() => {
+          if (normalizedOccupancy === 'cleaning' || normalizedOccupancy === 'reserved') {
+            return normalizedOccupancy;
+          }
+          if (typeof occupancyFlag === 'boolean') {
+            return occupancyFlag ? 'occupied' : 'free';
+          }
+          if (normalizedOccupancy) {
+            return normalizedOccupancy;
+          }
+          if (rawOccupancy !== null && rawOccupancy !== undefined) {
+            const booleanRaw = normalizeOccupancyFlag(rawOccupancy);
+            if (typeof booleanRaw === 'boolean') {
+              return booleanRaw ? 'occupied' : 'free';
+            }
+          }
+          return derivedOccupancy ?? null;
+        })();
+        const occupancyMetadata = {
+          ...(row.occupancy_metadata ?? {}),
+        };
+        if (!occupancyMetadata.source) {
+          occupancyMetadata.source = 'ed_board';
+        }
+        if (typeof occupancyFlag === 'boolean' && occupancyMetadata.occupancy === undefined) {
+          occupancyMetadata.occupancy = occupancyFlag;
+        }
+        if (rawOccupancy && !occupancyMetadata.rawStatus) {
+          occupancyMetadata.rawStatus = rawOccupancy;
+        }
 
         return {
           bedId: bedLabel,
@@ -389,13 +914,14 @@ export class DataPersistenceManager {
           statusReportedBy: row.status_reported_by ?? null,
           statusCreatedAt,
           statusMetadata: row.status_metadata ?? {},
-          occupancyState: row.occupancy_state ?? null,
+          occupancyState,
+          occupancy: typeof occupancyFlag === 'boolean' ? occupancyFlag : null,
           patientCode: row.patient_code ?? null,
           expectedUntil: row.expected_until ?? null,
           occupancyNotes: row.occupancy_notes ?? null,
           occupancyCreatedBy: row.occupancy_created_by ?? null,
           occupancyCreatedAt,
-          occupancyMetadata: row.occupancy_metadata ?? {},
+          occupancyMetadata,
         };
       })
       .filter(Boolean);
@@ -444,8 +970,9 @@ export class DataPersistenceManager {
     });
 
     const aggregated = [];
+    const baseLayout = this.getEffectiveBedLayout();
     const bedIds = new Set([
-      ...BED_LAYOUT,
+      ...baseLayout,
       ...latestStatus.keys(),
       ...latestOccupancy.keys(),
     ]);
@@ -456,6 +983,18 @@ export class DataPersistenceManager {
       const occupancyRecord = latestOccupancy.get(bedId) ?? null;
       const statusCreatedAt = statusRecord ? normalizeIsoTimestamp(statusRecord.timestamp) : null;
       const occupancyCreatedAt = occupancyRecord ? normalizeIsoTimestamp(occupancyRecord.timestamp) : null;
+      const occupancyFlag = normalizeOccupancyFlag(
+        occupancyRecord?.occupancy
+          ?? occupancyRecord?.metadata?.occupancy
+          ?? null,
+      );
+      const occupancyState = occupancyRecord
+        ? occupancyRecord.status
+          ?? deriveOccupancyStatus({
+            occupancyValue: occupancyFlag,
+            patientValue: occupancyRecord.patientCode,
+          })
+        : null;
 
       latest = pickLatestTimestamp(latest, statusCreatedAt);
       latest = pickLatestTimestamp(latest, occupancyCreatedAt);
@@ -469,7 +1008,8 @@ export class DataPersistenceManager {
         statusReportedBy: statusRecord?.email ?? null,
         statusCreatedAt,
         statusMetadata: statusRecord?.metadata ?? {},
-        occupancyState: occupancyRecord?.status ?? null,
+        occupancyState,
+        occupancy: typeof occupancyFlag === 'boolean' ? occupancyFlag : null,
         patientCode: occupancyRecord?.patientCode ?? null,
         expectedUntil: occupancyRecord?.expectedUntil ?? null,
         occupancyNotes: occupancyRecord?.notes ?? null,
@@ -528,25 +1068,17 @@ export class DataPersistenceManager {
 
     await this.#ensureBedsLoaded();
     const { data, error } = await this.client
-      .from('occupancy_events')
-      .select('id, bed_id, occupancy_state, patient_code, expected_until, notes, created_by, metadata, created_at, beds(label)')
-      .order('created_at', { ascending: true });
+      .from('ed_board')
+      .select('vieta, busena, pacientas, komentaras, updated_at, slaugytojas, padejejas, gydytojas, kat, occupancy')
+      .order('updated_at', { ascending: true });
 
     if (error) {
       throw new Error(`Nepavyko gauti lovų užimtumo nuotolinėje paslaugoje: ${error.message}`);
     }
 
-    const mapped = (data ?? []).map((item) => ({
-      id: item.id,
-      timestamp: item.created_at,
-      bedId: item.beds?.label ?? this.#resolveBedLabel(item.bed_id) ?? 'Nežinoma lova',
-      status: item.occupancy_state,
-      patientCode: item.patient_code ?? null,
-      expectedUntil: item.expected_until ?? null,
-      notes: item.notes ?? null,
-      createdBy: item.created_by ?? null,
-      metadata: item.metadata ?? {},
-    }));
+    const mapped = (data ?? [])
+      .map((item) => this.#mapBoardRecordToOccupancy(item))
+      .filter(Boolean);
 
     const latestTimestamp = mapped[mapped.length - 1]?.timestamp;
     if (latestTimestamp) {
@@ -639,29 +1171,24 @@ export class DataPersistenceManager {
     }
 
     if (data.occupancyData.length > 0) {
-      const occupancyPayload = await Promise.all(
-        data.occupancyData.map(async (record) => ({
-          id: record.id ?? undefined,
-          bed_id: await this.#resolveBedId(record.bedId),
-          occupancy_state: record.status,
-          patient_code: record.patientCode ?? null,
-          expected_until: record.expectedUntil ?? null,
-          notes: record.notes ?? null,
-          created_by: record.createdBy ?? null,
+      const occupancyPayload = data.occupancyData
+        .filter((record) => record?.bedId)
+        .map((record) => this.#buildBoardPayload({
+          ...record,
           metadata: {
             ...(record.metadata ?? {}),
             importedAt: new Date().toISOString(),
           },
-          created_at: record.timestamp ?? new Date().toISOString(),
-        })),
-      );
+        }));
 
-      const { error } = await this.client
-        .from('occupancy_events')
-        .insert(occupancyPayload);
+      if (occupancyPayload.length > 0) {
+        const { error } = await this.client
+          .from('ed_board')
+          .upsert(occupancyPayload, { onConflict: 'vieta' });
 
-      if (error) {
-        throw new Error(`Nepavyko importuoti užimtumo į nuotolinę paslaugą: ${error.message}`);
+        if (error) {
+          throw new Error(`Nepavyko importuoti užimtumo į nuotolinę paslaugą: ${error.message}`);
+        }
       }
     }
 
@@ -690,13 +1217,13 @@ export class DataPersistenceManager {
       throw new Error(`Nepavyko išvalyti būsenų nuotolinėje paslaugoje: ${deleteStatus.error.message}`);
     }
 
-    const deleteOccupancy = await this.client
-      .from('occupancy_events')
+    const deleteBoard = await this.client
+      .from('ed_board')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
+      .select('vieta');
 
-    if (deleteOccupancy.error) {
-      throw new Error(`Nepavyko išvalyti užimtumo nuotolinėje paslaugoje: ${deleteOccupancy.error.message}`);
+    if (deleteBoard.error) {
+      throw new Error(`Nepavyko išvalyti užimtumo nuotolinėje paslaugoje: ${deleteBoard.error.message}`);
     }
 
     this.lastSyncCache = null;

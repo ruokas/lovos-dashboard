@@ -108,6 +108,8 @@ describe('Realaus laiko srautai', () => {
       bedId: '3',
       timestamp: now,
       status: 'occupied',
+      createdBy: 'nurse@example.com',
+      patientCode: 'PX-1',
     });
 
     bedDataManager.addOccupancyData({
@@ -115,6 +117,8 @@ describe('Realaus laiko srautai', () => {
       bedId: '3',
       timestamp: now,
       status: 'free',
+      createdBy: 'nurse@example.com',
+      patientCode: '',
     });
 
     notificationManager.updateNotifications(bedDataManager.getAllBeds(), [], { suppressAlerts: true });
@@ -122,5 +126,43 @@ describe('Realaus laiko srautai', () => {
 
     expect(stats.total).toBeGreaterThan(0);
     expect(stats.low).toBeGreaterThanOrEqual(1);
+  });
+
+  it('kai nėra būsenos, realaus laiko įrašai naudoja occupancy lauką užimtumui nustatyti', () => {
+    const occupiedAt = new Date('2024-03-01T10:00:00.000Z').toISOString();
+    bedDataManager.addOccupancyData({
+      id: 'occ-3',
+      bedId: '5',
+      timestamp: occupiedAt,
+      status: '',
+      occupancy: true,
+      patientCode: '',
+      createdBy: 'nurse.alpha@example.com',
+      metadata: {},
+    });
+
+    const bed = bedDataManager.beds.get('5');
+    expect(bed.occupancyStatus).toBe('occupied');
+    expect(bed.currentPatientCode).toBeNull();
+    expect(bed.occupancyAssignedNurse).toBe('nurse.alpha@example.com');
+  });
+
+  it('kai occupancy reikšmė false, lova tampa laisva net jei statusas neperduotas', () => {
+    const freedAt = new Date('2024-03-01T12:00:00.000Z').toISOString();
+    bedDataManager.addOccupancyData({
+      id: 'occ-4',
+      bedId: '6',
+      timestamp: freedAt,
+      status: '',
+      occupancy: false,
+      patientCode: 'LEGACY',
+      createdBy: 'nurse.beta@example.com',
+      metadata: {},
+    });
+
+    const bed = bedDataManager.beds.get('6');
+    expect(bed.occupancyStatus).toBe('free');
+    expect(bed.currentPatientCode).toBeNull();
+    expect(bed.occupancyAssignedNurse).toBe('nurse.beta@example.com');
   });
 });
